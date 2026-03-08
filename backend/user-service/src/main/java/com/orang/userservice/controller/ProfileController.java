@@ -19,18 +19,18 @@ public class ProfileController {
 
     private final ProfileService profileService;
 
-    @GetMapping("/profile/{userId}")
+    @GetMapping("/{userId}/profile")
     public ResponseEntity<ProfileResponse> getProfile(@PathVariable UUID userId) {
         return ResponseEntity.ok(profileService.getProfileById(userId));
     }
 
-    @PostMapping("/profile/{userId}")
+    @PostMapping("/{userId}/profile")
     public ResponseEntity<ProfileResponse> createProfile(@PathVariable UUID userId, @RequestParam String displayName) {
         ProfileResponse profile = profileService.createProfile(userId, displayName);
         return ResponseEntity.status(HttpStatus.CREATED).body(profile);
     }
 
-    @PutMapping("/profile/{userId}")
+    @PutMapping("/{userId}/profile")
     public ResponseEntity<ProfileResponse> updateProfile(
             @PathVariable UUID userId,
             @Valid @RequestBody UpdateProfileRequest profile) {
@@ -43,7 +43,7 @@ public class ProfileController {
         return ResponseEntity.ok(profileService.searchProfiles(query));
     }
 
-    @PostMapping("/online/{userId}")
+    @PostMapping("/{userId}/online")
     public ResponseEntity<Void> setOnlineStatus(
             @PathVariable UUID userId,
             @RequestParam(defaultValue = "true") boolean status) {
