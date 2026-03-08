@@ -77,6 +77,10 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.orang</groupId>
+            <artifactId>shared-library</artifactId>
+        </dependency>
 
     </dependencies>
 

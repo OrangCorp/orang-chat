@@ -1,5 +1,7 @@
 package com.orang.userservice.service;
 
+import com.orang.shared.exception.BadRequestException;
+import com.orang.shared.exception.ResourceNotFoundException;
 import com.orang.userservice.dto.ContactResponse;
 import com.orang.userservice.entity.Contact;
 import com.orang.userservice.entity.Profile;
@@ -23,15 +25,15 @@ public class ContactService {
 
     public ContactResponse addContact(UUID userId, UUID contactUserId) {
         if (userId.equals(contactUserId)) {
-            throw new RuntimeException("You cannot add yourself as a contact");
+            throw new BadRequestException("You cannot add yourself as a contact");
         }
 
         if (contactRepository.existsByUserIdAndContactUserId(userId, contactUserId)) {
-            throw new RuntimeException("Contact already exists");
+            throw new BadRequestException("Contact already exists");
         }
 
         Profile contactProfile = profileRepository.findById(contactUserId)
-                .orElseThrow(() -> new RuntimeException("Contact user not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Contact user not found"));
 
         Contact contact = Contact.builder()
                 .userId(userId)
@@ -51,7 +53,7 @@ public class ContactService {
     @Transactional
     public void removeContact(UUID userId, UUID contactUserId) {
         Contact contact = contactRepository.findByUserIdAndContactUserId(userId, contactUserId)
-                .orElseThrow(() -> new RuntimeException("Contact not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Contact not found"));
         contactRepository.delete(contact);
     }
 
@@ -62,7 +64,7 @@ public class ContactService {
 
     private ContactResponse toContactResponse(Contact contact) {
         Profile contactProfile = profileRepository.findById(contact.getContactUserId())
-                .orElseThrow(() -> new RuntimeException("Contact user not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Contact user not found"));
         return ContactResponse.builder()
                 .id(contact.getId())
                 .userId(contact.getUserId())

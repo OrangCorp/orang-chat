@@ -1,5 +1,7 @@
 package com.orang.userservice.service;
 
+import com.orang.shared.exception.BadRequestException;
+import com.orang.shared.exception.ResourceNotFoundException;
 import com.orang.userservice.dto.ProfileResponse;
 import com.orang.userservice.dto.UpdateProfileRequest;
 import com.orang.userservice.entity.Profile;
@@ -21,14 +23,14 @@ public class ProfileService {
 
     public ProfileResponse getProfileById(UUID userId) {
         Profile profile = profileRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Profile not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
         return toProfileResponse(profile);
     }
 
     @Transactional
     public ProfileResponse createProfile(UUID userId, String displayName) {
         if (profileRepository.existsByUserId(userId)) {
-            throw new RuntimeException("Profile already exists");
+            throw new BadRequestException("Profile already exists");
         }
 
         Profile profile = Profile.builder()
@@ -43,7 +45,7 @@ public class ProfileService {
     @Transactional
     public ProfileResponse updateProfile(UUID userId, UpdateProfileRequest request) {
         Profile existingProfile = profileRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Profile not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
 
         if (request.getDisplayName() != null) {
             existingProfile.setDisplayName(request.getDisplayName());
