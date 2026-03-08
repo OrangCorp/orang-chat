@@ -5,6 +5,8 @@ import com.orang.authservice.dto.LoginRequest;
 import com.orang.authservice.dto.RegisterRequest;
 import com.orang.authservice.entity.User;
 import com.orang.authservice.repository.UserRepository;
+import com.orang.shared.exception.BadRequestException;
+import com.orang.shared.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,7 +27,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest registerRequest){
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BadRequestException("Email already exists");
         }
 
         User user = User.builder()
@@ -41,10 +43,10 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest loginRequest){
         User user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
 
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid email or password");
+            throw new UnauthorizedException("Invalid email or password");
         }
 
         String token = jwtService.generateToken(user.getId(), user.getEmail());

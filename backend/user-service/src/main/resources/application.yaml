@@ -20,6 +20,7 @@ spring:
     redis:
       host: localhost
       port: 6379
+
 jwt:
   secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
 
@@ -27,8 +28,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health.info
-    endpoint:
-      health:
-        access: unrestricted
+        include: "health,info"
+  endpoint:
+    health:
+      show-details: always
+      access: unrestricted
 
+logging:
+  level:
+    com.orang.userservice: DEBUG
