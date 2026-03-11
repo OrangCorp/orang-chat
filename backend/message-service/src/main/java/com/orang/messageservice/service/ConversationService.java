@@ -28,12 +28,8 @@ public class ConversationService {
             throw new IllegalArgumentException("Cannot create a conversation with yourself");
         }
 
-        List<Conversation> user1Chats = conversationRepository.findByParticipantIdsContaining(userId1);
-
-        Optional<Conversation> existingConversation = user1Chats.stream()
-                .filter(c -> c.getType() == Conversation.ConversationType.DIRECT
-                        && c.getParticipantIds().contains(userId2))
-                .findFirst();
+        Optional<Conversation> existingConversation =
+                conversationRepository.findDirectConversationBetween(userId1, userId2);
 
         if (existingConversation.isPresent()) {
             return toConversationResponse(existingConversation.get());
