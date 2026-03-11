@@ -24,6 +24,10 @@ public class ConversationService {
 
     @Transactional
     public ConversationResponse getOrCreateDirectConversation(UUID userId1, UUID userId2) {
+        if (userId1.equals(userId2)) {
+            throw new IllegalArgumentException("Cannot create a conversation with yourself");
+        }
+
         List<Conversation> user1Chats = conversationRepository.findByParticipantIdsContaining(userId1);
 
         Optional<Conversation> existingConversation = user1Chats.stream()
