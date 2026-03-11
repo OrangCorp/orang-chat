@@ -1,6 +1,6 @@
-package com.orang.userservice.config;
+package com.orang.messageservice.config;
 
-import com.orang.userservice.service.JwtService;
+import com.orang.messageservice.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
