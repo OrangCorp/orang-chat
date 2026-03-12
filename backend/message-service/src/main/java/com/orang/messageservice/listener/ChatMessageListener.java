@@ -37,7 +37,8 @@ public class ChatMessageListener {
 
             log.info("Message saved successfully");
         } catch (Exception e) {
-            log.error("Error saving message: {}", e.getMessage());
+            log.error("Error saving message", e);
+            throw new RuntimeException("Error saving message", e);
         }
     }
 }

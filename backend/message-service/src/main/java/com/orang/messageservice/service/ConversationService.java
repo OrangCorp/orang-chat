@@ -16,8 +16,8 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
 
     public List<ConversationResponse> getConversations(UUID userId) {
-        List<Conversation> conversation = conversationRepository.findByParticipantIdsContaining(userId);
-        return conversation.stream()
+        List<Conversation> conversations = conversationRepository.findByParticipantIdsContaining(userId);
+        return conversations.stream()
                 .map(this::toConversationResponse)
                 .toList();
     }
