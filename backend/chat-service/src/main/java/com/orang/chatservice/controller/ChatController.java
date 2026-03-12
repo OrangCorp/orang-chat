@@ -22,21 +22,32 @@ public class ChatController {
 
     @MessageMapping("/chat.send")
     public void processMessage(@Payload ChatMessage message) {
-        log.info("Received message from {} to {}", message.getSenderId(), message.getRecipientId());
+        log.info("Received {} message from {} to {}",
+                message.getType() ,
+                message.getSenderId(),
+                message.getRecipientId());
 
         if (message.getSenderId().equals(message.getRecipientId())) {
-            throw new IllegalArgumentException("You send message to yourself");
+            throw new IllegalArgumentException("You cannot send a message to yourself");
         }
 
         message.setTimestamp(LocalDateTime.now());
 
-        messagingTemplate.convertAndSendToUser(
-                message.getRecipientId().toString(),
-                "/queue/messages",
-                message
-        );
+        if (MessageType.GROUP.equals(message.getType())) {
+            messagingTemplate.convertAndSend(
+                    "/topic/group/" + message.getRecipientId(),
+                    message
+            );
+        } else {
+            messagingTemplate.convertAndSendToUser(
+                    message.getRecipientId().toString(),
+                    "/queue/messages",
+                    message
+            );
+        }
 
-        if (MessageType.CHAT.equals(message.getType())) {
+
+        if (!MessageType.TYPING.equals(message.getType())) {
             rabbitTemplate.convertAndSend(
                     "chat.exchange",
                     "chat.message.sent",
