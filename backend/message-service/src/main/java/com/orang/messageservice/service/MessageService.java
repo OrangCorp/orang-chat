@@ -34,13 +34,23 @@ public class MessageService {
     }
 
     @Transactional
-    public MessageResponse saveMessage(UUID conversationId, UUID senderId, String content) {
+    public void saveMessage(UUID conversationId, UUID senderId, String content) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Conversation not found with id: " + conversationId));
+
+        if (!conversation.getParticipantIds().contains(senderId)) {
+            throw new IllegalArgumentException(
+                    "User " + senderId + " is not a participant in conversation " + conversationId);
+        }
+
         Message message = Message.builder()
                 .conversationId(conversationId)
                 .senderId(senderId)
                 .content(content)
                 .build();
-        return toMessageResponse(messageRepository.save(message));
+
+        messageRepository.save(message);
     }
 
     private MessageResponse toMessageResponse(Message message) {

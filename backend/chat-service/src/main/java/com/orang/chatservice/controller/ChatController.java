@@ -1,6 +1,7 @@
 package com.orang.chatservice.controller;
 
 import com.orang.chatservice.dto.ChatMessage;
+import com.orang.chatservice.dto.MessageType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -35,12 +36,16 @@ public class ChatController {
                 message
         );
 
-        rabbitTemplate.convertAndSend(
-                "chat.exchange",
-                "chat.message.sent",
-                message
-        );
+        if (MessageType.CHAT.equals(message.getType())) {
+            rabbitTemplate.convertAndSend(
+                    "chat.exchange",
+                    "chat.message.sent",
+                    message
+            );
 
-        log.info("Message forwarded to RabbitMQ");
+            log.info("Message forwarded to RabbitMQ");
+        } else {
+            log.info("Typing indicator routed");
+        }
     }
 }
