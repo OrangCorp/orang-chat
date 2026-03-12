@@ -37,3 +37,9 @@ management:
 logging:
   level:
     com.orang.userservice: DEBUG
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs/api/users
+  swagger-ui:
+    enabled: false
