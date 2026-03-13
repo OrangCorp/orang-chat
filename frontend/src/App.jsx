@@ -1,24 +1,22 @@
-import React from 'react';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import ChatInterface from './components/ChatInterface';
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
+import { BrowserRouter } from 'react-router-dom';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { AuthProvider } from './context/AuthContext';
+import { ThemeContextProvider } from './context/ThemeContext';
+import AppRoutes from './routes/AppRoutes';
+import theme from './assets/styles/theme';
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <ChatInterface />
-    </ThemeProvider>
+    <BrowserRouter>
+      <ThemeContextProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </ThemeProvider>
+      </ThemeContextProvider>
+    </BrowserRouter>
   );
 }
 
