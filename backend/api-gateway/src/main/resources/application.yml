@@ -4,30 +4,47 @@ server:
 spring:
   application:
     name: api-gateway
+  main:
+    allow-bean-definition-overriding: true
   cloud:
     gateway:
       server:
         webflux:
           routes:
+            - id: auth-service-docs
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/v3/api-docs/api/auth
+
             - id: auth-service
-              uri: http://localhost:8081
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/auth/**
 
+            - id: user-service-docs
+              uri: ${USER_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/v3/api-docs/api/users
+
             - id: user-service
-              uri: http://localhost:8082
+              uri: ${USER_SERVICE_URL:http://localhost:8082}
               predicates:
                 - Path=/api/users/**
 
-            - id: chat-service
-              uri: ws://localhost:8083
+            - id: message-service-docs
+              uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
               predicates:
-                - Path=/ws/**
+                - Path=/v3/api-docs/api/messages
 
             - id: message-service
-              uri: http://localhost:8084
+              uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
               predicates:
-                - Path=/api/messages/**
+                - Path=/api/messages/**, /api/conversations/**
+
+            - id: chat-service
+              uri: ${CHAT_SERVICE_URL:ws://localhost:8083}
+              predicates:
+                - Path=/ws/**
 
 management:
   endpoints:
@@ -44,3 +61,16 @@ management:
 logging:
   level:
     org.springframework.cloud.gateway: DEBUG
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: Auth Service
+        url: /v3/api-docs/api/auth
+      - name: User Service
+        url: /v3/api-docs/api/users
+      - name: Message Service
+        url: /v3/api-docs/api/messages
+  api-docs:
+    path: /v3/api-docs

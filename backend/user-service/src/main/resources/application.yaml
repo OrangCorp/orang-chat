@@ -16,6 +16,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: 5672
+    username: ${RABBITMQ_USER:orangchat}
+    password: ${RABBITMQ_PASSWORD:orangchat123}
   data:
     redis:
       host: localhost
@@ -37,3 +42,9 @@ management:
 logging:
   level:
     com.orang.userservice: DEBUG
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs/api/users
+  swagger-ui:
+    enabled: false

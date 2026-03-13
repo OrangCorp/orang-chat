@@ -1,4 +1,97 @@
 services:
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: orangchat-api-gateway
+    ports:
+      - "8080:8080"
+    networks:
+      - orangchat-network
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - USER_SERVICE_URL=http://user-service:8082
+      - CHAT_SERVICE_URL=ws://chat-service:8083
+      - MESSAGE_SERVICE_URL=http://message-service:8084
+    depends_on:
+      - auth-service
+      - user-service
+      - message-service
+      - chat-service
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: orangchat-auth-service
+    ports:
+      - "8081:8081"
+    networks:
+      - orangchat-network
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-auth:5432/auth_db
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: orangchat-user-service
+    ports:
+      - "8082:8082"
+    networks:
+      - orangchat-network
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
+      - SPRING_DATA_REDIS_HOST=orangchat-redis
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: chat-service/Dockerfile
+    container_name: orangchat-chat-service
+    ports:
+      - "8083:8083"
+    networks:
+      - orangchat-network
+    environment:
+      - SPRING_RABBITMQ_HOST=orangchat-rabbitmq
+      - SPRING_DATA_REDIS_HOST=orangchat-redis
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  message-service:
+    build:
+      context: .
+      dockerfile: message-service/Dockerfile
+    container_name: orangchat-message-service
+    ports:
+      - "8084:8084"
+    networks:
+      - orangchat-network
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-message:5432/message_db
+      - SPRING_RABBITMQ_HOST=orangchat-rabbitmq
+    depends_on:
+      postgres-message:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   postgres-auth:
     image: postgres:18-alpine3.22
     container_name: orangchat-postgres-auth
@@ -72,7 +165,7 @@ services:
       retries: 5
 
   rabbitmq:
-    image: rabbitmq:4.2.4-alpine
+    image: rabbitmq:4.2.4-management-alpine
     container_name: orangchat-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: orangchat
@@ -85,6 +178,7 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
     networks:
       - orangchat-network
+    command: sh -c "rabbitmq-plugins enable --offline rabbitmq_stomp rabbitmq_management && rabbitmq-server"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 30s

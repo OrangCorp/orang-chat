@@ -5,13 +5,17 @@ import com.orang.authservice.dto.LoginRequest;
 import com.orang.authservice.dto.RegisterRequest;
 import com.orang.authservice.entity.User;
 import com.orang.authservice.repository.UserRepository;
+import com.orang.shared.event.UserRegisteredEvent;
 import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +24,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RabbitTemplate rabbitTemplate;
 
     @Value("${jwt.expiration}")
     private long jwtExpiration;
@@ -37,6 +42,13 @@ public class AuthService {
                 .build();
 
         User savedUser = userRepository.save(user);
+        UserRegisteredEvent userEvent = UserRegisteredEvent.builder()
+                .userId(savedUser.getId())
+                .displayName(savedUser.getDisplayName())
+                .build();
+
+        publishUserRegisteredEventAfterCommit(userEvent);
+
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail());
         return buildAuthResponse(savedUser, token);
     }
@@ -51,6 +63,27 @@ public class AuthService {
 
         String token = jwtService.generateToken(user.getId(), user.getEmail());
         return buildAuthResponse(user, token);
+    }
+
+    private void publishUserRegisteredEventAfterCommit(UserRegisteredEvent userEvent) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rabbitTemplate.convertAndSend(
+                            "user.exchange",
+                            "user.registered",
+                            userEvent
+                    );
+                }
+            });
+        } else {
+            rabbitTemplate.convertAndSend(
+                    "user.exchange",
+                    "user.registered",
+                    userEvent
+            );
+        }
     }
 
     private AuthResponse buildAuthResponse(User user, String token){

@@ -1,0 +1,25 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: chat-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: 5672
+    username: ${RABBITMQ_USER:orangchat}
+    password: ${RABBITMQ_PASSWORD:orangchat123}
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+
+logging:
+  level:
+    com.orang.chatservice: DEBUG
+    org.springframework.messaging: INFO
+    org.springframework.web.socket: INFO
+
