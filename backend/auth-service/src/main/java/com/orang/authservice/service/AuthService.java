@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -44,13 +46,9 @@ public class AuthService {
                 .userId(savedUser.getId())
                 .displayName(savedUser.getDisplayName())
                 .build();
-        
-        rabbitTemplate.convertAndSend(
-                "user.exchange",
-                "user.registered",
-                userEvent
-        );
-        
+
+        publishUserRegisteredEventAfterCommit(userEvent);
+
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail());
         return buildAuthResponse(savedUser, token);
     }
@@ -65,6 +63,27 @@ public class AuthService {
 
         String token = jwtService.generateToken(user.getId(), user.getEmail());
         return buildAuthResponse(user, token);
+    }
+
+    private void publishUserRegisteredEventAfterCommit(UserRegisteredEvent userEvent) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rabbitTemplate.convertAndSend(
+                            "user.exchange",
+                            "user.registered",
+                            userEvent
+                    );
+                }
+            });
+        } else {
+            rabbitTemplate.convertAndSend(
+                    "user.exchange",
+                    "user.registered",
+                    userEvent
+            );
+        }
     }
 
     private AuthResponse buildAuthResponse(User user, String token){
