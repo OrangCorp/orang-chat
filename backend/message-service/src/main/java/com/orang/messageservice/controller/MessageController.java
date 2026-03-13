@@ -26,8 +26,9 @@ public class MessageController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         UUID userUUID = UUID.fromString(myUserId);
-        int safeSize = Math.min(size, 100);
-        Pageable pageable = PageRequest.of(page, size);
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        Pageable pageable = PageRequest.of(safePage, safeSize);
 
         return ResponseEntity.ok(
                 messageService.getMessagesForConversation(conversationId, userUUID, pageable)
