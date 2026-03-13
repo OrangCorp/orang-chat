@@ -15,6 +15,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: 5672
+    username: ${RABBITMQ_USER:orangchat}
+    password: ${RABBITMQ_PASSWORD:orangchat123}
 
 jwt:
   secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
@@ -29,3 +34,9 @@ management:
     health:
       access: unrestricted
       show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs/api/auth
+  swagger-ui:
+    enabled: false

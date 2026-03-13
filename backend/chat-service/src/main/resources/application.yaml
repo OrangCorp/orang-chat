@@ -5,10 +5,10 @@ spring:
   application:
     name: chat-service
   rabbitmq:
-    host: localhost
+    host: ${RABBITMQ_HOST:rabbitmq}
     port: 5672
-    username: orangchat
-    password: orangchat123
+    username: ${RABBITMQ_USER:orangchat}
+    password: ${RABBITMQ_PASSWORD:orangchat123}
   data:
     redis:
       host: localhost

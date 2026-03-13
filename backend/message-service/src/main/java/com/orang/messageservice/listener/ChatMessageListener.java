@@ -1,6 +1,6 @@
 package com.orang.messageservice.listener;
 
-import com.orang.messageservice.dto.ChatMessageEvent;
+import com.orang.messageservice.event.ChatMessageEvent;
 import com.orang.messageservice.service.ConversationService;
 import com.orang.messageservice.service.MessageService;
 import lombok.RequiredArgsConstructor;

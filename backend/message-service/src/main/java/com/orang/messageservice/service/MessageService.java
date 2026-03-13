@@ -8,10 +8,11 @@ import com.orang.messageservice.repository.MessageRepository;
 import com.orang.shared.exception.ForbiddenException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -21,7 +22,11 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
 
-    public List<MessageResponse> getMessagesForConversation(UUID conversationId, UUID requesterId) {
+    public Page<MessageResponse> getMessagesForConversation(
+            UUID conversationId,
+            UUID requesterId,
+            Pageable pageable) {
+
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
@@ -29,18 +34,28 @@ public class MessageService {
             throw new ForbiddenException("You are not a participant of this conversation");
         }
 
-        List<Message> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
-        return messages.stream().map(this::toMessageResponse).toList();
+        Page<Message> messages = messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
+        return messages.map(this::toMessageResponse);
     }
 
     @Transactional
-    public MessageResponse saveMessage(UUID conversationId, UUID senderId, String content) {
+    public void saveMessage(UUID conversationId, UUID senderId, String content) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Conversation not found with id: " + conversationId));
+
+        if (!conversation.getParticipantIds().contains(senderId)) {
+            throw new IllegalArgumentException(
+                    "User " + senderId + " is not a participant in conversation " + conversationId);
+        }
+
         Message message = Message.builder()
                 .conversationId(conversationId)
                 .senderId(senderId)
                 .content(content)
                 .build();
-        return toMessageResponse(messageRepository.save(message));
+
+        messageRepository.save(message);
     }
 
     private MessageResponse toMessageResponse(Message message) {
