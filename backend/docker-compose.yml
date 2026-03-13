@@ -33,6 +33,8 @@ services:
     depends_on:
       postgres-auth:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   user-service:
     build:
@@ -50,6 +52,8 @@ services:
       postgres-user:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   chat-service:

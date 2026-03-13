@@ -27,7 +27,15 @@ public class User {
     @Column(nullable = false)
     private String passwordHash;
 
-    @Column(nullable = false)
+    /**
+     * Display name collected during registration.
+     * This is immutable and serves only as the initial value
+     * sent to user-service via UserRegisteredEvent.
+     *
+     * The source of truth for the display name is in the user-service Profile entity.
+     * Auth service never reads or updates this field after registration.
+     */
+    @Column(nullable = false, updatable = false)
     private String displayName;
 
     @CreationTimestamp
