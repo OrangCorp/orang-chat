@@ -9,7 +9,7 @@ const Signup = () => {
   const navigate = useNavigate();
 
   const onSubmit = async (data) => {
-    const success = await signup(data.email, data.password);
+    const success = await signup(data.email, data.password, data.displayName);
     if (success) navigate('/');
   };
 
@@ -31,6 +31,21 @@ const Signup = () => {
       </Typography>
       
       <form onSubmit={handleSubmit(onSubmit)}>
+        <TextField
+          {...register('displayName', { required: 'Name is required' })}
+          label="Name"
+          type="text"
+          fullWidth
+          margin="normal"
+          error={!!errors.displayName}
+          helperText={errors.displayName?.message}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: '20px 8px 20px 8px', // top-left, top-right, bottom-right, bottom-left
+              // This makes top corners very rounded, bottom corners slightly rounded
+            }
+          }}
+        />
         <TextField
           {...register('email', { required: 'Email is required' })}
           label="Email"
