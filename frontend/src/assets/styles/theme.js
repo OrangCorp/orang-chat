@@ -3,16 +3,15 @@ import { createTheme } from '@mui/material/styles';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#f99500',
+      main: '#F4991A',
     },
     secondary: {
-      main: '#1a7610',
+      main: '#344F1F',
     },
     background: {
-      default: '#e8dfcb',     // Page background
-      paper: '#e8dfcb',        // Card/Paper background
-      // You can add custom colors too
-      form: '#e8dfcb',         // Custom - for your form background
+      default: '#F2EAD3',
+      paper: '#F2EAD3',
+      form: '#F2EAD3',
     },
   },
   typography: {

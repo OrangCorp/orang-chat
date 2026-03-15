@@ -1,8 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 
-// API Base URL - you can move this to a config file later
-const API_BASE_URL = 'http://localhost:8080'; // Direct, or use 'http://localhost:8080' for gateway
-
+const API_BASE_URL = 'http://localhost:8080';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -10,15 +8,12 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check for saved token and validate on initial load
   useEffect(() => {
     const initializeAuth = async () => {
       const token = localStorage.getItem('accessToken');
       const savedUser = localStorage.getItem('user');
       
       if (token && savedUser) {
-        // Optional: Validate token with backend
-        // For now, just restore the user
         setUser(JSON.parse(savedUser));
       }
       setLoading(false);
@@ -43,7 +38,6 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle error responses
         if (response.status === 401) {
           throw new Error('Invalid email or password');
         } else if (response.status === 400) {
@@ -53,7 +47,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // Success - data contains user info and token
       const userData = {
         id: data.userId,
         email: data.email,
@@ -62,7 +55,6 @@ export const AuthProvider = ({ children }) => {
         tokenType: data.tokenType,
       };
 
-      // Save to state and localStorage
       setUser(userData);
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
@@ -82,8 +74,6 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
-    // Optional: Call logout endpoint if backend needs it
-    // fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' });
   };
 
   const signup = async (email, password, displayName) => {
@@ -109,9 +99,7 @@ export const AuthProvider = ({ children }) => {
         if (response.status === 409) {
           throw new Error('Email already registered');
         } else if (response.status === 400) {
-          // Handle validation errors
           if (data.errors) {
-            // Format validation errors into a readable message
             const errorMessages = Object.entries(data.errors)
               .map(([field, message]) => `${field}: ${message}`)
               .join(', ');
@@ -124,7 +112,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // Success - auto-login after registration
       const newUser = {
         id: data.userId,
         email: data.email,
@@ -147,7 +134,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Helper function for authenticated API calls
   const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('accessToken');
     
@@ -169,7 +155,7 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       signup,
-      fetchWithAuth, // Useful for other API calls
+      fetchWithAuth,
       isAuthenticated: !!user
     }}>
       {children}
