@@ -1,20 +1,27 @@
 package com.orang.messageservice.controller;
 
 import com.orang.messageservice.dto.MessageResponse;
+import com.orang.messageservice.dto.PageRequestDto;
 import com.orang.messageservice.service.MessageService;
+import com.orang.shared.constants.PaginationConstants;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/messages")
 @RequiredArgsConstructor
+@Validated
 public class MessageController {
 
     private final MessageService messageService;
@@ -23,15 +30,14 @@ public class MessageController {
     public ResponseEntity<Page<MessageResponse>> getChatHistory(
             @PathVariable UUID conversationId,
             @AuthenticationPrincipal String myUserId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @Valid PageRequestDto pageRequest) {
         UUID userUUID = UUID.fromString(myUserId);
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.max(1, Math.min(size, 100));
-        Pageable pageable = PageRequest.of(safePage, safeSize);
+        Pageable pageable = pageRequest.toPageable();
+
+        log.debug("Fetching messages for conversation {} with page {} and size {}",
+                conversationId, pageRequest.getPage(), pageRequest.getSize());
 
         return ResponseEntity.ok(
                 messageService.getMessagesForConversation(conversationId, userUUID, pageable)
-        );
-    }
+        );    }
 }
