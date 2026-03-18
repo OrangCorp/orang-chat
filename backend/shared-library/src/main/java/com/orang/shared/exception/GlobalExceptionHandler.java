@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -16,6 +18,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // -----------------------------------------
     // Custom Application Exceptions
@@ -130,6 +134,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception e,
             HttpServletRequest request) {
+
+        logger.error("Unhandled exception while processing {} {}",
+                request.getMethod(),
+                request.getRequestURI(),
+                e);
 
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
