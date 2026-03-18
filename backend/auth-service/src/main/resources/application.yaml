@@ -33,11 +33,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
+      base-path: /actuator
   endpoint:
     health:
-      access: unrestricted
-      show-details: always
+      show-details: never
+      probes:
+        enabled: true
+  health:
+    defaults:
+      enabled: true
 
 springdoc:
   api-docs:

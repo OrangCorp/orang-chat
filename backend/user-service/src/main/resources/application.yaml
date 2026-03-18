@@ -37,11 +37,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: "health,info"
+        include: health
+      base-path: /actuator
   endpoint:
     health:
-      show-details: always
-      access: unrestricted
+      show-details: never
+      probes:
+        enabled: true
+  health:
+    defaults:
+      enabled: true
 
 logging:
   level:

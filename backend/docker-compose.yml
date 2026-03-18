@@ -13,11 +13,20 @@ services:
       - USER_SERVICE_URL=http://user-service:8082
       - CHAT_SERVICE_URL=ws://chat-service:8083
       - MESSAGE_SERVICE_URL=http://message-service:8084
+      - SPRING_DATA_REDIS_HOST=orangchat-redis
+      - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
     depends_on:
-      - auth-service
-      - user-service
-      - message-service
-      - chat-service
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      message-service:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   auth-service:
     build:
@@ -35,6 +44,13 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
 
   user-service:
     build:
@@ -55,6 +71,13 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
 
   chat-service:
     build:
@@ -73,6 +96,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
 
   message-service:
     build:
@@ -91,6 +121,13 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
 
   postgres-auth:
     image: postgres:18-alpine3.22
