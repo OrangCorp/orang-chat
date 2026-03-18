@@ -28,7 +28,14 @@ public class RateLimitingConfig {
                 return Mono.just("unknown");
             }
 
-            return Mono.just(remoteAddress.getAddress().getHostAddress());
+            String host;
+            if (remoteAddress.getAddress() != null) {
+                host = remoteAddress.getAddress().getHostAddress();
+            } else {
+                host = remoteAddress.getHostString();
+            }
+
+            return Mono.just(host);
         };
     }
 
@@ -49,7 +56,13 @@ public class RateLimitingConfig {
 
             InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
             if (remoteAddress != null) {
-                return Mono.just("anon-" + remoteAddress.getAddress().getHostAddress());
+                String host;
+                if (remoteAddress.getAddress() != null) {
+                    host = remoteAddress.getAddress().getHostAddress();
+                } else {
+                    host = remoteAddress.getHostString();
+                }
+                return Mono.just("anon-" + host);
             }
 
             return Mono.just("anonymous");
