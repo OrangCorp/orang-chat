@@ -13,7 +13,7 @@ services:
       - USER_SERVICE_URL=http://user-service:8082
       - CHAT_SERVICE_URL=ws://chat-service:8083
       - MESSAGE_SERVICE_URL=http://message-service:8084
-      - SPRING_DATA_REDIS_HOST=orangchat-redis
+      - SPRING_DATA_REDIS_HOST=redis
       - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
     depends_on:
       auth-service:
@@ -63,7 +63,7 @@ services:
       - orangchat-network
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
-      - SPRING_DATA_REDIS_HOST=orangchat-redis
+      - SPRING_DATA_REDIS_HOST=redis
     depends_on:
       postgres-user:
         condition: service_healthy
