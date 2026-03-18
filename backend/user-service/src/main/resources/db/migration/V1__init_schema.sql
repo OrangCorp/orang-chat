@@ -27,8 +27,8 @@ CREATE TABLE contacts (
                           user_id         UUID            NOT NULL,
                           contact_user_id UUID            NOT NULL,
                           status          VARCHAR(20)     NOT NULL,
-                          created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-                          updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                          created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+                          updated_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
 
                           CONSTRAINT chk_contacts_status
                               CHECK (status IN ('PENDING', 'ACCEPTED', 'BLOCKED'))
