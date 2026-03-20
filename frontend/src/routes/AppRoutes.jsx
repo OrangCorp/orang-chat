@@ -34,7 +34,13 @@ const AppRoutes = () => {
             <Chat />
           </PrivateRoute>
         } />
-        <Route path="/profile" element={
+        {/* Profile routes - /profile/me for own profile, /profile/:userId for others */}
+        <Route path="/profile/me" element={
+          <PrivateRoute>
+            <Profile />
+          </PrivateRoute>
+        } />
+        <Route path="/profile/:userId" element={
           <PrivateRoute>
             <Profile />
           </PrivateRoute>
