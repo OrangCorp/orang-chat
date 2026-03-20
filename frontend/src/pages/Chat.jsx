@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -8,11 +8,6 @@ import {
   IconButton,
   Avatar,
   CircularProgress,
-  Divider,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   Button
 } from '@mui/material';
 import {
@@ -31,6 +26,7 @@ const Chat = () => {
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const subscriptionSetupRef = useRef(false);
 
   // State
   const [conversation, setConversation] = useState(null);
@@ -45,6 +41,7 @@ const Chat = () => {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [currentRecipient, setCurrentRecipient] = useState(null);
 
   // Load conversation details and initial messages
   useEffect(() => {
@@ -53,7 +50,7 @@ const Chat = () => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
-      setMessages([]); // Clear messages when switching chats
+      setMessages([]);
       
       try {
         // Get conversation details
@@ -65,9 +62,14 @@ const Chat = () => {
         }
         setConversation(found);
 
+        // Set current recipient for filtering
+        const recipient = found.type === 'DIRECT' 
+          ? found.participantIds.find(id => id !== user.id)
+          : found.id;
+        setCurrentRecipient(recipient);
+
         // Load messages from REST API
         const messagePage = await messageService.getMessages(chatId, 0, 50);
-        console.log('Loaded messages:', messagePage.content); // Debug
         setMessages(messagePage.content);
         setHasMore(!messagePage.last);
         setPage(0);
@@ -103,45 +105,53 @@ const Chat = () => {
   // WebSocket connection and subscriptions
   useEffect(() => {
     if (!conversation || !user || !chatId) return;
+    if (subscriptionSetupRef.current) return;
+    subscriptionSetupRef.current = true;
 
     const setupWebSocket = async () => {
       try {
         await chatService.connect();
         setConnected(true);
 
-        // Define the message handler
         const handleMessage = (message) => {
-          console.log('Received WebSocket message:', message); // Debug
+          console.log('📨 Received:', message);
           
-          // Only process messages for this conversation
-          if (message.conversationId === chatId) {
-            // Handle typing indicators
-            if (message.type === 'TYPING') {
-              setTypingUsers(prev => {
-                const newSet = new Set(prev);
-                if (message.content === 'typing...') {
-                  newSet.add(message.senderId);
-                } else {
-                  newSet.delete(message.senderId);
-                }
-                return newSet;
-              });
-            } else {
-              // Regular message - add to list if not already there
-              setMessages(prev => {
-                // Check if message already exists (prevent duplicates)
-                const exists = prev.some(m => m.id === message.id);
-                if (exists) return prev;
-                return [...prev, message];
-              });
-              scrollToBottom();
-            }
+          // Handle typing indicators
+          if (message.type === 'TYPING') {
+            setTypingUsers(prev => {
+              const newSet = new Set(prev);
+              if (message.content === 'typing...') {
+                newSet.add(message.senderId);
+              } else {
+                newSet.delete(message.senderId);
+              }
+              return newSet;
+            });
+            return;
           }
+          
+          // Check if message belongs to this conversation
+          // For direct: sender or recipient should be the other user
+          // For group: recipient should be group ID
+
+          const messageWithId = {
+            ...message,
+            id: message.id || `ws-${Date.now()}-${Math.random()}`
+          };
+          
+          
+          // Add message to state
+          setMessages(prev => {
+            console.log(message);
+            console.log(prev);
+            return [...prev, messageWithId];
+          });
+          scrollToBottom();
         };
 
         // Subscribe based on conversation type
         if (conversation.type === 'DIRECT') {
-          chatService.subscribeToPrivateMessages(user.id, handleMessage);
+          chatService.subscribeToPrivateMessages(handleMessage);
         } else {
           chatService.subscribeToGroup(conversation.id, handleMessage);
         }
@@ -153,10 +163,11 @@ const Chat = () => {
     setupWebSocket();
 
     return () => {
+      subscriptionSetupRef.current = false;
       // Cleanup subscriptions
       if (conversation) {
         if (conversation.type === 'DIRECT') {
-          chatService.unsubscribe(`/user/${user.id}/queue/messages`);
+          chatService.unsubscribe(`/user/queue/messages`);
         } else {
           chatService.unsubscribe(`/topic/group/${conversation.id}`);
         }
@@ -199,32 +210,30 @@ const Chat = () => {
     setInput('');
     setSending(true);
 
-    // Determine recipient
     const recipientId = conversation.type === 'DIRECT' 
       ? conversation.participantIds.find(id => id !== user.id) 
       : conversation.id;
 
-    // Optimistic message
-    const tempId = `temp-${Date.now()}`;
-    const optimisticMessage = {
-      id: tempId,
-      conversationId: chatId,
+    // Create a temporary message for local display
+    const tempMessage = {
+      id: `temp-${Date.now()}`,
       senderId: user.id,
+      recipientId: recipientId,
       content: messageContent,
-      createdAt: new Date().toISOString(),
-      type: 'TEXT'
+      type: 'CHAT',
+      createdAt: new Date().toISOString()
     };
     
-    setMessages(prev => [...prev, optimisticMessage]);
+    // Add to local messages immediately
+    setMessages(prev => [...prev, tempMessage]);
     scrollToBottom();
 
     // Send via WebSocket
     chatService.sendMessage({
-      id: tempId,
       senderId: user.id,
       recipientId: recipientId,
       content: messageContent,
-      type: 'TEXT'
+      type: 'CHAT'
     });
 
     setSending(false);
@@ -241,21 +250,16 @@ const Chat = () => {
       ? conversation.participantIds.find(id => id !== user.id) 
       : conversation.id;
 
-    // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Send typing start
     if (value.length > 0) {
       chatService.sendTyping(user.id, recipientId, true);
-
-      // Set timeout to send typing stop after 2 seconds
       typingTimeoutRef.current = setTimeout(() => {
         chatService.sendTyping(user.id, recipientId, false);
       }, 2000);
     } else {
-      // Send typing stop immediately
       chatService.sendTyping(user.id, recipientId, false);
     }
   };
@@ -264,6 +268,17 @@ const Chat = () => {
   const getDisplayName = (userId) => {
     if (userId === user.id) return 'You';
     return participants[userId]?.displayName || userId.slice(0, 8);
+  };
+
+  // Get formatted time
+  const getMessageTime = (msg) => {
+    const date = msg.createdAt || msg.timestamp;
+    if (!date) return 'Just now';
+    try {
+      return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Just now';
+    }
   };
 
   if (loading) {
@@ -315,6 +330,9 @@ const Chat = () => {
             ● Online
           </Typography>
         )}
+        <Typography variant="caption" sx={{ ml: 2 }}>
+          {connected ? '🟢 Connected' : '🔴 Disconnected'}
+        </Typography>
       </Paper>
 
       {/* Messages area */}
@@ -334,16 +352,17 @@ const Chat = () => {
             </Typography>
           </Box>
         ) : (
-          <List>
-            {messages.map((msg) => (
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            {messages.map((msg, index) => (
               <MessageBubble
-                key={msg.id}
+                key={index}
                 message={msg}
                 isOwn={msg.senderId === user.id}
                 senderName={getDisplayName(msg.senderId)}
+                time={getMessageTime(msg)}
               />
             ))}
-          </List>
+          </Box>
         )}
         
         {typingUsers.size > 0 && (

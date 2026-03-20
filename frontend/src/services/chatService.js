@@ -36,7 +36,7 @@ class ChatService {
           resolve(this);
         },
         onStompError: (frame) => {
-          console.error('STOMP error:', frame);
+          console.log('STOMP error:', frame);
           this.connected = false;
           this.connectionPromise = null;
           reject(frame);
@@ -71,21 +71,18 @@ class ChatService {
   }
 
   // Subscribe to private messages for current user
-  subscribeToPrivateMessages(userId, callback) {
+  subscribeToPrivateMessages(callback) {
     this.connect().then(() => {
-      const destination = `/user/${userId}/queue/messages`;
+      const destination = `/user/queue/messages`;
+      console.log('📡 Subscribing to:', destination);
       
-      if (this.subscriptions.has(destination)) {
-        this.subscriptions.get(destination).unsubscribe();
-      }
-
       const subscription = this.stompClient.subscribe(destination, (message) => {
         const chatMessage = JSON.parse(message.body);
         callback(chatMessage);
       });
 
       this.subscriptions.set(destination, subscription);
-    }).catch(err => console.error('Failed to subscribe to private messages:', err));
+    });
   }
 
   // Subscribe to group messages
@@ -113,16 +110,20 @@ class ChatService {
       return;
     }
 
+    // Remove id - let backend generate it
+    const chatMessage = {
+      senderId: message.senderId,
+      recipientId: message.recipientId,
+      content: message.content,
+      type: 'CHAT',  // Use CHAT from the enum
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('📤 Sending message:', chatMessage);
+
     this.stompClient.publish({
       destination: '/app/chat.send',
-      body: JSON.stringify({
-        id: message.id || crypto.randomUUID(),
-        senderId: message.senderId,
-        recipientId: message.recipientId,
-        content: message.content,
-        type: message.type || 'TEXT',
-        timestamp: new Date().toISOString()
-      })
+      body: JSON.stringify(chatMessage)
     });
   }
 
@@ -133,12 +134,10 @@ class ChatService {
     this.stompClient.publish({
       destination: '/app/chat.send',
       body: JSON.stringify({
-        id: crypto.randomUUID(),
         senderId: senderId,
         recipientId: recipientId,
         content: isTyping ? 'typing...' : '',
-        type: 'TYPING',
-        timestamp: new Date().toISOString()
+        type: 'TYPING'
       })
     });
   }

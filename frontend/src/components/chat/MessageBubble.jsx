@@ -1,7 +1,10 @@
 import { Box, Paper, Typography } from '@mui/material';
 
-const MessageBubble = ({ message, isOwn, senderName }) => {
+const MessageBubble = ({ message, isOwn, senderName, time }) => {
+  if (!message) return null;
+  
   const isSystem = message.type === 'SYSTEM';
+  const displayTime = time || 'Just now';
 
   return (
     <Box sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', mb: 2 }}>
@@ -21,9 +24,9 @@ const MessageBubble = ({ message, isOwn, senderName }) => {
           wordBreak: 'break-word'
         }}
       >
-        <Typography variant="body2">{message.content}</Typography>
+        <Typography variant="body2">{message.content || 'Empty message'}</Typography>
         <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', mt: 0.5, opacity: 0.8 }}>
-          {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {displayTime}
         </Typography>
       </Paper>
     </Box>
