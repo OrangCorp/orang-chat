@@ -24,6 +24,7 @@ import { Search as SearchIcon, Chat as ChatIcon } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import { userService } from '../../services/userService';
 import { conversationService } from '../../services/messageService';
+import logoImg from '../../assets/logo.png';
 
 const Header = () => {
   const { logout, user } = useAuth();
@@ -108,7 +109,7 @@ const Header = () => {
         {/* Logo */}
         <Box sx={{ flexGrow: 1 }}>
           <img 
-            src="/logo.png" 
+            src={logoImg} 
             alt="Logo" 
             style={{ height: '40px', cursor: 'pointer' }}
             onClick={() => navigate('/')}

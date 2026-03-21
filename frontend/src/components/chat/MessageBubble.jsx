@@ -18,8 +18,8 @@ const MessageBubble = ({ message, isOwn, senderName, time }) => {
         sx={{
           p: 1.5,
           maxWidth: '70%',
-          bgcolor: isSystem ? 'grey.100' : (isOwn ? 'primary.light' : 'white'),
-          color: isSystem ? 'text.secondary' : (isOwn ? 'white' : 'text.primary'),
+          bgcolor: isSystem ? 'grey.100' : (isOwn ? 'primary.light' : 'secondary.light'),
+          color: isSystem ? 'text.secondary' : (isOwn ? 'white' : 'white'),
           borderRadius: isOwn ? '20px 8px 8px 20px' : '8px 20px 20px 8px',
           wordBreak: 'break-word'
         }}

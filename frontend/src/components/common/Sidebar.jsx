@@ -92,10 +92,6 @@ const Sidebar = () => {
     navigate(`/chat/${conversationId}`);
   };
 
-  const handleNewChat = () => {
-    // Could open a dialog to search users, but for now just navigate to a "new chat" page
-    navigate('/new-chat');
-  };
 
   const getConversationDisplay = (conv) => {
     if (conv.type === 'DIRECT') {
@@ -136,11 +132,6 @@ const Sidebar = () => {
         <Typography variant="subtitle2" color="text.secondary">
           Chats
         </Typography>
-        <Tooltip title="New chat">
-          <IconButton size="small" onClick={handleNewChat}>
-            <AddIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
       </Box>
 
       <Divider />

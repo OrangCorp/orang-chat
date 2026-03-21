@@ -111,7 +111,7 @@ const Profile = () => {
         sx={{ 
           p: 4,
           borderRadius: 4,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          bgcolor: 'secondary.main',
           color: 'white',
           mb: 3
         }}
@@ -180,23 +180,15 @@ const Profile = () => {
             </Typography>
           </Grid>
 
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              User ID
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-              {profile.userId}
-            </Typography>
-          </Grid>
 
-          <Grid item xs={12} md={6}>
+          {/*<Grid item xs={12} md={6}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Last Seen
             </Typography>
             <Typography variant="body1">
               {profile.lastSeen ? new Date(profile.lastSeen).toLocaleString() : 'Never'}
             </Typography>
-          </Grid>
+          </Grid>*/}
 
           <Grid item xs={12}>
             <Divider sx={{ my: 2 }} />

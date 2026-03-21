@@ -336,7 +336,7 @@ const Chat = () => {
       </Paper>
 
       {/* Messages area */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: 'grey.50' }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: '#efe4c3' }}>
         {hasMore && (
           <Box sx={{ textAlign: 'center', my: 2 }}>
             <Button onClick={loadMore} disabled={loadingMore}>
@@ -386,6 +386,12 @@ const Chat = () => {
               disabled={sending}
               multiline
               maxRows={4}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(e);
+                }
+              }}
             />
             <IconButton
               type="submit"
