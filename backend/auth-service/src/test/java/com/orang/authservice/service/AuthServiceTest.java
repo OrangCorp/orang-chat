@@ -2,6 +2,7 @@ package com.orang.authservice.service;
 
 import com.orang.authservice.dto.AuthResponse;
 import com.orang.authservice.dto.LoginRequest;
+import com.orang.authservice.dto.RefreshRequest;
 import com.orang.authservice.entity.User;
 import com.orang.authservice.repository.UserRepository;
 import com.orang.shared.exception.UnauthorizedException;
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -24,13 +27,19 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-public class AuthServiceTest {
+class AuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private RabbitTemplate rabbitTemplate;
+
+    @Mock
+    private RedisTemplate<String, String> redisTemplate;
 
     @Mock
     private JwtService jwtService;
@@ -56,20 +65,26 @@ public class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("login returns auth response for valid credentials")
+    @DisplayName("login returns auth response with both access and refresh tokens")
     void login_WithValidCredentials_ReturnsAuthResponse() {
+        // Arrange
         when(userRepository.findByEmail(testLoginRequest.getEmail()))
                 .thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches(testLoginRequest.getPassword(), testUser.getPasswordHash()))
                 .thenReturn(true);
         when(jwtService.generateToken(any(UUID.class), anyString()))
-                .thenReturn("fake.jwt.token");
+                .thenReturn("fake.access.token");
+        when(jwtService.generateRefreshToken(any(UUID.class)))
+                .thenReturn("fake.refresh.token");
 
+        // Act
         AuthResponse response = authService.login(testLoginRequest);
 
+        // Assert
         assertThat(response).isNotNull();
         assertThat(response.getEmail()).isEqualTo("test@example.com");
-        assertThat(response.getAccessToken()).isEqualTo("fake.jwt.token");
+        assertThat(response.getAccessToken()).isEqualTo("fake.access.token");
+        assertThat(response.getRefreshToken()).isEqualTo("fake.refresh.token");
         assertThat(response.getTokenType()).isEqualTo("Bearer");
     }
 
@@ -103,5 +118,94 @@ public class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(testLoginRequest))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Invalid email or password");
+    }
+
+    @Test
+    @DisplayName("refresh returns new tokens for valid refresh token")
+    void refresh_WithValidRefreshToken_ReturnsNewTokens() {
+        // Arrange
+        RefreshRequest request = new RefreshRequest();
+        request.setRefreshToken("valid.refresh.token");
+
+        when(jwtService.isRefreshToken("valid.refresh.token")).thenReturn(true);
+        when(jwtService.extractUserId("valid.refresh.token")).thenReturn(testUser.getId());
+        when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+        when(jwtService.generateToken(any(UUID.class), anyString())).thenReturn("new.access.token");
+        when(jwtService.generateRefreshToken(any(UUID.class))).thenReturn("new.refresh.token");
+
+        // Act
+        AuthResponse response = authService.refreshToken(request);
+
+        // Assert
+        assertThat(response.getAccessToken()).isEqualTo("new.access.token");
+        assertThat(response.getRefreshToken()).isEqualTo("new.refresh.token");
+    }
+
+    @Test
+    @DisplayName("refresh throws UnauthorizedException for invalid refresh token")
+    void refresh_WithInvalidToken_ThrowsUnauthorizedException() {
+        // Arrange
+        RefreshRequest request = new RefreshRequest();
+        request.setRefreshToken("invalid.token");
+
+        when(jwtService.isRefreshToken("invalid.token")).thenReturn(false);
+
+        // Act & Assert
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Invalid refresh token");
+    }
+
+    @Test
+    @DisplayName("refresh throws UnauthorizedException for access token used as refresh")
+    void refresh_WithAccessToken_ThrowsUnauthorizedException() {
+        // Arrange
+        RefreshRequest request = new RefreshRequest();
+        request.setRefreshToken("valid.access.token");
+
+        // isRefreshToken returns false for access tokens
+        when(jwtService.isRefreshToken("valid.access.token")).thenReturn(false);
+
+        // Act & Assert
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Invalid refresh token");
+    }
+
+    @Test
+    @DisplayName("refresh throws UnauthorizedException for deleted user")
+    void refresh_WithDeletedUser_ThrowsUnauthorizedException() {
+        // Arrange
+        RefreshRequest request = new RefreshRequest();
+        request.setRefreshToken("valid.refresh.token");
+        UUID deletedUserId = UUID.randomUUID();
+
+        when(jwtService.isRefreshToken("valid.refresh.token")).thenReturn(true);
+        when(jwtService.extractUserId("valid.refresh.token")).thenReturn(deletedUserId);
+        when(userRepository.findById(deletedUserId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("User not found");
+    }
+
+    @Test
+    @DisplayName("refresh throws UnauthorizedException for blacklisted user")
+    void refresh_WithBlacklistedUser_ThrowsUnauthorizedException() {
+        // Arrange
+        RefreshRequest request = new RefreshRequest();
+        request.setRefreshToken("valid.refresh.token");
+
+        when(jwtService.isRefreshToken("valid.refresh.token")).thenReturn(true);
+        when(jwtService.extractUserId("valid.refresh.token")).thenReturn(testUser.getId());
+
+        // Mock Redis to return true for hasKey (user is blacklisted)
+        when(redisTemplate.hasKey("blacklist:user:" + testUser.getId())).thenReturn(true);
+
+        // Act & Assert
+        assertThatThrownBy(() -> authService.refreshToken(request))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("User session has been revoked");
     }
 }
