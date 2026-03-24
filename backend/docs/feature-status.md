@@ -10,14 +10,21 @@
 ### 🔐 Authentication (Auth Service — Port 8081)
 - **User Registration** (`POST /api/auth/register`)
   - Email, password, and display name
-  - Returns JWT access token, userId, tokenType, expiresIn
+  - Returns JWT access token, refresh token, userId, tokenType, expiresIn
   - Publishes `UserRegisteredEvent` to RabbitMQ (after transaction commit) to trigger async profile creation
 - **User Login** (`POST /api/auth/login`)
   - Email/password authentication with BCrypt-encoded password verification
   - Returns same JWT response as registration
+- **Logout** (`POST /api/auth/logout`)
+  - Invalidates session by blacklisting the user ID in Redis (7-day TTL)
+  - Requires `Authorization: Bearer <token>` header
+- **Token Refresh** (`POST /api/auth/refresh`)
+  - Issues a new access token and refresh token given a valid refresh token
+  - Respects user blacklist from logout
 - **JWT Issuance & Validation**
   - HS256-signed tokens with configurable secret and expiry
-  - Token lifetime is currently configured via `jwt.expiration` in Auth Service
+  - Access token lifetime configured via `jwt.expiration` (default 15 minutes)
+  - Refresh token lifetime configured via `jwt.refresh-expiration` (default 7 days)
   - Shared JWT utilities are used by downstream services for validation/parsing
 
 ### 👤 User Profiles (User Service — Port 8082)

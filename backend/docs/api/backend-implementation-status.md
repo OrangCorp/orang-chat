@@ -72,9 +72,9 @@ Generated from source code, repository documentation, and recent commit history 
   Key Files: `auth-service/src/test/java/com/orang/authservice/AuthServiceApplicationTests.java`, `user-service/src/test/java/com/orang/userservice/UserServiceApplicationTests.java`, `message-service/src/test/java/com/orang/messageservice/MessageServiceApplicationTests.java`, `chat-service/src/test/java/com/orang/chatservice/ChatServiceApplicationTests.java`
 
 - Feature: Backend documentation accuracy
-  Current State: Auth API docs exist and technical debt is documented. Recent commits show active work on messaging, RabbitMQ, and group chat.
-  Missing Parts: The root README still marks WebSocket support and message-service as TODO even though both now have concrete implementation, so the project status documentation is behind the code.
-  Key Files: `README.md`, `docs/api/auth-api.md`, `docs/api/technical-debt.md`
+  Current State: Auth API docs now include logout and refresh endpoints. Root README updated to reflect actual docker-compose behavior, correct service startup order, complete environment variable table, and removal of stale TODO notes. Feature status and backend implementation status docs updated to reflect current auth capabilities and actual database migration state.
+  Missing Parts: API docs for user-service, message-service, and chat-service endpoints have not yet been written.
+  Key Files: `README.md`, `docs/api/auth-api.md`, `docs/feature-status.md`, `docs/api/backend-implementation-status.md`, `docs/api/technical-debt.md`
 
 ## 🔴 Not Implemented
 
@@ -111,8 +111,7 @@ Generated from source code, repository documentation, and recent commit history 
   Suggested Fix: Complete the receipt model with an embedded ID, repository, consumer, service methods, and retrieval/update APIs.
 
 - Issue: README status is stale relative to current code
-  Impact: Project planning and onboarding can understate implemented backend scope or misclassify working features as TODO.
-  Suggested Fix: Update the root README and service docs so they reflect current message-service and WebSocket capabilities.
+  Status: **Resolved.** README, auth API docs, feature status, and backend implementation status have been updated to reflect current logout/refresh endpoints, correct docker-compose behavior, accurate service startup order, and complete environment variable documentation.
 
 - Issue: Test coverage is mostly limited to application context startup
   Impact: Regressions in security, RabbitMQ integration, WebSocket flows, and data rules can land without detection.
@@ -137,7 +136,7 @@ Generated from source code, repository documentation, and recent commit history 
   Status: Implemented at basic level. Service URLs, datasource URLs, and broker hosts are externalized through environment variables.
 
 - Task: Database schema migration strategy
-  Status: Missing. Services still rely on Hibernate schema auto-update.
+  Status: In progress. Flyway is configured in all services (`flyway.enabled: true`) and `ddl-auto` is set to `validate` instead of `update`. However, no versioned migration scripts (`db/migration/V*.sql`) have been written yet — the schema is currently expected to be bootstrapped externally (e.g., by a previous Hibernate-managed run or a manual script). Migration scripts need to be created to complete the transition.
 
 - Task: CI/CD pipeline
   Status: Missing.
@@ -171,7 +170,7 @@ Generated from source code, repository documentation, and recent commit history 
 - [ ] Add CI/CD pipeline for build, test, and image publishing
 - [ ] Add observability stack for metrics, tracing, and centralized logging
 - [ ] Externalize secrets for non-local environments
-- [ ] Update project documentation to reflect the current backend implementation status
+- [x] Update project documentation to reflect the current backend implementation status
 - [ ] Refactor duplicated profile ownership concerns between auth-service and user-service
 - [ ] Refactor contact/profile modeling to reduce manual lookup logic
 - [ ] Fix message history page-size cap enforcement in `MessageController`

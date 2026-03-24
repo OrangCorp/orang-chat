@@ -25,8 +25,9 @@ Base URL (via gateway): `http://localhost:8080`
   "email": "user@example.com",
   "displayName": "John Doe",
   "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
-  "expiresIn": 86400
+  "expiresIn": 900
 }
 ```
 
@@ -54,7 +55,53 @@ Same as registration response
 `400 Bad Request` - Validation failed
 `401 Unauthorized` - Invalid credentials
 
-### 3. Health Check
+### 3. Logout
+
+**POST** `/api/auth/logout`
+
+**Request Headers:**
+```text
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+```
+
+**Response (204 No Content)**
+
+Invalidates the user session by blacklisting the user ID in Redis (TTL: 7 days). All tokens for the user are rejected until the blacklist entry expires or is removed.
+
+**Errors:**
+
+`401 Unauthorized` - Missing or invalid token
+
+### 4. Refresh Token
+
+**POST** `/api/auth/refresh`
+
+**Request:**
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "user@example.com",
+  "displayName": "John Doe",
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+**Errors:**
+
+`400 Bad Request` - Validation failed (missing refresh token)
+`401 Unauthorized` - Invalid or expired refresh token, or user session has been revoked
+
+### 5. Health Check
 
    **GET** `/actuator/health`
 
