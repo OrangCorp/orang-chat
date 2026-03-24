@@ -13,9 +13,9 @@ CREATE TABLE profiles (
                           display_name    VARCHAR(50)     NOT NULL,
                           bio             VARCHAR(500),
                           avatar_url      VARCHAR(500),
-                          last_seen       TIMESTAMPTZ,
-                          created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-                          updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+                          last_seen       TIMESTAMP,
+                          created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+                          updated_at      TIMESTAMP       NOT NULL DEFAULT NOW()
 );
 
 -- -----------------------------------------

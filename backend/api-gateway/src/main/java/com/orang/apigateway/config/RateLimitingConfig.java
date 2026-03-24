@@ -51,7 +51,19 @@ public class RateLimitingConfig {
 
                 return jwtUtils.extractUserId(token)
                         .map(Mono::just)
-                        .orElseGet(() -> Mono.just("invalid-token"));
+                        .orElseGet(() -> {
+                            InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+                            if (remoteAddress != null) {
+                                String host;
+                                if (remoteAddress.getAddress() != null) {
+                                    host = remoteAddress.getAddress().getHostAddress();
+                                } else {
+                                    host = remoteAddress.getHostString();
+                                }
+                                return Mono.just("anon-" + host);
+                            }
+                            return Mono.just("anonymous");
+                        });
             }
 
             InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
