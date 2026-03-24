@@ -12,8 +12,8 @@ CREATE TABLE conversations (
                                id              UUID            PRIMARY KEY,
                                name            VARCHAR(255),
                                type            VARCHAR(20)     NOT NULL,
-                               created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-                               updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                               created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+                               updated_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
 
                                CONSTRAINT chk_conversations_type
                                    CHECK (type IN ('DIRECT', 'GROUP'))
@@ -42,8 +42,8 @@ CREATE TABLE messages (
                           conversation_id UUID            NOT NULL,
                           sender_id       UUID            NOT NULL,
                           content         VARCHAR(2000)   NOT NULL,
-                          created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-                          updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                          created_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+                          updated_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
 
                           CONSTRAINT fk_messages_conversation
                               FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
@@ -56,7 +56,7 @@ CREATE TABLE messages (
 CREATE TABLE message_read_receipts (
                                        message_id      UUID            NOT NULL,
                                        read_by         UUID            NOT NULL,
-                                       read_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                                       read_at         TIMESTAMP       NOT NULL DEFAULT NOW(),
 
                                        CONSTRAINT pk_message_read_receipts
                                            PRIMARY KEY (message_id, read_by),
