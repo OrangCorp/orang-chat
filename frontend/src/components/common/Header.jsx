@@ -18,11 +18,24 @@ import {
   Avatar,
   CircularProgress,
   ClickAwayListener,
-  IconButton
+  IconButton,
+  Menu,
+  MenuItem,
+  Typography,
+  Divider,
+  Badge,
+  Tooltip
 } from '@mui/material';
-import { Search as SearchIcon, Chat as ChatIcon } from '@mui/icons-material';
+import { 
+  Search as SearchIcon, 
+  Chat as ChatIcon,
+  Person as PersonIcon,
+  Settings as SettingsIcon,
+  Logout as LogoutIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon
+} from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
-import { userService } from '../../services/userService';
+import userService from '../../services/userService'; // Import the singleton
 import { conversationService } from '../../services/messageService';
 import logoImg from '../../assets/logo.png';
 
@@ -37,10 +50,62 @@ const Header = () => {
   const [searching, setSearching] = useState(false);
   const searchAnchorRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  
+  // Profile menu state
+  const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  // Load current user's profile
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const loadUserProfile = async () => {
+      try {
+        setProfileLoading(true);
+        // This will be cached automatically
+        const profile = await userService.getProfile(user.id);
+        setCurrentUserProfile(profile);
+      } catch (error) {
+        console.error('Failed to load user profile:', error);
+        // Fallback to basic info from auth context
+        setCurrentUserProfile({
+          userId: user.id,
+          displayName: user.username || user.email?.split('@')[0] || 'User',
+          avatarUrl: null,
+          online: true
+        });
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    loadUserProfile();
+  }, [user]);
 
   const handleLogout = () => {
+    // Clear user service cache on logout
+    userService.clearCache();
     logout();
     navigate('/login');
+  };
+
+  const handleProfileMenuOpen = (event) => {
+    setProfileMenuAnchor(event.currentTarget);
+  };
+
+  const handleProfileMenuClose = () => {
+    setProfileMenuAnchor(null);
+  };
+
+  const handleProfileClick = () => {
+    handleProfileMenuClose();
+    navigate('/profile/me');
+  };
+
+  const handleSettingsClick = () => {
+    handleProfileMenuClose();
+    navigate('/settings');
   };
 
   // Handle search with debounce
@@ -101,6 +166,20 @@ const Header = () => {
 
   const handleClickAway = () => {
     setSearchOpen(false);
+  };
+
+  // Get user's display name for profile
+  const getDisplayName = () => {
+    if (currentUserProfile?.displayName) return currentUserProfile.displayName;
+    if (user?.username) return user.username;
+    if (user?.email) return user.email.split('@')[0];
+    return 'User';
+  };
+
+  // Get user's avatar initial
+  const getAvatarInitial = () => {
+    const name = getDisplayName();
+    return name.charAt(0).toUpperCase();
   };
 
   return (
@@ -194,7 +273,7 @@ const Header = () => {
                             primary={result.displayName}
                             secondary={
                               <>
-                                {result.isOnline ? (
+                                {result.online ? (
                                   <span style={{ color: '#4caf50' }}>● Online</span>
                                 ) : (
                                   <span>Last seen {result.lastSeen ? new Date(result.lastSeen).toLocaleDateString() : 'recently'}</span>
@@ -212,21 +291,140 @@ const Header = () => {
           )}
         </Box>
 
-        {/* Logout Button */}
-        <Button 
-          variant="contained"
-          color="secondary"
-          onClick={handleLogout}
-          sx={{ 
-            borderRadius: '20px 8px 20px 8px',
-            px: 3,
-            textTransform: 'none',
-            fontWeight: 'bold'
-          }}
-        >
-          Logout
-        </Button>
+        {/* User Profile Section */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* Profile Button with Avatar */}
+          <Tooltip title="Profile & Settings">
+            <Button
+              onClick={handleProfileMenuOpen}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                textTransform: 'none',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                borderRadius: '20px',
+                px: 2,
+                py: 0.5
+              }}
+            >
+              <Badge
+                color="success"
+                variant="dot"
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                overlap="circular"
+                invisible={!currentUserProfile?.online}
+              >
+                <Avatar 
+                  src={currentUserProfile?.avatarUrl}
+                  sx={{ 
+                    width: 32, 
+                    height: 32,
+                    bgcolor: 'secondary.main'
+                  }}
+                >
+                  {!profileLoading && getAvatarInitial()}
+                  {profileLoading && <CircularProgress size={24} sx={{ color: 'white' }} />}
+                </Avatar>
+              </Badge>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>
+                  {getDisplayName()}
+                </Typography>
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  {currentUserProfile?.online ? 'Online' : 'Offline'}
+                </Typography>
+              </Box>
+              <KeyboardArrowDownIcon sx={{ fontSize: 20 }} />
+            </Button>
+          </Tooltip>
+        </Box>
       </Toolbar>
+
+      {/* Profile Menu Dropdown */}
+      <Menu
+        anchorEl={profileMenuAnchor}
+        open={Boolean(profileMenuAnchor)}
+        onClose={handleProfileMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            mt: 1,
+            width: 280,
+            borderRadius: 2,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        {/* Profile Header */}
+        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Badge
+              color="success"
+              variant="dot"
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'right',
+              }}
+              overlap="circular"
+              invisible={!currentUserProfile?.online}
+            >
+              <Avatar 
+                src={currentUserProfile?.avatarUrl}
+                sx={{ 
+                  width: 48, 
+                  height: 48,
+                  bgcolor: 'secondary.main',
+                  border: '2px solid white'
+                }}
+              >
+                {getAvatarInitial()}
+              </Avatar>
+            </Badge>
+            <Box>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {getDisplayName()}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                {currentUserProfile?.online ? 'Active now' : 'Offline'}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider />
+
+        {/* Menu Items */}
+        <MenuItem onClick={handleProfileClick}>
+          <PersonIcon sx={{ mr: 2, fontSize: 20 }} />
+          <Typography variant="body2">My Profile</Typography>
+        </MenuItem>
+        
+        <MenuItem onClick={handleSettingsClick}>
+          <SettingsIcon sx={{ mr: 2, fontSize: 20 }} />
+          <Typography variant="body2">Settings</Typography>
+        </MenuItem>
+        
+        <Divider />
+        
+        <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+          <LogoutIcon sx={{ mr: 2, fontSize: 20 }} />
+          <Typography variant="body2">Logout</Typography>
+        </MenuItem>
+      </Menu>
     </AppBar>
   );
 };

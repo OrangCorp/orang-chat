@@ -8,15 +8,19 @@ import {
   IconButton,
   Avatar,
   CircularProgress,
-  Button
+  Button,
+  Chip,
+  Stack
 } from '@mui/material';
 import {
   Send as SendIcon,
-  ArrowBack as ArrowBackIcon
+  ArrowBack as ArrowBackIcon,
+  Group as GroupIcon,
+  Person as PersonIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { conversationService, messageService } from '../services/messageService';
-import { userService } from '../services/userService';
+import userService from '../services/userService'; // Import the singleton
 import chatService from '../services/chatService';
 import MessageBubble from '../components/chat/MessageBubble';
 
@@ -70,24 +74,24 @@ const Chat = () => {
 
         // Load messages from REST API
         const messagePage = await messageService.getMessages(chatId, 0, 50);
-        setMessages(messagePage.content);
+        setMessages(messagePage.content.reverse());
         setHasMore(!messagePage.last);
         setPage(0);
 
-        // Fetch profiles for all participants
+        // Fetch profiles for all participants using the new batch method
         const participantIds = found.participantIds || [];
-        const profiles = {};
-        await Promise.all(participantIds.map(async (pid) => {
-          if (pid !== user.id) {
-            try {
-              const profile = await userService.getProfile(pid);
-              profiles[pid] = profile;
-            } catch (e) {
-              profiles[pid] = { displayName: pid.slice(0, 8) };
-            }
-          }
-        }));
-        setParticipants(profiles);
+        
+        if (participantIds.length > 0) {
+          // Get all profiles at once (cached automatically)
+          const profileMap = await userService.getProfiles(participantIds);
+          
+          // Convert Map to object for easier access
+          const profiles = {};
+          profileMap.forEach((profile, userId) => {
+            profiles[userId] = profile;
+          });
+          setParticipants(profiles);
+        }
 
         // Scroll to bottom after messages load
         setTimeout(scrollToBottom, 100);
@@ -113,7 +117,7 @@ const Chat = () => {
         await chatService.connect();
         setConnected(true);
 
-        const handleMessage = (message) => {
+        const handleMessage = async (message) => {
           console.log('📨 Received:', message);
           
           // Handle typing indicators
@@ -130,22 +134,23 @@ const Chat = () => {
             return;
           }
           
-          // Check if message belongs to this conversation
-          // For direct: sender or recipient should be the other user
-          // For group: recipient should be group ID
-
+          // For new messages, ensure we have the sender's profile cached
+          if (message.type === 'CHAT' && message.senderId && message.senderId !== user.id) {
+            // Pre-cache the sender's profile if not already cached
+            try {
+              await userService.getProfile(message.senderId);
+            } catch (err) {
+              console.warn('Could not pre-cache sender profile:', err);
+            }
+          }
+          
           const messageWithId = {
             ...message,
             id: message.id || `ws-${Date.now()}-${Math.random()}`
           };
           
-          
           // Add message to state
-          setMessages(prev => {
-            console.log(message);
-            console.log(prev);
-            return [...prev, messageWithId];
-          });
+          setMessages(prev => [...prev, messageWithId]);
           scrollToBottom();
         };
 
@@ -191,7 +196,15 @@ const Chat = () => {
     try {
       const nextPage = page + 1;
       const messagePage = await messageService.getMessages(chatId, nextPage, 50);
-      setMessages(prev => [...messagePage.content, ...prev]);
+      
+      // Get unique user IDs from older messages to pre-cache profiles
+      const olderMessages = messagePage.content;
+      const uniqueSenderIds = [...new Set(olderMessages.map(msg => msg.senderId))];
+      
+      // Pre-cache profiles for older messages (silent, don't block UI)
+      Promise.all(uniqueSenderIds.map(id => userService.getProfile(id).catch(() => null)));
+      
+      setMessages(prev => [...olderMessages, ...prev]);
       setHasMore(!messagePage.last);
       setPage(nextPage);
     } catch (err) {
@@ -264,10 +277,25 @@ const Chat = () => {
     }
   };
 
-  // Get display name for a user
+  // Get display name for a user (with cache)
   const getDisplayName = (userId) => {
     if (userId === user.id) return 'You';
-    return participants[userId]?.displayName || userId.slice(0, 8);
+    const profile = participants[userId];
+    if (profile?.displayName) return profile.displayName;
+    // Fallback to cached value from user service if not in participants state
+    return userId.slice(0, 8);
+  };
+
+  // Get avatar for a user
+  const getAvatar = (userId) => {
+    if (userId === user.id) return null;
+    return participants[userId]?.avatarUrl || null;
+  };
+
+  // Get online status
+  const isUserOnline = (userId) => {
+    if (userId === user.id) return true;
+    return participants[userId]?.online || false;
   };
 
   // Get formatted time
@@ -283,7 +311,7 @@ const Chat = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
         <CircularProgress />
       </Box>
     );
@@ -293,7 +321,9 @@ const Chat = () => {
     return (
       <Box sx={{ p: 3 }}>
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="error">{error || 'Conversation not found'}</Typography>
+          <Typography color="error" gutterBottom>
+            {error || 'Conversation not found'}
+          </Typography>
           <Button variant="contained" onClick={() => navigate('/')} sx={{ mt: 2 }}>
             Go Home
           </Button>
@@ -306,41 +336,70 @@ const Chat = () => {
     ? conversation.participantIds?.find(id => id !== user.id) 
     : null;
 
+  const otherParticipantProfile = otherParticipantId ? participants[otherParticipantId] : null;
+
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-        <IconButton onClick={() => navigate('/')} sx={{ mr: 2 }}>
+      <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <IconButton onClick={() => navigate('/')}>
           <ArrowBackIcon />
         </IconButton>
+        
         <Avatar 
-          src={conversation.type === 'DIRECT' ? participants[otherParticipantId]?.avatarUrl : null}
-          sx={{ mr: 2 }}
+          src={conversation.type === 'DIRECT' ? otherParticipantProfile?.avatarUrl : null}
+          sx={{ width: 48, height: 48 }}
         >
-          {conversation.type === 'GROUP' ? 'G' : 
-            (participants[otherParticipantId]?.displayName?.charAt(0) || '?')}
+          {conversation.type === 'GROUP' ? 
+            <GroupIcon /> : 
+            (otherParticipantProfile?.displayName?.charAt(0)?.toUpperCase() || <PersonIcon />)}
         </Avatar>
-        <Typography variant="h6">
-          {conversation.type === 'GROUP' 
-            ? conversation.name || 'Group Chat' 
-            : participants[otherParticipantId]?.displayName || 'Unknown User'}
-        </Typography>
-        {conversation.type === 'DIRECT' && participants[otherParticipantId]?.isOnline && (
-          <Typography variant="caption" sx={{ ml: 2, color: 'success.main' }}>
-            ● Online
+        
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6">
+            {conversation.type === 'GROUP' 
+              ? conversation.name || 'Group Chat' 
+              : otherParticipantProfile?.displayName || 'Unknown User'}
           </Typography>
-        )}
-        <Typography variant="caption" sx={{ ml: 2 }}>
-          {connected ? '🟢 Connected' : '🔴 Disconnected'}
-        </Typography>
+          {conversation.type === 'DIRECT' && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="caption" color={isUserOnline(otherParticipantId) ? 'success.main' : 'text.disabled'}>
+                {isUserOnline(otherParticipantId) ? '● Online' : '○ Offline'}
+              </Typography>
+              {otherParticipantProfile?.lastSeen && !isUserOnline(otherParticipantId) && (
+                <Typography variant="caption" color="text.secondary">
+                  Last seen: {new Date(otherParticipantProfile.lastSeen).toLocaleString()}
+                </Typography>
+              )}
+            </Stack>
+          )}
+        </Box>
+        
+        <Chip 
+          label={connected ? 'Connected' : 'Disconnected'} 
+          color={connected ? 'success' : 'error'}
+          size="small"
+          variant="outlined"
+        />
       </Paper>
 
       {/* Messages area */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: '#efe4c3' }}>
+      <Box sx={{ 
+        flex: 1, 
+        overflowY: 'auto', 
+        p: 2, 
+        bgcolor: '#f5f5f5',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         {hasMore && (
           <Box sx={{ textAlign: 'center', my: 2 }}>
-            <Button onClick={loadMore} disabled={loadingMore}>
-              {loadingMore ? <CircularProgress size={24} /> : 'Load older messages'}
+            <Button 
+              onClick={loadMore} 
+              disabled={loadingMore}
+              size="small"
+            >
+              {loadingMore ? <CircularProgress size={20} /> : 'Load older messages'}
             </Button>
           </Box>
         )}
@@ -355,10 +414,11 @@ const Chat = () => {
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             {messages.map((msg, index) => (
               <MessageBubble
-                key={index}
+                key={msg.id || index}
                 message={msg}
                 isOwn={msg.senderId === user.id}
                 senderName={getDisplayName(msg.senderId)}
+                senderAvatar={getAvatar(msg.senderId)}
                 time={getMessageTime(msg)}
               />
             ))}
@@ -366,15 +426,26 @@ const Chat = () => {
         )}
         
         {typingUsers.size > 0 && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'left', mt: 1, fontStyle: 'italic' }}>
-            {Array.from(typingUsers).map(id => getDisplayName(id)).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+          <Typography 
+            variant="caption" 
+            color="text.secondary" 
+            sx={{ 
+              display: 'block', 
+              textAlign: 'left', 
+              mt: 1, 
+              fontStyle: 'italic',
+              pl: 2
+            }}
+          >
+            {Array.from(typingUsers).map(id => getDisplayName(id)).join(', ')} 
+            {typingUsers.size === 1 ? ' is' : ' are'} typing...
           </Typography>
         )}
         <div ref={messagesEndRef} />
       </Box>
 
       {/* Input area */}
-      <Paper square elevation={3} sx={{ p: 2 }}>
+      <Paper elevation={3} sx={{ p: 2 }}>
         <form onSubmit={handleSend}>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <TextField
