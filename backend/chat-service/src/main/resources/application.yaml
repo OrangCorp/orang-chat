@@ -23,3 +23,18 @@ logging:
     org.springframework.messaging: INFO
     org.springframework.web.socket: INFO
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  health:
+    defaults:
+      enabled: true
+

@@ -6,11 +6,24 @@ spring:
     name: api-gateway
   main:
     allow-bean-definition-overriding: true
+    web-application-type: reactive
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:orangchat-redis}
+      port: 6379
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
   cloud:
     gateway:
       server:
         webflux:
           routes:
+            # -----------------------------------------
+            # Auth Service Routes
+            # -----------------------------------------
             - id: auth-service-docs
               uri: ${AUTH_SERVICE_URL:http://localhost:8081}
               predicates:
@@ -20,7 +33,16 @@ spring:
               uri: ${AUTH_SERVICE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/auth/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 5
+                    redis-rate-limiter.burstCapacity: 10
+                    key-resolver: "#{@ipKeyResolver}"
 
+            # -----------------------------------------
+            # User Service Routes
+            # -----------------------------------------
             - id: user-service-docs
               uri: ${USER_SERVICE_URL:http://localhost:8082}
               predicates:
@@ -30,7 +52,16 @@ spring:
               uri: ${USER_SERVICE_URL:http://localhost:8082}
               predicates:
                 - Path=/api/users/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    key-resolver: "#{@userKeyResolver}"
 
+            # -----------------------------------------
+            # Message Service Routes
+            # -----------------------------------------
             - id: message-service-docs
               uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
               predicates:
@@ -40,7 +71,16 @@ spring:
               uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
               predicates:
                 - Path=/api/messages/**, /api/conversations/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 50
+                    redis-rate-limiter.burstCapacity: 100
+                    key-resolver: "#{@userKeyResolver}"
 
+            # -----------------------------------------
+            # Chat Service (WebSocket) - No Rate Limiting
+            # -----------------------------------------
             - id: chat-service
               uri: ${CHAT_SERVICE_URL:ws://localhost:8083}
               predicates:
@@ -74,3 +114,6 @@ springdoc:
         url: /v3/api-docs/api/messages
   api-docs:
     path: /v3/api-docs
+
+jwt:
+  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
