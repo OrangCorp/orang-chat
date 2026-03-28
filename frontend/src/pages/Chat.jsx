@@ -10,17 +10,19 @@ import {
   CircularProgress,
   Button,
   Chip,
-  Stack
+  Stack,
+  Fab,
 } from '@mui/material';
 import {
   Send as SendIcon,
   ArrowBack as ArrowBackIcon,
   Group as GroupIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { conversationService, messageService } from '../services/messageService';
-import userService from '../services/userService'; // Import the singleton
+import userService from '../services/userService';
 import chatService from '../services/chatService';
 import MessageBubble from '../components/chat/MessageBubble';
 
@@ -29,8 +31,10 @@ const Chat = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const subscriptionSetupRef = useRef(false);
+  const shouldAutoScrollRef = useRef(false);
 
   // State
   const [conversation, setConversation] = useState(null);
@@ -46,6 +50,7 @@ const Chat = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [currentRecipient, setCurrentRecipient] = useState(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Load conversation details and initial messages
   useEffect(() => {
@@ -93,8 +98,8 @@ const Chat = () => {
           setParticipants(profiles);
         }
 
-        // Scroll to bottom after messages load
-        setTimeout(scrollToBottom, 100);
+        // Scroll to bottom after messages load (always initially)
+        setTimeout(() => scrollToBottom(true), 100);
       } catch (err) {
         console.error('Failed to load chat:', err);
         setError(err.message);
@@ -105,6 +110,32 @@ const Chat = () => {
 
     loadData();
   }, [chatId, user]);
+
+  // Scroll listener on messages container
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 10; // threshold
+      setIsAtBottom(atBottom);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    // Initial check
+    handleScroll();
+
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [messagesContainerRef.current]);
+
+  // Effect to handle auto-scroll after new messages
+  useEffect(() => {
+    if (shouldAutoScrollRef.current) {
+      scrollToBottom(true);
+      shouldAutoScrollRef.current = false;
+    }
+  }, [messages]);
 
   // WebSocket connection and subscriptions
   useEffect(() => {
@@ -136,7 +167,6 @@ const Chat = () => {
           
           // For new messages, ensure we have the sender's profile cached
           if (message.type === 'CHAT' && message.senderId && message.senderId !== user.id) {
-            // Pre-cache the sender's profile if not already cached
             try {
               await userService.getProfile(message.senderId);
             } catch (err) {
@@ -149,9 +179,14 @@ const Chat = () => {
             id: message.id || `ws-${Date.now()}-${Math.random()}`
           };
           
+          // Capture scroll state before adding message
+          const wasAtBottom = checkIfAtBottom();
+          if (wasAtBottom) {
+            shouldAutoScrollRef.current = true;
+          }
+          
           // Add message to state
           setMessages(prev => [...prev, messageWithId]);
-          scrollToBottom();
         };
 
         // Subscribe based on conversation type
@@ -180,14 +215,20 @@ const Chat = () => {
     };
   }, [conversation, user, chatId]);
 
-  // Scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Helper: check if user is at bottom of messages container
+  const checkIfAtBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    return scrollTop + clientHeight >= scrollHeight - 10;
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  // Scroll to bottom, optionally force regardless of current position
+  const scrollToBottom = (force = false) => {
+    if (force || checkIfAtBottom()) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   // Load more messages (pagination)
   const loadMore = async () => {
@@ -227,6 +268,12 @@ const Chat = () => {
       ? conversation.participantIds.find(id => id !== user.id) 
       : conversation.id;
 
+    // Capture scroll state before adding message
+    const wasAtBottom = checkIfAtBottom();
+    if (wasAtBottom) {
+      shouldAutoScrollRef.current = true;
+    }
+
     // Create a temporary message for local display
     const tempMessage = {
       id: `temp-${Date.now()}`,
@@ -239,7 +286,6 @@ const Chat = () => {
     
     // Add to local messages immediately
     setMessages(prev => [...prev, tempMessage]);
-    scrollToBottom();
 
     // Send via WebSocket
     chatService.sendMessage({
@@ -384,14 +430,17 @@ const Chat = () => {
       </Paper>
 
       {/* Messages area */}
-      <Box sx={{ 
-        flex: 1, 
-        overflowY: 'auto', 
-        p: 2, 
-        bgcolor: '#f5f5f5',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
+      <Box 
+        ref={messagesContainerRef}
+        sx={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          p: 2, 
+          bgcolor: '#f5f5f5',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
         {hasMore && (
           <Box sx={{ textAlign: 'center', my: 2 }}>
             <Button 
@@ -475,6 +524,18 @@ const Chat = () => {
           </Box>
         </form>
       </Paper>
+
+      {/* Scroll to bottom button */}
+      {!isAtBottom && (
+        <Fab
+          color="primary"
+          size="small"
+          sx={{ position: 'fixed', bottom: 80, right: 20, zIndex: 1000 }}
+          onClick={() => scrollToBottom(true)}
+        >
+          <KeyboardArrowDownIcon />
+        </Fab>
+      )}
     </Box>
   );
 };

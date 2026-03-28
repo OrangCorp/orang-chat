@@ -8,7 +8,6 @@ import {
   List,
   ListItem,
   ListItemButton,
-  ListItemText,
   ListItemAvatar,
   Avatar,
   Divider,
@@ -22,16 +21,14 @@ import {
   Button
 } from '@mui/material';
 import { 
-  Add as AddIcon, 
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Menu as MenuIcon,
   Chat as ChatIcon,
-  Group as GroupIcon,
-  Person as PersonIcon
+  Group as GroupIcon
 } from '@mui/icons-material';
 import { conversationService } from '../../services/messageService';
-import userService from '../../services/userService'; // Import the singleton
+import userService from '../../services/userService';
 import { useAuth } from '../../context/AuthContext';
 
 const drawerWidth = 280;
@@ -41,7 +38,8 @@ const Sidebar = () => {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [open, setOpen] = useState(true); // State for drawer open/close
+  const [open, setOpen] = useState(true);
+  const [profiles, setProfiles] = useState(new Map()); // Store profiles in state
   const { user } = useAuth();
   const navigate = useNavigate();
   const { chatId } = useParams();
@@ -53,12 +51,11 @@ const Sidebar = () => {
     if (isMobile) {
       setOpen(false);
     } else {
-      // Restore from localStorage on desktop
       const savedState = localStorage.getItem('sidebar-open');
       if (savedState !== null) {
         setOpen(savedState === 'true');
       } else {
-        setOpen(true); // Default open on desktop
+        setOpen(true);
       }
     }
   }, [isMobile]);
@@ -80,6 +77,9 @@ const Sidebar = () => {
       const data = await conversationService.getConversations();
       setConversations(data);
       setError(null);
+      
+      // After loading conversations, fetch all profiles
+      await fetchAllProfiles(data);
     } catch (err) {
       setError('Failed to load conversations');
       console.error(err);
@@ -88,13 +88,67 @@ const Sidebar = () => {
     }
   };
 
-  const handleChatClick = (conversationId) => {
-    navigate(`/chat/${conversationId}`);
-    if (isMobile) {
-      setOpen(false); // Close drawer on mobile after navigation
+  const fetchAllProfiles = async (conversationsData) => {
+    // Get all unique user IDs from direct conversations
+    const userIds = conversationsData
+      .filter(conv => conv.type === 'DIRECT')
+      .map(conv => conv.participantIds.find(id => id !== user?.id))
+      .filter(id => id && id !== user?.id);
+    
+    if (userIds.length > 0) {
+      try {
+        // Fetch all profiles at once - this will populate the service cache
+        const profileMap = await userService.getProfiles(userIds);
+        
+        // Convert Map to plain object for state
+        const profilesMap = new Map();
+        profileMap.forEach((profile, userId) => {
+          if (profile) {
+            profilesMap.set(userId, profile);
+          }
+        });
+        setProfiles(profilesMap);
+      } catch (err) {
+        console.error('Failed to fetch profiles:', err);
+      }
     }
   };
 
+  // Update profiles when they change in the cache (e.g., online status updates)
+  useEffect(() => {
+    // Set up an interval to check for profile updates? 
+    // Or better, we could use a subscription, but for now we'll just 
+    // update when conversations change
+    const updateProfiles = async () => {
+      const userIds = conversations
+        .filter(conv => conv.type === 'DIRECT')
+        .map(conv => conv.participantIds.find(id => id !== user?.id))
+        .filter(id => id && id !== user?.id);
+      
+      if (userIds.length > 0) {
+        const profileMap = await userService.getProfiles(userIds);
+        const profilesMap = new Map();
+        profileMap.forEach((profile, userId) => {
+          if (profile) {
+            profilesMap.set(userId, profile);
+          }
+        });
+        setProfiles(profilesMap);
+      }
+    };
+    
+    // Update profiles when conversations change
+    if (conversations.length > 0 && user) {
+      updateProfiles();
+    }
+  }, [conversations, user]);
+
+  const handleChatClick = (conversationId) => {
+    navigate(`/chat/${conversationId}`);
+    if (isMobile) {
+      setOpen(false);
+    }
+  };
 
   const toggleDrawer = () => {
     setOpen(!open);
@@ -105,16 +159,25 @@ const Sidebar = () => {
       const otherId = conv.participantIds.find(id => id !== user?.id);
       if (!otherId) return { name: 'Unknown', avatar: null, id: null, online: false };
       
-      // Profile is automatically cached by user service
-      const profile = userService.profileCache.get(otherId);
-      const displayName = profile?.displayName || otherId.slice(0, 8);
+      // Get profile from state (which is updated after fetch)
+      const profile = profiles.get(otherId);
+      const displayName = profile?.displayName;
       const avatarUrl = profile?.avatarUrl;
       const online = profile?.online || false;
       
-      return { name: displayName, avatar: avatarUrl, id: otherId, online, type: 'DIRECT' };
+      // Use the display name if available, otherwise show a placeholder
+      const name = displayName || otherId.slice(0, 8);
+      
+      return { name, avatar: avatarUrl, id: otherId, online, type: 'DIRECT' };
     } else {
       // Group chat
-      return { name: conv.name || 'Unnamed Group', avatar: null, id: conv.id, online: false, type: 'GROUP' };
+      return { 
+        name: conv.name || 'Unnamed Group', 
+        avatar: null, 
+        id: conv.id, 
+        online: false, 
+        type: 'GROUP' 
+      };
     }
   };
 
@@ -143,24 +206,12 @@ const Sidebar = () => {
     }
   };
 
-  // Pre-cache profiles for all conversations
-  useEffect(() => {
-    const preCacheProfiles = async () => {
-      const userIds = conversations
-        .filter(conv => conv.type === 'DIRECT')
-        .map(conv => conv.participantIds.find(id => id !== user?.id))
-        .filter(id => id && !userService.profileCache.has(id));
-      
-      if (userIds.length === 0) return;
-      
-      // Batch load profiles (they'll be cached automatically)
-      await userService.getProfiles(userIds);
-    };
-
-    if (conversations.length > 0 && user) {
-      preCacheProfiles();
+  const getLastMessagePreview = (conv) => {
+    if (!conv.lastMessagePreview) {
+      return ''; // Return empty string instead of "No messages yet"
     }
-  }, [conversations, user]);
+    return conv.lastMessagePreview;
+  };
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -208,7 +259,7 @@ const Sidebar = () => {
       {/* Error State */}
       {error && (
         <Box sx={{ p: 2 }}>
-          <Typography color="error" variant="body2" align="center">
+          <Typography color="error" variant="body2" align="center" component="div">
             {error}
           </Typography>
           <Button 
@@ -225,8 +276,11 @@ const Sidebar = () => {
       {!loading && !error && conversations.length === 0 && (
         <Box sx={{ p: 2, textAlign: 'center', mt: 4 }}>
           <ChatIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="body1" color="text.secondary" gutterBottom>
+          <Typography variant="body1" color="text.secondary" component="div" gutterBottom>
             No chats yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" component="div">
+            Start a conversation to see it here
           </Typography>
         </Box>
       )}
@@ -238,6 +292,7 @@ const Sidebar = () => {
             const { name, avatar, id: otherId, online, type } = getConversationDisplay(conv);
             const isSelected = conv.id === chatId;
             const lastMessageTime = getLastMessageTime(conv);
+            const lastMessagePreview = getLastMessagePreview(conv);
             const unreadCount = conv.unreadCount || 0;
 
             if (!open) {
@@ -301,7 +356,7 @@ const Sidebar = () => {
               );
             }
 
-            // Expanded view - show full conversation item
+            // Expanded view - show full conversation item with custom layout
             return (
               <ListItem key={conv.id} disablePadding>
                 <ListItemButton
@@ -314,10 +369,11 @@ const Sidebar = () => {
                         bgcolor: 'primary.light',
                       }
                     },
-                    py: 1.5
+                    py: 1.5,
+                    px: 2
                   }}
                 >
-                  <ListItemAvatar>
+                  <ListItemAvatar sx={{ minWidth: 56 }}>
                     <Badge
                       color="success"
                       variant="dot"
@@ -340,50 +396,102 @@ const Sidebar = () => {
                       </Avatar>
                     </Badge>
                   </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography
-                          variant="body2"
-                          fontWeight={isSelected || unreadCount > 0 ? 'bold' : 'normal'}
-                          noWrap
-                          sx={{ maxWidth: '150px' }}
+                  
+                  {/* Custom layout to avoid nested p tags */}
+                  <Box sx={{ 
+                    flex: 1,
+                    minWidth: 0,
+                    ml: 1
+                  }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between',
+                      mb: 0.5
+                    }}>
+                      <Typography
+                        component="div"
+                        variant="body2"
+                        sx={{ 
+                          fontWeight: isSelected || unreadCount > 0 ? 'bold' : 'normal',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          flex: 1
+                        }}
+                      >
+                        {name}
+                      </Typography>
+                      {lastMessageTime && (
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary"
+                          component="span"
+                          sx={{ ml: 1, flexShrink: 0 }}
                         >
-                          {name}
+                          {lastMessageTime}
                         </Typography>
-                        {lastMessageTime && (
-                          <Typography variant="caption" color="text.secondary">
-                            {lastMessageTime}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                    secondary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      )}
+                    </Box>
+                    
+                    {lastMessagePreview && (
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between'
+                      }}>
                         <Typography
+                          component="div"
                           variant="caption"
                           color="text.secondary"
-                          noWrap
-                          sx={{ maxWidth: '150px' }}
+                          sx={{ 
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1
+                          }}
                         >
-                          {conv.lastMessagePreview || 'No messages yet'}
+                          {lastMessagePreview}
                         </Typography>
                         {unreadCount > 0 && (
                           <Badge
                             badgeContent={unreadCount}
                             color="error"
                             sx={{
+                              ml: 1,
+                              flexShrink: 0,
                               '& .MuiBadge-badge': {
                                 fontSize: '0.65rem',
                                 height: 18,
                                 minWidth: 18,
+                                position: 'relative',
+                                transform: 'none',
                               }
                             }}
                           />
                         )}
                       </Box>
-                    }
-                  />
+                    )}
+                    
+                    {/* Show unread count alone if no message preview and has unread messages */}
+                    {!lastMessagePreview && unreadCount > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <Badge
+                          badgeContent={unreadCount}
+                          color="error"
+                          sx={{
+                            '& .MuiBadge-badge': {
+                              fontSize: '0.65rem',
+                              height: 18,
+                              minWidth: 18,
+                              position: 'relative',
+                              transform: 'none',
+                            }
+                          }}
+                        />
+                      </Box>
+                    )}
+                  </Box>
                 </ListItemButton>
               </ListItem>
             );
