@@ -9,8 +9,8 @@ import com.orang.authservice.repository.UserRepository;
 import com.orang.shared.event.UserRegisteredEvent;
 import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.UnauthorizedException;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -24,6 +24,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -83,9 +84,22 @@ public class AuthService {
         }
 
         UUID userId = jwtService.extractUserId(refreshToken);
+        String tokenId = jwtService.extractTokenId(refreshToken);
 
         if (isUserBlacklisted(userId)) {
             throw new UnauthorizedException("User session has been revoked");
+        }
+
+        boolean tokenWasAlreadyUsed = markTokenAsUsed(
+                tokenId,
+                userId,
+                refreshExpiration / 1000
+        );
+
+        if (tokenWasAlreadyUsed) {
+            blacklistUser(userId, refreshExpiration / 1000);
+            log.error("SECURITY: Refresh token reuse detected for user {}, token {}", userId, tokenId);
+            throw new UnauthorizedException("Token reuse detected - all sessions revoked");
         }
 
         User user = userRepository.findById(userId)
@@ -133,6 +147,23 @@ public class AuthService {
     private boolean isUserBlacklisted(UUID userId) {
         String blacklistKey = "blacklist:user:" + userId;
         return redisTemplate.hasKey(blacklistKey);
+    }
+
+    private boolean markTokenAsUsed(String tokenId, UUID userId, long ttlSeconds) {
+        String tokenKey = "refresh:used:" + tokenId;
+
+        Boolean wasSet = redisTemplate.opsForValue().setIfAbsent(
+                tokenKey,
+                userId.toString(),
+                ttlSeconds,
+                java.util.concurrent.TimeUnit.SECONDS);
+
+        return Boolean.FALSE.equals(wasSet);
+    }
+
+    private boolean isTokenAlreadyUsed(String tokenId) {
+        String tokenKey = "refresh:used:" + tokenId;
+        return redisTemplate.hasKey(tokenKey);
     }
 
     public void blacklistUser(UUID userId, long ttlSeconds) {

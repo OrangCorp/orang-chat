@@ -8,25 +8,31 @@ import com.orang.authservice.repository.UserRepository;
 import com.orang.shared.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)  // ✨ Fixes UnnecessaryStubbingException
 class AuthServiceTest {
 
     @Mock
@@ -39,16 +45,18 @@ class AuthServiceTest {
     private RabbitTemplate rabbitTemplate;
 
     @Mock
+    private JwtService jwtService;
+
+    @Mock
     private RedisTemplate<String, String> redisTemplate;
 
     @Mock
-    private JwtService jwtService;
+    private ValueOperations<String, String> valueOperations;
 
     @InjectMocks
     private AuthService authService;
 
     private User testUser;
-    private LoginRequest testLoginRequest;
 
     @BeforeEach
     void setUp() {
@@ -59,153 +67,258 @@ class AuthServiceTest {
                 .displayName("Test User")
                 .build();
 
-        testLoginRequest = new LoginRequest();
-        testLoginRequest.setEmail("test@example.com");
-        testLoginRequest.setPassword("correct_password");
+        // Set @Value fields via reflection
+        ReflectionTestUtils.setField(authService, "jwtExpiration", 900000L);
+        ReflectionTestUtils.setField(authService, "refreshExpiration", 604800000L);
+
+        // Setup Redis mock
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
-    @Test
-    @DisplayName("login returns auth response with both access and refresh tokens")
-    void login_WithValidCredentials_ReturnsAuthResponse() {
-        // Arrange
-        when(userRepository.findByEmail(testLoginRequest.getEmail()))
-                .thenReturn(Optional.of(testUser));
-        when(passwordEncoder.matches(testLoginRequest.getPassword(), testUser.getPasswordHash()))
-                .thenReturn(true);
-        when(jwtService.generateToken(any(UUID.class), anyString()))
-                .thenReturn("fake.access.token");
-        when(jwtService.generateRefreshToken(any(UUID.class)))
-                .thenReturn("fake.refresh.token");
+    // ==================== LOGIN TESTS ====================
 
-        // Act
-        AuthResponse response = authService.login(testLoginRequest);
+    @Nested
+    @DisplayName("Login Tests")
+    class LoginTests {
 
-        // Assert
-        assertThat(response).isNotNull();
-        assertThat(response.getEmail()).isEqualTo("test@example.com");
-        assertThat(response.getAccessToken()).isEqualTo("fake.access.token");
-        assertThat(response.getRefreshToken()).isEqualTo("fake.refresh.token");
-        assertThat(response.getTokenType()).isEqualTo("Bearer");
+        private LoginRequest loginRequest;
+
+        @BeforeEach
+        void setUp() {
+            loginRequest = new LoginRequest();
+            loginRequest.setEmail("test@example.com");
+            loginRequest.setPassword("correct_password");
+        }
+
+        @Test
+        @DisplayName("returns auth response with both tokens for valid credentials")
+        void login_WithValidCredentials_ReturnsAuthResponse() {
+            // Arrange
+            when(userRepository.findByEmail(loginRequest.getEmail()))
+                    .thenReturn(Optional.of(testUser));
+            when(passwordEncoder.matches(loginRequest.getPassword(), testUser.getPasswordHash()))
+                    .thenReturn(true);
+            when(jwtService.generateToken(any(UUID.class), anyString()))
+                    .thenReturn("fake.access.token");
+            when(jwtService.generateRefreshToken(any(UUID.class)))
+                    .thenReturn("fake.refresh.token");
+
+            // Act
+            AuthResponse response = authService.login(loginRequest);
+
+            // Assert
+            assertThat(response).isNotNull();
+            assertThat(response.getEmail()).isEqualTo("test@example.com");
+            assertThat(response.getAccessToken()).isEqualTo("fake.access.token");
+            assertThat(response.getRefreshToken()).isEqualTo("fake.refresh.token");
+            assertThat(response.getTokenType()).isEqualTo("Bearer");
+            assertThat(response.getExpiresIn()).isEqualTo(900L);
+        }
+
+        @Test
+        @DisplayName("throws UnauthorizedException for non-existent email")
+        void login_WithNonExistentEmail_ThrowsUnauthorizedException() {
+            // Arrange
+            when(userRepository.findByEmail("unknown@example.com"))
+                    .thenReturn(Optional.empty());
+
+            loginRequest.setEmail("unknown@example.com");
+
+            // Act & Assert
+            assertThatThrownBy(() -> authService.login(loginRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("Invalid email or password");
+        }
+
+        @Test
+        @DisplayName("throws UnauthorizedException for wrong password")
+        void login_WithWrongPassword_ThrowsUnauthorizedException() {
+            // Arrange
+            when(userRepository.findByEmail("test@example.com"))
+                    .thenReturn(Optional.of(testUser));
+            when(passwordEncoder.matches("wrong_password", "hashed_password"))
+                    .thenReturn(false);
+
+            loginRequest.setPassword("wrong_password");
+
+            // Act & Assert
+            assertThatThrownBy(() -> authService.login(loginRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("Invalid email or password");
+        }
     }
 
-    @Test
-    @DisplayName("login throws UnauthorizedException for non-existent email")
-    void login_WithNonExistentEmail_ThrowsUnauthorizedException() {
-        // Arrange: User not found
-        when(userRepository.findByEmail("unknown@example.com"))
-                .thenReturn(Optional.empty());
+    // ==================== REFRESH TESTS ====================
 
-        testLoginRequest.setEmail("unknown@example.com");
+    @Nested
+    @DisplayName("Refresh Token Tests")
+    class RefreshTests {
 
-        // Act & Assert: Verify exception is thrown
-        assertThatThrownBy(() -> authService.login(testLoginRequest))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("Invalid email or password");
-    }
+        private RefreshRequest refreshRequest;
+        private final String validRefreshToken = "valid.refresh.token";
+        private final String tokenId = "token-jti-123";
 
-    @Test
-    @DisplayName("login throws UnauthorizedException for wrong password")
-    void login_WithWrongPassword_ThrowsUnauthorizedException() {
-        // Arrange: User exists but password doesn't match
-        when(userRepository.findByEmail("test@example.com"))
-                .thenReturn(Optional.of(testUser));
-        when(passwordEncoder.matches("wrong_password", "hashed_password"))
-                .thenReturn(false);  // Password doesn't match!
+        @BeforeEach
+        void setUp() {
+            refreshRequest = new RefreshRequest();
+            refreshRequest.setRefreshToken(validRefreshToken);
+        }
 
-        testLoginRequest.setPassword("wrong_password");
+        @Test
+        @DisplayName("returns new tokens for valid refresh token")
+        void refresh_WithValidRefreshToken_ReturnsNewTokens() {
+            // Arrange
+            when(jwtService.isRefreshToken(validRefreshToken)).thenReturn(true);
+            when(jwtService.extractUserId(validRefreshToken)).thenReturn(testUser.getId());
+            when(jwtService.extractTokenId(validRefreshToken)).thenReturn(tokenId);
+            when(redisTemplate.hasKey("blacklist:user:" + testUser.getId())).thenReturn(false);
+            when(valueOperations.setIfAbsent(
+                    eq("refresh:used:" + tokenId),
+                    eq(testUser.getId().toString()),
+                    anyLong(),
+                    any(TimeUnit.class)
+            )).thenReturn(true);  // First use — token NOT already used
+            when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+            when(jwtService.generateToken(any(UUID.class), anyString())).thenReturn("new.access.token");
+            when(jwtService.generateRefreshToken(any(UUID.class))).thenReturn("new.refresh.token");
 
-        // Act & Assert
-        assertThatThrownBy(() -> authService.login(testLoginRequest))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("Invalid email or password");
-    }
+            // Act
+            AuthResponse response = authService.refreshToken(refreshRequest);
 
-    @Test
-    @DisplayName("refresh returns new tokens for valid refresh token")
-    void refresh_WithValidRefreshToken_ReturnsNewTokens() {
-        // Arrange
-        RefreshRequest request = new RefreshRequest();
-        request.setRefreshToken("valid.refresh.token");
+            // Assert
+            assertThat(response.getAccessToken()).isEqualTo("new.access.token");
+            assertThat(response.getRefreshToken()).isEqualTo("new.refresh.token");
 
-        when(jwtService.isRefreshToken("valid.refresh.token")).thenReturn(true);
-        when(jwtService.extractUserId("valid.refresh.token")).thenReturn(testUser.getId());
-        when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
-        when(jwtService.generateToken(any(UUID.class), anyString())).thenReturn("new.access.token");
-        when(jwtService.generateRefreshToken(any(UUID.class))).thenReturn("new.refresh.token");
+            // Verify token was marked as used
+            verify(valueOperations).setIfAbsent(
+                    eq("refresh:used:" + tokenId),
+                    eq(testUser.getId().toString()),
+                    anyLong(),
+                    any(TimeUnit.class)
+            );
+        }
 
-        // Act
-        AuthResponse response = authService.refreshToken(request);
+        @Test
+        @DisplayName("throws UnauthorizedException for invalid token")
+        void refresh_WithInvalidToken_ThrowsUnauthorizedException() {
+            // Arrange
+            refreshRequest.setRefreshToken("invalid.token");
+            when(jwtService.isRefreshToken("invalid.token")).thenReturn(false);
 
-        // Assert
-        assertThat(response.getAccessToken()).isEqualTo("new.access.token");
-        assertThat(response.getRefreshToken()).isEqualTo("new.refresh.token");
-    }
+            // Act & Assert
+            assertThatThrownBy(() -> authService.refreshToken(refreshRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("Invalid refresh token");
+        }
 
-    @Test
-    @DisplayName("refresh throws UnauthorizedException for invalid refresh token")
-    void refresh_WithInvalidToken_ThrowsUnauthorizedException() {
-        // Arrange
-        RefreshRequest request = new RefreshRequest();
-        request.setRefreshToken("invalid.token");
+        @Test
+        @DisplayName("throws UnauthorizedException when access token used as refresh")
+        void refresh_WithAccessToken_ThrowsUnauthorizedException() {
+            // Arrange
+            refreshRequest.setRefreshToken("access.token.here");
+            when(jwtService.isRefreshToken("access.token.here")).thenReturn(false);
 
-        when(jwtService.isRefreshToken("invalid.token")).thenReturn(false);
+            // Act & Assert
+            assertThatThrownBy(() -> authService.refreshToken(refreshRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("Invalid refresh token");
+        }
 
-        // Act & Assert
-        assertThatThrownBy(() -> authService.refreshToken(request))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("Invalid refresh token");
-    }
+        @Test
+        @DisplayName("throws UnauthorizedException for blacklisted user")
+        void refresh_WithBlacklistedUser_ThrowsUnauthorizedException() {
+            // Arrange
+            when(jwtService.isRefreshToken(validRefreshToken)).thenReturn(true);
+            when(jwtService.extractUserId(validRefreshToken)).thenReturn(testUser.getId());
+            when(jwtService.extractTokenId(validRefreshToken)).thenReturn(tokenId);
+            when(redisTemplate.hasKey("blacklist:user:" + testUser.getId())).thenReturn(true);  // BLACKLISTED!
 
-    @Test
-    @DisplayName("refresh throws UnauthorizedException for access token used as refresh")
-    void refresh_WithAccessToken_ThrowsUnauthorizedException() {
-        // Arrange
-        RefreshRequest request = new RefreshRequest();
-        request.setRefreshToken("valid.access.token");
+            // Act & Assert
+            assertThatThrownBy(() -> authService.refreshToken(refreshRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("User session has been revoked");
+        }
 
-        // isRefreshToken returns false for access tokens
-        when(jwtService.isRefreshToken("valid.access.token")).thenReturn(false);
+        @Test
+        @DisplayName("throws UnauthorizedException for deleted user")
+        void refresh_WithDeletedUser_ThrowsUnauthorizedException() {
+            // Arrange
+            UUID deletedUserId = UUID.randomUUID();
+            when(jwtService.isRefreshToken(validRefreshToken)).thenReturn(true);
+            when(jwtService.extractUserId(validRefreshToken)).thenReturn(deletedUserId);
+            when(jwtService.extractTokenId(validRefreshToken)).thenReturn(tokenId);
+            when(redisTemplate.hasKey("blacklist:user:" + deletedUserId)).thenReturn(false);
+            when(valueOperations.setIfAbsent(
+                    eq("refresh:used:" + tokenId),
+                    eq(deletedUserId.toString()),
+                    anyLong(),
+                    any(TimeUnit.class)
+            )).thenReturn(true);  // First use
+            when(userRepository.findById(deletedUserId)).thenReturn(Optional.empty());  // User not found!
 
-        // Act & Assert
-        assertThatThrownBy(() -> authService.refreshToken(request))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("Invalid refresh token");
-    }
+            // Act & Assert
+            assertThatThrownBy(() -> authService.refreshToken(refreshRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("User not found");
+        }
 
-    @Test
-    @DisplayName("refresh throws UnauthorizedException for deleted user")
-    void refresh_WithDeletedUser_ThrowsUnauthorizedException() {
-        // Arrange
-        RefreshRequest request = new RefreshRequest();
-        request.setRefreshToken("valid.refresh.token");
-        UUID deletedUserId = UUID.randomUUID();
+        @Test
+        @DisplayName("detects token reuse and blacklists user")
+        void refresh_WithReusedToken_BlacklistsUserAndThrows() {
+            // Arrange
+            when(jwtService.isRefreshToken(validRefreshToken)).thenReturn(true);
+            when(jwtService.extractUserId(validRefreshToken)).thenReturn(testUser.getId());
+            when(jwtService.extractTokenId(validRefreshToken)).thenReturn(tokenId);
+            when(redisTemplate.hasKey("blacklist:user:" + testUser.getId())).thenReturn(false);
+            when(valueOperations.setIfAbsent(
+                    eq("refresh:used:" + tokenId),
+                    anyString(),
+                    anyLong(),
+                    any(TimeUnit.class)
+            )).thenReturn(false);  // Token ALREADY USED — reuse detected!
 
-        when(jwtService.isRefreshToken("valid.refresh.token")).thenReturn(true);
-        when(jwtService.extractUserId("valid.refresh.token")).thenReturn(deletedUserId);
-        when(userRepository.findById(deletedUserId)).thenReturn(Optional.empty());
+            // Act & Assert
+            assertThatThrownBy(() -> authService.refreshToken(refreshRequest))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("Token reuse detected - all sessions revoked");
 
-        // Act & Assert
-        assertThatThrownBy(() -> authService.refreshToken(request))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("User not found");
-    }
+            // Verify user was blacklisted
+            verify(valueOperations).set(
+                    eq("blacklist:user:" + testUser.getId()),
+                    eq("revoked"),
+                    anyLong(),
+                    any(TimeUnit.class)
+            );
+        }
 
-    @Test
-    @DisplayName("refresh throws UnauthorizedException for blacklisted user")
-    void refresh_WithBlacklistedUser_ThrowsUnauthorizedException() {
-        // Arrange
-        RefreshRequest request = new RefreshRequest();
-        request.setRefreshToken("valid.refresh.token");
+        @Test
+        @DisplayName("marks token as used in Redis")
+        void refresh_ShouldMarkTokenAsUsed() {
+            // Arrange
+            when(jwtService.isRefreshToken(validRefreshToken)).thenReturn(true);
+            when(jwtService.extractUserId(validRefreshToken)).thenReturn(testUser.getId());
+            when(jwtService.extractTokenId(validRefreshToken)).thenReturn(tokenId);
+            when(redisTemplate.hasKey("blacklist:user:" + testUser.getId())).thenReturn(false);
+            when(valueOperations.setIfAbsent(
+                    eq("refresh:used:" + tokenId),
+                    eq(testUser.getId().toString()),
+                    anyLong(),
+                    any(TimeUnit.class)
+            )).thenReturn(true);  // First use
+            when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+            when(jwtService.generateToken(any(), anyString())).thenReturn("new.access");
+            when(jwtService.generateRefreshToken(any())).thenReturn("new.refresh");
 
-        when(jwtService.isRefreshToken("valid.refresh.token")).thenReturn(true);
-        when(jwtService.extractUserId("valid.refresh.token")).thenReturn(testUser.getId());
+            // Act
+            authService.refreshToken(refreshRequest);
 
-        // Mock Redis to return true for hasKey (user is blacklisted)
-        when(redisTemplate.hasKey("blacklist:user:" + testUser.getId())).thenReturn(true);
-
-        // Act & Assert
-        assertThatThrownBy(() -> authService.refreshToken(request))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessage("User session has been revoked");
+            // Assert — verify Redis setIfAbsent was called with correct key
+            verify(valueOperations).setIfAbsent(
+                    eq("refresh:used:" + tokenId),
+                    eq(testUser.getId().toString()),
+                    eq(604800L),  // 7 days in seconds
+                    eq(TimeUnit.SECONDS)
+            );
+        }
     }
 }

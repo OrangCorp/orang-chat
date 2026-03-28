@@ -105,4 +105,25 @@ class JwtServiceTest {
 
         assertFalse(shortLivedService.isAccessToken(token));
     }
+
+    @Test
+    void shouldGenerateRefreshTokenWithJti() {
+        UUID userId = UUID.randomUUID();
+        String token = jwtService.generateRefreshToken(userId);
+
+        String tokenId = jwtService.extractTokenId(token);
+
+        assertNotNull(tokenId);
+        assertDoesNotThrow(() -> UUID.fromString(tokenId));
+    }
+
+    @Test
+    void shouldGenerateUniqueJtiForEachToken() {
+        UUID userId = UUID.randomUUID();
+
+        String token1 = jwtService.generateRefreshToken(userId);
+        String token2 = jwtService.generateRefreshToken(userId);
+
+        assertNotEquals(jwtService.extractTokenId(token1), jwtService.extractTokenId(token2));
+    }
 }

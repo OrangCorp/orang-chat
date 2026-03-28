@@ -44,9 +44,12 @@ public class JwtService {
         Date now = new Date();
         Date expirationDate = new Date(now.getTime() + refreshExpiration);
 
+        String tokenId = UUID.randomUUID().toString();
+
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("type", "refresh")
+                .claim("jti", tokenId)
                 .issuedAt(now)
                 .expiration(expirationDate)
                 .signWith(secretKey)
@@ -69,6 +72,11 @@ public class JwtService {
     public String extractEmail(String token) {
         Claims claims = validateToken(token);
         return claims.get("email").toString();
+    }
+
+    public String extractTokenId(String token) {
+        Claims claims = validateToken(token);
+        return claims.get("jti").toString();
     }
 
     public boolean isRefreshToken(String token) {
