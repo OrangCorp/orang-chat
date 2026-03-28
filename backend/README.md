@@ -101,4 +101,4 @@ Run tests for all modules from the root directory:
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details (TODO: Add LICENSE file).
 
 ---
-*Note: This project is currently under active development. Some services and features are marked as TODO.*
+*Note: This project is currently under active development. Read-receipts and token refresh are now implemented.*

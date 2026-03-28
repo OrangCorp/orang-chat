@@ -1,13 +1,13 @@
 # Backend Implementation Status
 
-Generated from source code, repository documentation, and recent commit history on branch `dev` as of 2026-03-13. Code is treated as the source of truth where documentation and implementation diverge.
+Generated from source code, repository documentation, and recent commit history on branch `dev` as of 2026-03-28. Code is treated as the source of truth where documentation and implementation diverge.
 
 ## ✅ Completed
 
 - Feature: Authentication and JWT issuance
-  Description: User registration and login are implemented with email/password validation, password hashing, JWT generation, and structured auth responses. Registration also emits a user-created domain event for downstream services.
+  Description: User registration and login are implemented with email/password validation, password hashing, JWT generation (access and refresh tokens), and structured auth responses. Registration also emits a user-created domain event for downstream services. Includes token refresh with rotation and reuse detection.
   Key Files: `auth-service/src/main/java/com/orang/authservice/controller/AuthController.java`, `auth-service/src/main/java/com/orang/authservice/service/AuthService.java`, `auth-service/src/main/java/com/orang/authservice/service/JwtService.java`, `auth-service/src/main/java/com/orang/authservice/entity/User.java`, `auth-service/src/main/java/com/orang/authservice/repository/UserRepository.java`
-  Related Endpoints: `POST /api/auth/register`, `POST /api/auth/login`
+  Related Endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh`
 
 - Feature: Event-driven profile bootstrap after registration
   Description: Auth service publishes `UserRegisteredEvent` via RabbitMQ, and user-service consumes it to create a profile idempotently. This is a working cross-service integration, not just a planned pattern.
@@ -44,6 +44,11 @@ Generated from source code, repository documentation, and recent commit history 
   Key Files: `chat-service/src/main/java/com/orang/chatservice/controller/ChatController.java`, `chat-service/src/main/java/com/orang/chatservice/config/WebSocketConfig.java`, `chat-service/src/main/java/com/orang/chatservice/config/WebSocketSecurityConfig.java`, `message-service/src/main/java/com/orang/messageservice/listener/ChatMessageListener.java`, `message-service/src/main/java/com/orang/messageservice/service/MessageService.java`
   Related Endpoints: `WS /ws`, STOMP `SEND /app/chat.send`, indirect persistence consumed from `chat.message.sent`
 
+- Feature: Message read receipts and persistence
+  Description: Chat-service receives read receipts over WebSocket, broadcasts them to relevant users, and publishes them to RabbitMQ. Message-service consumes these events and persists them in the database for durable tracking of message status.
+  Key Files: `chat-service/src/main/java/com/orang/chatservice/controller/ChatController.java`, `message-service/src/main/java/com/orang/messageservice/entity/MessageReadReceipt.java`, `message-service/src/main/java/com/orang/messageservice/repository/MessageReadReceiptRepository.java`, `message-service/src/main/java/com/orang/messageservice/listener/MessageReceiptListener.java`, `shared-library/src/main/java/com/orang/shared/event/MessageReceiptEvent.java`
+  Related Endpoints: STOMP `SEND /app/chat.receipt`, STOMP `SUBSCRIBE /user/queue/receipts`
+
 - Feature: API gateway routing and aggregated OpenAPI surface
   Description: Gateway routes are configured for auth, user, message, conversation, and WebSocket traffic, and SpringDoc aggregation is wired for the REST services.
   Key Files: `api-gateway/src/main/resources/application.yml`, `auth-service/src/main/java/com/orang/authservice/config/OpenApiConfig.java`, `user-service/src/main/java/com/orang/userservice/config/OpenApiConfig.java`, `message-service/src/main/java/com/orang/messageservice/config/OpenApiConfig.java`
@@ -51,15 +56,10 @@ Generated from source code, repository documentation, and recent commit history 
 
 - Feature: Shared exception and event contracts
   Description: Common API error handling, exception types, RabbitMQ constants, and shared event DTOs are extracted into a shared library reused across services.
-  Key Files: `shared-library/src/main/java/com/orang/shared/exception/GlobalExceptionHandler.java`, `shared-library/src/main/java/com/orang/shared/event/UserRegisteredEvent.java`, `shared-library/src/main/java/com/orang/shared/event/MessageReceipt.java`, `shared-library/src/main/java/com/orang/shared/constants/RabbitMQConstants.java`
+  Key Files: `shared-library/src/main/java/com/orang/shared/exception/GlobalExceptionHandler.java`, `shared-library/src/main/java/com/orang/shared/event/UserRegisteredEvent.java`, `shared-library/src/main/java/com/orang/shared/event/MessageReceiptEvent.java`, `shared-library/src/main/java/com/orang/shared/constants/RabbitMQConstants.java`
   Related Endpoints: Cross-cutting behavior across all backend services
 
 ## 🟡 In Progress
-
-- Feature: Read receipt persistence and lifecycle
-  Current State: Chat-service can receive a receipt message over STOMP and forward a shared `MessageReceipt` event. Message-service contains a `message_receipts` entity stub, which indicates planned persistence.
-  Missing Parts: No embedded ID class is present, no receipt repository or service exists, no RabbitMQ listener consumes `chat.receipt.received`, and no REST/WebSocket query/update path exposes persisted receipt state.
-  Key Files: `chat-service/src/main/java/com/orang/chatservice/controller/ChatController.java`, `shared-library/src/main/java/com/orang/shared/event/MessageReceipt.java`, `message-service/src/main/java/com/orang/messageservice/entity/MessageReceipt.java`
 
 - Feature: Group chat delivery persistence parity
   Current State: Group conversations can be created, and chat-service supports `MessageType.GROUP` for WebSocket fan-out to a topic.
