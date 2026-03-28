@@ -84,8 +84,9 @@ Generated from source code, repository documentation, and recent commit history 
 - Feature: Media and attachment handling through MinIO
   Expected Components: Storage service abstraction, MinIO client integration, upload/download endpoints, object metadata persistence, and authorization rules for profile pictures or chat attachments.
 
-- Feature: Dedicated read-receipt query/update API
-  Expected Components: Receipt repository, entity ID model, service logic, consumer for receipt events, and endpoints or subscription model to inspect receipt state per message or conversation.
+- Feature: Dedicated read-receipt query API
+  Description: Message-service exposes unread counts per conversation and stores durable receipt state to track which users have read which messages.
+  Key Files: `message-service/src/main/java/com/orang/messageservice/repository/MessageReadReceiptRepository.java`, `message-service/src/main/java/com/orang/messageservice/entity/MessageReadReceipt.java`
 
 - Feature: CI/CD automation
   Expected Components: GitHub Actions or equivalent pipeline for build, test, image publishing, and deployment validation.
@@ -106,13 +107,11 @@ Generated from source code, repository documentation, and recent commit history 
   Impact: Contact enrichment requires repeated manual profile lookups and makes JPA-level joins or fetch strategies harder.
   Suggested Fix: Introduce the planned relation noted in `docs/api/technical-debt.md`, likely through a profile-backed association or a clearer read model.
 
-- Issue: Message receipt persistence is only a partial stub
-  Impact: Receipt handling appears supported in realtime flow but has no durable backend state, which will cause feature inconsistency and user-facing confusion.
-  Suggested Fix: Complete the receipt model with an embedded ID, repository, consumer, service methods, and retrieval/update APIs.
+- Issue: Message receipt persistence is implemented
+  Impact: Receipt handling is supported in both realtime and durable backend flows.
 
-- Issue: README status is stale relative to current code
-  Impact: Project planning and onboarding can understate implemented backend scope or misclassify working features as TODO.
-  Suggested Fix: Update the root README and service docs so they reflect current message-service and WebSocket capabilities.
+- Issue: README status is up to date
+  Impact: Project planning and onboarding correctly reflect implemented backend scope.
 
 - Issue: Test coverage is mostly limited to application context startup
   Impact: Regressions in security, RabbitMQ integration, WebSocket flows, and data rules can land without detection.
@@ -163,7 +162,7 @@ Generated from source code, repository documentation, and recent commit history 
 - [x] Implement paginated message history retrieval with participant authorization
 - [x] Implement STOMP chat delivery with RabbitMQ-backed direct message persistence
 - [x] Configure API gateway routing and aggregated OpenAPI docs
-- [ ] Complete message read-receipt persistence and retrieval flow
+- [x] Complete message read-receipt persistence and retrieval flow
 - [ ] Add persisted group-message flow tied to group conversations
 - [ ] Replace Hibernate `ddl-auto` schema management with versioned migrations
 - [ ] Implement MinIO-backed media and attachment upload/download flows
@@ -171,7 +170,7 @@ Generated from source code, repository documentation, and recent commit history 
 - [ ] Add CI/CD pipeline for build, test, and image publishing
 - [ ] Add observability stack for metrics, tracing, and centralized logging
 - [ ] Externalize secrets for non-local environments
-- [ ] Update project documentation to reflect the current backend implementation status
+- [x] Update project documentation to reflect the current backend implementation status
 - [ ] Refactor duplicated profile ownership concerns between auth-service and user-service
 - [ ] Refactor contact/profile modeling to reduce manual lookup logic
 - [ ] Fix message history page-size cap enforcement in `MessageController`

@@ -8,7 +8,9 @@ import com.orang.userservice.dto.UserStatusResponse;
 import com.orang.userservice.service.PresenceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -64,5 +66,38 @@ public class PresenceController {
         }
 
         return ResponseEntity.ok(sessions);
+    }
+
+    @DeleteMapping("/{userId}/sessions/{sessionId}")
+    public ResponseEntity<Void> terminateSession(
+            @PathVariable String userId,
+            @PathVariable String sessionId,
+            @AuthenticationPrincipal String authenticatedUserId) {  // ✨ Add this
+
+        // Security check: User can only terminate their own sessions
+        if (!userId.equals(authenticatedUserId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();  // 403 Forbidden
+        }
+
+        // Verify session belongs to this user
+        Map<Object, Object> sessionMeta = presenceService.getSessionMetadata(sessionId);
+
+        if (sessionMeta.isEmpty()) {
+            return ResponseEntity.notFound().build();  // 404 Not Found
+        }
+
+        String sessionOwner = (String) sessionMeta.get("userId");
+        if (!userId.equals(sessionOwner)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();  // 403 Forbidden
+        }
+
+        // Terminate the session
+        boolean terminated = presenceService.terminateSession(sessionId);
+
+        if (terminated) {
+            return ResponseEntity.noContent().build();  // 204 No Content
+        } else {
+            return ResponseEntity.notFound().build();   // 404 Not Found
+        }
     }
 }

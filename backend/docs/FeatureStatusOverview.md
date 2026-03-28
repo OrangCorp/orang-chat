@@ -21,7 +21,7 @@
 - **JWT Issuance & Validation**
   - HS256-signed tokens with configurable secret and expiry
   - Support for access and refresh token lifetimes
-  - Token blacklisting for detected security anomalies
+  - Token rotation and reuse detection implemented
   - Shared JWT utilities are used by downstream services for validation/parsing
 
 ### 👤 User Profiles (User Service — Port 8082)

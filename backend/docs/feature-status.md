@@ -1,6 +1,6 @@
 # Feature Status Overview
 
-> **Current Date:** 2026-03-18
+> **Current Date:** 2026-03-28
 > **Project:** Orang Chat — Cloud-native microservices chat application
 
 ---
@@ -19,6 +19,8 @@
   - HS256-signed tokens with configurable secret and expiry
   - Token lifetime is currently configured via `jwt.expiration` in Auth Service
   - Shared JWT utilities are used by downstream services for validation/parsing
+- **Token Refresh** (`POST /api/auth/refresh`)
+  - Refresh token rotation and reuse detection implemented
 
 ### 👤 User Profiles (User Service — Port 8082)
 - **Get Profile** (`GET /api/users/{userId}/profile`)
@@ -40,17 +42,30 @@
   - Returns contact info enriched with profile data (displayName, avatarUrl, online status)
 - **Remove Contact** (`DELETE /api/users/{userId}/contacts/{contactUserId}`)
 
+### 💬 Conversations & Messaging (Message Service — Port 8084)
+- **Conversation Management**
+  - **List Conversations** (`GET /api/conversations`) — Returns list of conversations for the authenticated user
+  - **Direct Chat** (`POST /api/conversations/direct/{targetUserId}`) — Gets or creates a direct conversation between two users
+  - **Group Chat** (`POST /api/conversations/group`) — Creates a group conversation with multiple participants
+- **Message History**
+  - **Get History** (`GET /api/messages/{conversationId}`) — Paginated retrieval of messages with participant authorization
+- **Async Persistence**
+  - Consumes `chat.message.sent` from RabbitMQ to persist messages sent over WebSocket
+
 ### ⚡ Real-time Messaging (Chat Service — Port 8083)
 - **WebSocket/STOMP endpoint** (`/ws`)
   - JWT authentication for WebSocket connections
-  - `@MessageMapping("/chat.send")` — send messages
+  - `@MessageMapping("/chat.send")` — send messages (CHAT, JOIN, LEAVE, TYPING, GROUP)
   - Routes `GROUP` messages to `/topic/group/{conversationId}`
   - Routes `DIRECT` messages to `/queue/messages` (private queue)
   - `TYPING` indicator messages handled in-memory (not persisted)
+- **Read Receipts**
+  - `@MessageMapping("/chat.receipt")` — receives read receipts from clients
+  - Broadcasts receipts to relevant users over WebSocket
+  - Publishes `MessageReceiptEvent` to RabbitMQ for persistence in Message Service
 - **Online/Offline status via WebSocket lifecycle**
   - On connect: sets `user:{userId}:online = true` in Redis
   - On disconnect: removes Redis key
-  - Login itself does **not** mark the user online
 
 ### 🌐 API Gateway (Port 8080)
 - Single entry point routing to all backend services

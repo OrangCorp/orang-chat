@@ -1,5 +1,6 @@
 package com.orang.userservice.service;
 
+import com.orang.shared.constants.PresenceConstants;
 import com.orang.shared.presence.PresenceUtils;
 import com.orang.shared.presence.UserStatus;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -19,8 +20,10 @@ import java.util.Set;
 public class PresenceService {
 
     private final PresenceUtils presenceUtils;
+    private final RedisTemplate<String, String> redisTemplate;
 
     public PresenceService(RedisTemplate<String, String> redisTemplate) {
+        this.redisTemplate = redisTemplate;
         this.presenceUtils = new PresenceUtils(redisTemplate);
     }
 
@@ -92,5 +95,34 @@ public class PresenceService {
      */
     public Map<Object, Object> getSessionMetadata(String sessionId) {
         return presenceUtils.getSessionMetadata(sessionId);
+    }
+
+    public boolean terminateSession(String sessionId) {
+        String sessionMetaKey = PresenceConstants.sessionMetaKey(sessionId);
+        Map<Object, Object> meta = redisTemplate.opsForHash().entries(sessionMetaKey);
+
+        if (meta.isEmpty()) {
+            return false;
+        }
+
+        String userId = (String) meta.get(PresenceConstants.META_USER_ID);
+        if (userId == null) {
+            return false;
+        }
+
+        // Remove session from user's session set
+        String sessionsKey = PresenceConstants.userSessionsKey(userId);
+        redisTemplate.opsForSet().remove(sessionsKey, sessionId);
+
+        // Delete session metadata
+        redisTemplate.delete(sessionMetaKey);
+
+        // Clean up sessions key if empty
+        Long remainingSessions = redisTemplate.opsForSet().size(sessionsKey);
+        if (remainingSessions == null || remainingSessions == 0) {
+            redisTemplate.delete(sessionsKey);
+        }
+
+        return true;
     }
 }
