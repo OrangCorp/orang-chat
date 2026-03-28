@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'; // Add useLayoutEffect
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -118,24 +118,23 @@ const Chat = () => {
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 10; // threshold
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 10;
       setIsAtBottom(atBottom);
     };
 
     container.addEventListener('scroll', handleScroll);
-    // Initial check
-    handleScroll();
+    handleScroll(); // initial check
 
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [messagesContainerRef.current]);
+  }, []); // run only once
 
-  // Effect to handle auto-scroll after new messages
-  useEffect(() => {
+  // Use useLayoutEffect to ensure scroll happens after DOM update
+  useLayoutEffect(() => {
     if (shouldAutoScrollRef.current) {
       scrollToBottom(true);
       shouldAutoScrollRef.current = false;
     }
-  }, [messages]);
+  }, [messages, typingUsers]); // trigger on messages or typingUsers changes
 
   // WebSocket connection and subscriptions
   useEffect(() => {
@@ -153,6 +152,12 @@ const Chat = () => {
           
           // Handle typing indicators
           if (message.type === 'TYPING') {
+            // Capture scroll state before updating typing indicators
+            const wasAtBottom = checkIfAtBottom();
+            if (wasAtBottom) {
+              shouldAutoScrollRef.current = true;
+            }
+            
             setTypingUsers(prev => {
               const newSet = new Set(prev);
               if (message.content === 'typing...') {
@@ -234,20 +239,33 @@ const Chat = () => {
   const loadMore = async () => {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
+    
+    // Store current scroll position before loading
+    const container = messagesContainerRef.current;
+    const previousScrollHeight = container?.scrollHeight;
+    const previousScrollTop = container?.scrollTop;
+    
     try {
       const nextPage = page + 1;
       const messagePage = await messageService.getMessages(chatId, nextPage, 50);
       
-      // Get unique user IDs from older messages to pre-cache profiles
       const olderMessages = messagePage.content;
       const uniqueSenderIds = [...new Set(olderMessages.map(msg => msg.senderId))];
       
-      // Pre-cache profiles for older messages (silent, don't block UI)
       Promise.all(uniqueSenderIds.map(id => userService.getProfile(id).catch(() => null)));
       
       setMessages(prev => [...olderMessages, ...prev]);
       setHasMore(!messagePage.last);
       setPage(nextPage);
+      
+      // Restore scroll position after content is added
+      setTimeout(() => {
+        if (container && previousScrollHeight) {
+          const newScrollHeight = container.scrollHeight;
+          const heightDifference = newScrollHeight - previousScrollHeight;
+          container.scrollTop = previousScrollTop + heightDifference;
+        }
+      }, 100);
     } catch (err) {
       console.error('Failed to load more messages:', err);
     } finally {
@@ -328,7 +346,6 @@ const Chat = () => {
     if (userId === user.id) return 'You';
     const profile = participants[userId];
     if (profile?.displayName) return profile.displayName;
-    // Fallback to cached value from user service if not in participants state
     return userId.slice(0, 8);
   };
 
