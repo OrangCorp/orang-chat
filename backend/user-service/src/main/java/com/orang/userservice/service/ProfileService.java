@@ -8,7 +8,6 @@ import com.orang.userservice.entity.Profile;
 import com.orang.userservice.repository.ProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +20,7 @@ import java.util.UUID;
 public class ProfileService {
 
     private final ProfileRepository profileRepository;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final PresenceService presenceService;
 
     public ProfileResponse getProfileById(UUID userId) {
         Profile profile = profileRepository.findById(userId)
@@ -94,22 +93,7 @@ public class ProfileService {
                 .avatarUrl(profile.getAvatarUrl())
                 .bio(profile.getBio())
                 .lastSeen(profile.getLastSeen())
-                .isOnline(isUserOnline(profile.getUserId()))
+                .isOnline(presenceService.isUserOnline(profile.getUserId().toString()))
                 .build();
-    }
-
-    private boolean isUserOnline(UUID userId) {
-        String onlineStatus = redisTemplate.opsForValue().get("user:" + userId + ":online");
-        return "true".equals(onlineStatus);
-    }
-
-    public void setOnlineStatus(UUID userId, boolean online) {
-        String key = "user:" + userId + ":online";
-
-        if (online) {
-            redisTemplate.opsForValue().set(key, "true");
-        } else {
-            redisTemplate.delete(key);
-        }
     }
 }

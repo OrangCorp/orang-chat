@@ -25,6 +25,7 @@ Base URL (via gateway): `http://localhost:8080`
   "email": "user@example.com",
   "displayName": "John Doe",
   "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
   "expiresIn": 86400
 }
@@ -54,7 +55,24 @@ Same as registration response
 `400 Bad Request` - Validation failed
 `401 Unauthorized` - Invalid credentials
 
-### 3. Health Check
+### 3. Refresh Token
+   **POST** `/api/auth/refresh`
+
+**Request:**
+
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+**Response (200 OK):**
+Same as registration response (returns new access and refresh tokens)
+
+**Errors:**
+`401 Unauthorized` - Invalid or reused refresh token (token reuse triggers full user session revocation)
+
+### 4. Health Check
 
    **GET** `/actuator/health`
 
