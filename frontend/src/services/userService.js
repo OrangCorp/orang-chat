@@ -251,6 +251,96 @@ class UserService {
     });
   }
 
+
+  // Get incoming contact requests (where current user is the contact)
+  async getIncomingContactRequests(userId, forceRefresh = false) {
+    const key = `incomingContacts:${userId}`;
+    
+    if (!forceRefresh && this.pendingRequests.has(key)) {
+      return this.pendingRequests.get(key);
+    }
+    
+    return this.#dedupeRequest(key, async () => {
+      const response = await fetch(`${API_BASE_URL}/${userId}/contacts`, {
+        headers: getHeaders()
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch contacts');
+      }
+      
+      const contacts = await response.json();
+      
+      // Filter to only PENDING requests where contactUserId matches current user?
+      // Actually, the API might return all contacts, we need to see the structure.
+      // Based on the ContactResponse schema:
+      // - userId: the owner of the contact list
+      // - contactUserId: the person they added
+      // - status: PENDING/ACCEPTED/BLOCKED
+      
+      // For incoming requests, we want contacts where:
+      // 1. The request was sent to current user (contactUserId === currentUserId)
+      // 2. Status is PENDING
+      
+      // But wait - the endpoint is GET /api/users/{userId}/contacts
+      // This returns contacts for userId (the owner of the contact list)
+      // So to see who added YOU, you'd need to fetch contacts where contactUserId === your ID
+      // That's not directly supported by this endpoint.
+      
+      // Alternative approach: Store all contacts and filter client-side
+      // Or, your backend might have a separate endpoint for incoming requests
+      
+      // For now, let's store all contacts and we'll filter in the component
+      this.incomingRequestsCache = this.incomingRequestsCache || new Map();
+      this.incomingRequestsCache.set(userId, contacts);
+      
+      return contacts;
+    });
+  }
+
+  // Accept a contact request (update status to ACCEPTED)
+  async acceptContactRequest(userId, contactUserId) {
+    // This might be a PUT or PATCH endpoint - adjust based on your API
+    // Assuming you have an endpoint to update contact status
+    const response = await fetch(`${API_BASE_URL}/${userId}/contacts/${contactUserId}/accept`, {
+      method: 'PUT',
+      headers: getHeaders()
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to accept contact request');
+    }
+    
+    // Clear caches
+    this.contactCache.delete(userId);
+    if (this.incomingRequestsCache) {
+      this.incomingRequestsCache.delete(userId);
+    }
+    
+    return true;
+  }
+
+  // Reject/decline a contact request
+  async rejectContactRequest(userId, contactUserId) {
+    // Or use DELETE if that removes the pending request
+    const response = await fetch(`${API_BASE_URL}/${userId}/contacts/${contactUserId}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to reject contact request');
+    }
+    
+    // Clear caches
+    this.contactCache.delete(userId);
+    if (this.incomingRequestsCache) {
+      this.incomingRequestsCache.delete(userId);
+    }
+    
+    return true;
+  }
+
   // Add a contact
   async addContact(userId, contactUserId) {
     const response = await fetch(

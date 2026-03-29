@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -24,7 +24,8 @@ import {
   Typography,
   Divider,
   Badge,
-  Tooltip
+  Tooltip,
+  Chip
 } from '@mui/material';
 import { 
   Search as SearchIcon, 
@@ -32,10 +33,14 @@ import {
   Person as PersonIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
-  KeyboardArrowDown as KeyboardArrowDownIcon
+  KeyboardArrowDown as KeyboardArrowDownIcon,
+  Notifications as NotificationsIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
+  PersonAdd as PersonAddIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
-import userService from '../../services/userService'; // Import the singleton
+import userService from '../../services/userService';
 import { conversationService } from '../../services/messageService';
 import logoImg from '../../assets/logo.png';
 
@@ -55,6 +60,12 @@ const Header = () => {
   const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  
+  // Notifications state
+  const [notificationsAnchor, setNotificationsAnchor] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Load current user's profile
   useEffect(() => {
@@ -63,12 +74,10 @@ const Header = () => {
     const loadUserProfile = async () => {
       try {
         setProfileLoading(true);
-        // This will be cached automatically
         const profile = await userService.getProfile(user.id);
         setCurrentUserProfile(profile);
       } catch (error) {
         console.error('Failed to load user profile:', error);
-        // Fallback to basic info from auth context
         setCurrentUserProfile({
           userId: user.id,
           displayName: user.username || user.email?.split('@')[0] || 'User',
@@ -83,8 +92,64 @@ const Header = () => {
     loadUserProfile();
   }, [user]);
 
+  // Load notifications (incoming contact requests)
+  const loadNotifications = async () => {
+  if (!user?.id) return;
+  
+  try {
+    setNotificationsLoading(true);
+    
+    // Get current user's contacts (outgoing)
+    const myContacts = await userService.getContacts(user.id, true);
+    
+    // For incoming requests, we need to find who added current user
+    // Since we can't query other users' contacts directly, we need a different approach
+    
+    // Option 1: The contact relationship is bidirectional in your backend?
+    // If when User A adds User B, User B automatically gets a reverse relationship?
+    
+    // Option 2: Show pending requests YOU sent (outgoing)
+    // And change the UI to reflect that
+    
+    const outgoingPending = myContacts.filter(
+      contact => contact.status === 'PENDING'
+    );
+    
+    const formattedNotifications = outgoingPending.map(request => ({
+      id: request.id,
+      type: 'contact_request_sent',
+      userId: request.contactUserId,
+      displayName: request.displayName,
+      avatarUrl: request.avatarUrl,
+      status: request.status,
+      createdAt: request.createdAt,
+      read: false,
+      direction: 'outgoing'
+    }));
+    
+    setNotifications(formattedNotifications);
+    setUnreadCount(formattedNotifications.filter(n => !n.read).length);
+    
+  } catch (error) {
+    console.error('Failed to load notifications:', error);
+  } finally {
+    setNotificationsLoading(false);
+  }
+};
+
+  // Load notifications periodically
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    loadNotifications();
+    
+    // Refresh notifications every 30 seconds
+    const interval = setInterval(loadNotifications, 30000);
+    
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
   const handleLogout = () => {
-    // Clear user service cache on logout
     userService.clearCache();
     logout();
     navigate('/login');
@@ -106,6 +171,48 @@ const Header = () => {
   const handleSettingsClick = () => {
     handleProfileMenuClose();
     navigate('/settings');
+  };
+
+  const handleNotificationsOpen = (event) => {
+    setNotificationsAnchor(event.currentTarget);
+    // Mark all as read when opening
+    if (unreadCount > 0) {
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    }
+  };
+
+  const handleNotificationsClose = () => {
+    setNotificationsAnchor(null);
+  };
+
+  const handleAcceptRequest = async (notification) => {
+    try {
+      // Accept the contact request
+      // This would call an API endpoint to update the status to ACCEPTED
+      // For now, we'll just remove it from notifications
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      // TODO: Call API to accept contact request
+      // await userService.acceptContactRequest(user.id, notification.userId);
+      
+      // Optionally start a chat or show success message
+    } catch (error) {
+      console.error('Failed to accept request:', error);
+    }
+  };
+
+  const handleDeclineRequest = async (notification) => {
+    try {
+      // Decline/remove the contact request
+      await userService.removeContact(user.id, notification.userId);
+      
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Failed to decline request:', error);
+    }
   };
 
   // Handle search with debounce
@@ -148,7 +255,7 @@ const Header = () => {
   };
 
   const handleStartChat = async (e, targetUser) => {
-    e.stopPropagation(); // Prevent triggering the parent click
+    e.stopPropagation();
     setSearchOpen(false);
     setSearchQuery('');
     
@@ -168,7 +275,6 @@ const Header = () => {
     setSearchOpen(false);
   };
 
-  // Get user's display name for profile
   const getDisplayName = () => {
     if (currentUserProfile?.displayName) return currentUserProfile.displayName;
     if (user?.username) return user.username;
@@ -176,7 +282,6 @@ const Header = () => {
     return 'User';
   };
 
-  // Get user's avatar initial
   const getAvatarInitial = () => {
     const name = getDisplayName();
     return name.charAt(0).toUpperCase();
@@ -291,9 +396,24 @@ const Header = () => {
           )}
         </Box>
 
-        {/* User Profile Section */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* Profile Button with Avatar */}
+        {/* User Actions */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* Notifications Button */}
+          <Tooltip title="Notifications">
+            <IconButton 
+              color="inherit" 
+              onClick={handleNotificationsOpen}
+              sx={{ 
+                '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.1)' }
+              }}
+            >
+              <Badge badgeContent={unreadCount} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+
+          {/* Profile Button */}
           <Tooltip title="Profile & Settings">
             <Button
               onClick={handleProfileMenuOpen}
@@ -347,6 +467,105 @@ const Header = () => {
         </Box>
       </Toolbar>
 
+      {/* Notifications Dropdown */}
+      <Menu
+        anchorEl={notificationsAnchor}
+        open={Boolean(notificationsAnchor)}
+        onClose={handleNotificationsClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            mt: 1,
+            width: 380,
+            maxHeight: 500,
+            borderRadius: 2,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+          <Typography variant="subtitle1" fontWeight="bold">
+            Notifications
+          </Typography>
+        </Box>
+        
+        <Divider />
+        
+        {notificationsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : notifications.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography color="text.secondary">
+              No notifications
+            </Typography>
+          </Box>
+        ) : (
+          <List sx={{ p: 0 }}>
+            {notifications.map((notification) => (
+              <React.Fragment key={notification.id}>
+                <ListItem sx={{ py: 2, px: 2 }}>
+                  <ListItemAvatar>
+                    <Avatar src={notification.avatarUrl}>
+                      {notification.displayName?.charAt(0).toUpperCase()}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={
+                      <Typography variant="body2" fontWeight="medium">
+                        {notification.direction === 'outgoing' ? (
+                          <>Contact request sent to <strong>{notification.displayName}</strong></>
+                        ) : (
+                          <><strong>{notification.displayName}</strong> sent you a request</>
+                        )}
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography variant="caption" color="text.secondary">
+                        {notification.direction === 'outgoing' ? 'Waiting for response' : 'Pending approval'}
+                        {' • '}
+                        {notification.createdAt && new Date(notification.createdAt).toLocaleDateString()}
+                      </Typography>
+                    }
+                  />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title="Accept">
+                      <IconButton
+                        size="small"
+                        color="success"
+                        onClick={() => handleAcceptRequest(notification)}
+                        sx={{ bgcolor: 'success.light', '&:hover': { bgcolor: 'success.main' } }}
+                      >
+                        <CheckIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Decline">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeclineRequest(notification)}
+                        sx={{ bgcolor: 'error.light', '&:hover': { bgcolor: 'error.main' } }}
+                      >
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
+        )}
+      </Menu>
+
       {/* Profile Menu Dropdown */}
       <Menu
         anchorEl={profileMenuAnchor}
@@ -369,7 +588,6 @@ const Header = () => {
           }
         }}
       >
-        {/* Profile Header */}
         <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Badge
@@ -407,7 +625,6 @@ const Header = () => {
 
         <Divider />
 
-        {/* Menu Items */}
         <MenuItem onClick={handleProfileClick}>
           <PersonIcon sx={{ mr: 2, fontSize: 20 }} />
           <Typography variant="body2">My Profile</Typography>
