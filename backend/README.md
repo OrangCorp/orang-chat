@@ -7,12 +7,13 @@ Orang Chat is a modern, cloud-native microservices chat application built with S
 - **Microservices Architecture**: Independently deployable services for authentication, user management, and messaging.
 - **API Gateway**: Single entry point for all client requests using Spring Cloud Gateway.
 - **Authentication & Authorization**: Secure access using JWT (JSON Web Tokens).
-- **Real-time Communication**: WebSocket/STOMP support for instant messaging.
+- **Real-time Communication**: WebSocket/STOMP support for instant messaging and read receipts.
 - **Service Communication**: Event-driven architecture with RabbitMQ for asynchronous processing.
 - **Object Storage**: Profile pictures and attachments storage with MinIO (planned).
-- **Persistence**: Per-service PostgreSQL databases for data isolation.
+- **Persistence**: Per-service PostgreSQL databases with Flyway migrations (started).
+- **Contact Request System**: Full request/accept workflow with blocking support.
 
-See [docs/feature-status.md](docs/feature-status.md) for a full breakdown of implemented, partially implemented, and planned features.
+See [docs/feature-status.md](docs/feature-status.md) for a full breakdown of implemented and planned features.
 
 ## 🛠 Tech Stack
 
@@ -73,11 +74,11 @@ Build all modules using the Maven wrapper:
 
 ### 4. Run Services
 Start the services in the following order:
-1. **API Gateway**: `cd api-gateway && ../mvnw spring-boot:run`
-2. **Auth Service**: `cd auth-service && ../mvnw spring-boot:run`
-3. **User Service**: `cd user-service && ../mvnw spring-boot:run`
-4. **Message Service**: `cd message-service && ../mvnw spring-boot:run`
-5. **Chat Service**: `cd chat-service && ../mvnw spring-boot:run`
+- **API Gateway**: `cd api-gateway && ../mvnw spring-boot:run`
+- **Auth Service**: `cd auth-service && ../mvnw spring-boot:run`
+- **User Service**: `cd user-service && ../mvnw spring-boot:run`
+- **Message Service**: `cd message-service && ../mvnw spring-boot:run`
+- **Chat Service**: `cd chat-service && ../mvnw spring-boot:run`
 
 ## ⚙️ Environment Variables
 
