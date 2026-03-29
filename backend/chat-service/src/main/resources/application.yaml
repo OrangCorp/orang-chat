@@ -15,7 +15,10 @@ spring:
       port: 6379
 
 jwt:
-  secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+  secret: ${JWT_SECRET}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
 logging:
   level:

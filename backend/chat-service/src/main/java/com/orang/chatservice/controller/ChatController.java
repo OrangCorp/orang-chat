@@ -11,7 +11,9 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @Controller
@@ -23,7 +25,14 @@ public class ChatController {
     private final PresenceService presenceService;
 
     @MessageMapping("/chat.send")
-    public void processMessage(@Payload ChatMessage message) {
+    public void processMessage(@Payload ChatMessage message, Principal principal) {
+        UUID authenticatedUserId = UUID.fromString(principal.getName());
+
+        if (!authenticatedUserId.equals(message.getSenderId())) {
+            log.warn("Sender ID mismatch: authenticated={} claimed={}", authenticatedUserId, message.getSenderId());
+            throw new SecurityException("Sender ID does not match authenticated user");
+        }
+
         log.info("Received {} message from {} to {}",
                 message.getType() ,
                 message.getSenderId(),

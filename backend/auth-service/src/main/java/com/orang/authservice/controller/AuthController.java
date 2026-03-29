@@ -6,6 +6,7 @@ import com.orang.authservice.dto.RefreshRequest;
 import com.orang.authservice.dto.RegisterRequest;
 import com.orang.authservice.service.AuthService;
 import com.orang.authservice.service.JwtService;
+import com.orang.shared.exception.UnauthorizedException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,7 +37,14 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.replace("Bearer ", "");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new UnauthorizedException("Invalid authorization header");
+        }
+        String token = authHeader.substring(7);
+
+        if (!jwtService.isAccessToken(token)) {
+            throw new UnauthorizedException("Invalid or expired token");
+        }
 
         UUID userId = jwtService.extractUserId(token);
 

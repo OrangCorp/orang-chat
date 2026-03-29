@@ -6,16 +6,16 @@ spring:
     name: user-service
   datasource:
     url: jdbc:postgresql://localhost:5433/user_db
-    username: useruser
-    password: userpass
+    username: ${DB_USERNAME:useruser}
+    password: ${DB_PASSWORD:userpass}
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: 5672
@@ -31,7 +31,7 @@ spring:
     baseline-on-migrate: true
 
 jwt:
-  secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+  secret: ${JWT_SECRET}
 
 management:
   endpoints:

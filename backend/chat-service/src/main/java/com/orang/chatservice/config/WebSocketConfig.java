@@ -20,10 +20,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Value("${spring.rabbitmq.password}")
     private String rabbitPassword;
 
+    @Value("#{'${cors.allowed-origins}'.split(',')}")
+    private String[] allowedOrigins;
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*"); // Allow CORS
+                .setAllowedOrigins(allowedOrigins);
     }
 
     public void configureMessageBroker(MessageBrokerRegistry registry) {
