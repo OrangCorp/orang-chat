@@ -37,5 +37,4 @@ public class Message {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-
 }

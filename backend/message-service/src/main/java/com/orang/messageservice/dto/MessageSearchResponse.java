@@ -1,6 +1,5 @@
-package com.orang.userservice.dto;
+package com.orang.messageservice.dto;
 
-import com.orang.userservice.entity.ContactStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,11 +12,13 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ContactResponse {
+public class MessageSearchResponse {
+
     private UUID id;
-    private UUID requesterId;
-    private UUID recipientId;
-    private ContactStatus status;
-    private LocalDateTime acceptedAt;
+    private UUID conversationId;
+    private UUID senderId;
+    private String content;
+    private String highlightedContent;
+    private Float rank;
     private LocalDateTime createdAt;
 }

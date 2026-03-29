@@ -1,14 +1,15 @@
 package com.orang.messageservice.controller;
 
 import com.orang.messageservice.dto.MessageResponse;
+import com.orang.messageservice.dto.MessageSearchResponse;
+import com.orang.messageservice.dto.MessagesAroundResponse;
 import com.orang.messageservice.dto.PageRequestDto;
+import com.orang.messageservice.service.MessageSearchService;
 import com.orang.messageservice.service.MessageService;
-import com.orang.shared.constants.PaginationConstants;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,6 +26,7 @@ import java.util.UUID;
 public class MessageController {
 
     private final MessageService messageService;
+    private final MessageSearchService messageSearchService;
 
     @GetMapping("/{conversationId}")
     public ResponseEntity<Page<MessageResponse>> getChatHistory(
@@ -40,4 +42,31 @@ public class MessageController {
         return ResponseEntity.ok(
                 messageService.getMessagesForConversation(conversationId, userUUID, pageable)
         );    }
+
+    @GetMapping("/{conversationId}/search")
+    public ResponseEntity<Page<MessageSearchResponse>> searchMessages(
+            @PathVariable UUID conversationId,
+            @AuthenticationPrincipal String myUserId,
+            @RequestParam("q") String query,
+            @Valid PageRequestDto pageRequest) {
+        UUID userUUID = UUID.fromString(myUserId);
+        Pageable pageable = pageRequest.toPageable();
+
+        return ResponseEntity.ok(
+                messageSearchService.searchMessages(conversationId, userUUID, query, pageable)
+        );
+    }
+
+    @GetMapping("/{conversationId}/around/{messageId}")
+    public ResponseEntity<MessagesAroundResponse> getMessagesAround(
+            @PathVariable UUID conversationId,
+            @AuthenticationPrincipal String myUserId,
+            @PathVariable UUID messageId,
+            @RequestParam(defaultValue = "50") int size) {
+        UUID userUUID = UUID.fromString(myUserId);
+
+        return ResponseEntity.ok(
+                messageSearchService.getMessagesAround(conversationId, userUUID, messageId, size)
+        );
+    }
 }
