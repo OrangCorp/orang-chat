@@ -251,152 +251,158 @@ class UserService {
     });
   }
 
+// ========== Contact Methods ==========
 
-  // Get incoming contact requests (where current user is the contact)
-  async getIncomingContactRequests(userId, forceRefresh = false) {
-    const key = `incomingContacts:${userId}`;
-    
-    if (!forceRefresh && this.pendingRequests.has(key)) {
-      return this.pendingRequests.get(key);
+  // Get all accepted contacts for current user
+  async getContacts(forceRefresh = false) {
+    if (!forceRefresh && this.contactCache.has('contacts')) {
+      return this.contactCache.get('contacts');
     }
-    
-    return this.#dedupeRequest(key, async () => {
-      const response = await fetch(`${API_BASE_URL}/${userId}/contacts`, {
-        headers: getHeaders()
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch contacts');
-      }
-      
-      const contacts = await response.json();
-      
-      // Filter to only PENDING requests where contactUserId matches current user?
-      // Actually, the API might return all contacts, we need to see the structure.
-      // Based on the ContactResponse schema:
-      // - userId: the owner of the contact list
-      // - contactUserId: the person they added
-      // - status: PENDING/ACCEPTED/BLOCKED
-      
-      // For incoming requests, we want contacts where:
-      // 1. The request was sent to current user (contactUserId === currentUserId)
-      // 2. Status is PENDING
-      
-      // But wait - the endpoint is GET /api/users/{userId}/contacts
-      // This returns contacts for userId (the owner of the contact list)
-      // So to see who added YOU, you'd need to fetch contacts where contactUserId === your ID
-      // That's not directly supported by this endpoint.
-      
-      // Alternative approach: Store all contacts and filter client-side
-      // Or, your backend might have a separate endpoint for incoming requests
-      
-      // For now, let's store all contacts and we'll filter in the component
-      this.incomingRequestsCache = this.incomingRequestsCache || new Map();
-      this.incomingRequestsCache.set(userId, contacts);
-      
-      return contacts;
-    });
-  }
 
-  // Accept a contact request (update status to ACCEPTED)
-  async acceptContactRequest(userId, contactUserId) {
-    // This might be a PUT or PATCH endpoint - adjust based on your API
-    // Assuming you have an endpoint to update contact status
-    const response = await fetch(`${API_BASE_URL}/${userId}/contacts/${contactUserId}/accept`, {
-      method: 'PUT',
+    const response = await fetch(`/api/contacts`, {
       headers: getHeaders()
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to accept contact request');
-    }
-    
-    // Clear caches
-    this.contactCache.delete(userId);
-    if (this.incomingRequestsCache) {
-      this.incomingRequestsCache.delete(userId);
-    }
-    
+
+    if (!response.ok) throw new Error('Failed to fetch contacts');
+
+    const contacts = await response.json();
+    this.contactCache.set('contacts', contacts);
+
+    // Cache profiles for quick lookup
+    contacts.forEach(c => {
+      const otherUserId = c.requesterId === this.currentUserId ? c.recipientId : c.requesterId;
+      if (!this.profileCache.has(otherUserId)) {
+        this.profileCache.set(otherUserId, { userId: otherUserId });
+      }
+    });
+
+    return contacts;
+  }
+
+  // Send a contact request
+  async sendContactRequest(targetUserId) {
+    const response = await fetch(`/api/contacts/request/${targetUserId}`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to send contact request');
+
+    const contact = await response.json();
+
+    // Invalidate contacts cache
+    this.contactCache.delete('contacts');
+    return contact;
+  }
+
+  // Accept a contact request by contactId
+  async acceptContactRequest(contactId) {
+    const response = await fetch(`/api/contacts/${contactId}/accept`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to accept contact request');
+
+    this.contactCache.delete('contacts');
     return true;
   }
 
-  // Reject/decline a contact request
-  async rejectContactRequest(userId, contactUserId) {
-    // Or use DELETE if that removes the pending request
-    const response = await fetch(`${API_BASE_URL}/${userId}/contacts/${contactUserId}`, {
+  // Reject a contact request by contactId
+  async rejectContactRequest(contactId) {
+    const response = await fetch(`/api/contacts/${contactId}/reject`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to reject contact request');
+
+    this.contactCache.delete('contacts');
+    return true;
+  }
+
+  // Cancel a sent request
+  async cancelContactRequest(contactId) {
+    const response = await fetch(`/api/contacts/${contactId}/cancel`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to cancel contact request');
+
+    this.contactCache.delete('contacts');
+    return true;
+  }
+
+  // Remove an accepted contact
+  async removeContact(contactId) {
+    const response = await fetch(`/api/contacts/${contactId}`, {
       method: 'DELETE',
       headers: getHeaders()
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to reject contact request');
-    }
-    
-    // Clear caches
-    this.contactCache.delete(userId);
-    if (this.incomingRequestsCache) {
-      this.incomingRequestsCache.delete(userId);
-    }
-    
+
+    if (!response.ok) throw new Error('Failed to remove contact');
+
+    this.contactCache.delete('contacts');
     return true;
   }
 
-  // Add a contact
-  async addContact(userId, contactUserId) {
-    const response = await fetch(
-      `${API_BASE_URL}/${userId}/contacts/${contactUserId}`,
-      {
-        method: 'POST',
-        headers: getHeaders()
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error('Failed to add contact');
-    }
-    
-    const newContact = await response.json();
-    
-    // Invalidate contacts cache (force refresh on next get)
-    this.contactCache.delete(userId);
-    
-    // Cache the new contact's profile
-    this.profileCache.set(contactUserId, {
-      userId: contactUserId,
-      displayName: newContact.displayName,
-      avatarUrl: newContact.avatarUrl,
-      online: newContact.online,
+  // Block a user
+  async blockUser(targetUserId) {
+    const response = await fetch(`/api/contacts/block/${targetUserId}`, {
+      method: 'POST',
+      headers: getHeaders()
     });
-    
-    return newContact;
-  }
 
-  // Remove a contact
-  async removeContact(userId, contactUserId) {
-    const response = await fetch(
-      `${API_BASE_URL}/${userId}/contacts/${contactUserId}`,
-      {
-        method: 'DELETE',
-        headers: getHeaders()
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error('Failed to remove contact');
-    }
-    
-    // Invalidate contacts cache
-    this.contactCache.delete(userId);
-    
+    if (!response.ok) throw new Error('Failed to block user');
+
+    this.contactCache.delete('contacts');
     return true;
   }
 
-  // Get contact status for a specific user
-  async getContactStatus(userId, contactUserId) {
-    const contacts = await this.getContacts(userId);
-    const contact = contacts.find(c => c.contactUserId === contactUserId);
-    return contact?.status || null;
+  // Unblock a user
+  async unblockUser(targetUserId) {
+    const response = await fetch(`/api/contacts/block/${targetUserId}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to unblock user');
+
+    this.contactCache.delete('contacts');
+    return true;
   }
+
+  // Get incoming requests
+  async getIncomingRequests() {
+    const response = await fetch(`/api/contacts/pending/incoming`, {
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to fetch incoming requests');
+    return await response.json();
+  }
+
+  // Get outgoing requests
+  async getOutgoingRequests() {
+    const response = await fetch(`/api/contacts/pending/outgoing`, {
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to fetch outgoing requests');
+    return await response.json();
+  }
+
+  // Get blocked users
+  async getBlockedUsers() {
+    const response = await fetch(`/api/contacts/blocked`, {
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Failed to fetch blocked users');
+    return await response.json();
+  }
+
 }
 
 // Export singleton instance
