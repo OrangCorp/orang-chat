@@ -3,18 +3,15 @@ package com.orang.chatservice.controller;
 import com.orang.chatservice.dto.ChatMessage;
 import com.orang.chatservice.dto.MessageType;
 import com.orang.chatservice.service.PresenceService;
-import com.orang.shared.event.MessageReceiptEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Slf4j
 @Controller
