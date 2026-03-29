@@ -4,6 +4,8 @@ import com.orang.messageservice.dto.ConversationResponse;
 import com.orang.messageservice.entity.Conversation;
 import com.orang.messageservice.repository.ConversationRepository;
 import com.orang.shared.exception.BadRequestException;
+import com.orang.shared.exception.ForbiddenException;
+import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,5 +71,14 @@ public class ConversationService {
                 .name(conversation.getName())
                 .participantIds(conversation.getParticipantIds())
                 .build();
+    }
+
+    public void verifyParticipant(UUID conversationId, UUID userId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (!conversation.getParticipantIds().contains(userId)) {
+            throw new ForbiddenException("You are not a participant of this conversation");
+        }
     }
 }

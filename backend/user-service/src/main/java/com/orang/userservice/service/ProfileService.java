@@ -4,6 +4,7 @@ import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import com.orang.userservice.dto.ProfileResponse;
 import com.orang.userservice.dto.UpdateProfileRequest;
+import com.orang.userservice.dto.UserSummaryDto;
 import com.orang.userservice.entity.Profile;
 import com.orang.userservice.repository.ProfileRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -80,6 +84,16 @@ public class ProfileService {
         return toProfileResponse(updatedProfile);
     }
 
+    public Map<UUID, UserSummaryDto> getBatchUserSummaries(Set<UUID> userIds) {
+        List<Profile> profiles = profileRepository.findAllById(userIds);
+
+        return profiles.stream()
+                .collect(Collectors.toMap(
+                        Profile::getUserId,
+                        this::toUserSummaryDto
+                ));
+    }
+
     public List<ProfileResponse> searchProfiles(String query) {
         return profileRepository.findByDisplayNameContainingIgnoreCase(query).stream()
                 .map(this::toProfileResponse)
@@ -93,6 +107,15 @@ public class ProfileService {
                 .avatarUrl(profile.getAvatarUrl())
                 .bio(profile.getBio())
                 .lastSeen(profile.getLastSeen())
+                .isOnline(presenceService.isUserOnline(profile.getUserId().toString()))
+                .build();
+    }
+
+    private UserSummaryDto toUserSummaryDto(Profile profile) {
+        return UserSummaryDto.builder()
+                .userId(profile.getUserId())
+                .displayName(profile.getDisplayName())
+                .avatarUrl(profile.getAvatarUrl())
                 .isOnline(presenceService.isUserOnline(profile.getUserId().toString()))
                 .build();
     }
