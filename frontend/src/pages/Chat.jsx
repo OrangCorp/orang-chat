@@ -357,13 +357,6 @@ const Chat = () => {
           </Box>
         </form>
       </Paper>
-
-      {/* Scroll button - appears when not at bottom */}
-      {!isAtBottom && (
-        <Fab color="primary" size="small" sx={{ position: 'fixed', bottom: 80, right: 20, zIndex: 1000 }} onClick={() => scrollToBottom(true)}>
-          <KeyboardArrowDownIcon />
-        </Fab>
-      )}
     </Box>
   );
 };

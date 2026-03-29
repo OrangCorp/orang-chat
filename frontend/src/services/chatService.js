@@ -1,4 +1,3 @@
-import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
 
 class ChatService {
@@ -20,9 +19,8 @@ class ChatService {
     }
 
     this.connectionPromise = new Promise((resolve, reject) => {
-      // Use native WebSocket - NO SOCKJS!
       this.stompClient = new Client({
-        brokerURL: 'ws://localhost:8080/ws', // Direct WebSocket URL
+        brokerURL: 'ws://localhost:8080/ws',
         connectHeaders: {
           Authorization: `Bearer ${token}`
         },

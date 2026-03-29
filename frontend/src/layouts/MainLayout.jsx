@@ -13,8 +13,10 @@ const MainLayout = () => {
         component="main" 
         sx={{ 
           flexGrow: 1, 
-          mt: '64px', // Match header height
-          overflow: 'hidden' // Prevent unnecessary scrolling
+          mt: '64px', 
+          display: 'flex',       // allow children to flex
+          flexDirection: 'column',
+          minHeight: 0            // important for flex children to scroll
         }}
       >
         <Outlet />
