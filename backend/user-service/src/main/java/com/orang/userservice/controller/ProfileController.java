@@ -42,13 +42,4 @@ public class ProfileController {
     public ResponseEntity<List<ProfileResponse>> searchProfiles(@RequestParam String query) {
         return ResponseEntity.ok(profileService.searchProfiles(query));
     }
-
-    @PostMapping("/{userId}/online")
-    public ResponseEntity<Void> setOnlineStatus(
-            @PathVariable UUID userId,
-            @RequestParam(defaultValue = "true") boolean status) {
-        profileService.setOnlineStatus(userId, status);
-        return ResponseEntity.ok().build();
-    }
-
 }

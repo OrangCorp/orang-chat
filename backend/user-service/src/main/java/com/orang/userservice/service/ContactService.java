@@ -8,7 +8,6 @@ import com.orang.userservice.entity.Profile;
 import com.orang.userservice.repository.ContactRepository;
 import com.orang.userservice.repository.ProfileRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +20,7 @@ public class ContactService {
 
     private final ProfileRepository profileRepository;
     private final ContactRepository contactRepository;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final PresenceService presenceService;
 
     public ContactResponse addContact(UUID userId, UUID contactUserId) {
         if (userId.equals(contactUserId)) {
@@ -57,14 +56,10 @@ public class ContactService {
         contactRepository.delete(contact);
     }
 
-    private boolean isUserOnline(UUID userId) {
-        String onlineStatus = redisTemplate.opsForValue().get("user:" + userId + ":online");
-        return "true".equals(onlineStatus);
-    }
-
     private ContactResponse toContactResponse(Contact contact) {
         Profile contactProfile = profileRepository.findById(contact.getContactUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("Contact user not found"));
+
         return ContactResponse.builder()
                 .id(contact.getId())
                 .userId(contact.getUserId())
@@ -72,7 +67,7 @@ public class ContactService {
                 .displayName(contactProfile.getDisplayName())
                 .avatarUrl(contactProfile.getAvatarUrl())
                 .status(contact.getStatus())
-                .isOnline(isUserOnline(contact.getContactUserId()))
+                .isOnline(presenceService.isUserOnline(contact.getContactUserId().toString()))
                 .createdAt(contact.getCreatedAt())
                 .build();
     }

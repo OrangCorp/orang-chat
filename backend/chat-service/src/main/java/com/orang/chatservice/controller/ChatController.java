@@ -2,15 +2,19 @@ package com.orang.chatservice.controller;
 
 import com.orang.chatservice.dto.ChatMessage;
 import com.orang.chatservice.dto.MessageType;
+import com.orang.chatservice.service.PresenceService;
+import com.orang.shared.event.MessageReceiptEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @Controller
@@ -19,6 +23,7 @@ public class ChatController {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final RabbitTemplate rabbitTemplate;
+    private final PresenceService presenceService;
 
     @MessageMapping("/chat.send")
     public void processMessage(@Payload ChatMessage message) {
@@ -30,6 +35,8 @@ public class ChatController {
         if (message.getSenderId().equals(message.getRecipientId())) {
             throw new IllegalArgumentException("You cannot send a message to yourself");
         }
+
+        presenceService.updateLastActivity(message.getSenderId().toString());
 
         message.setTimestamp(LocalDateTime.now());
 
@@ -45,7 +52,6 @@ public class ChatController {
                     message
             );
         }
-
 
         if (!MessageType.TYPING.equals(message.getType())) {
             rabbitTemplate.convertAndSend(

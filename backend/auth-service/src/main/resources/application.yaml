@@ -15,6 +15,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: 5672
@@ -27,7 +31,8 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
-  expiration: 86400000
+  expiration: 900000
+  refresh-expiration: 604800000
 
 management:
   endpoints:

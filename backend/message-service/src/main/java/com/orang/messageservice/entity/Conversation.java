@@ -31,8 +31,10 @@ public class Conversation {
     private String name;
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "conversation_participants", joinColumns = @JoinColumn(name = "conversation_id"))
-    @Column(name = "user_id")
+    @CollectionTable(
+            name = "conversation_participants",
+            joinColumns = @JoinColumn(name = "conversation_id"))
+    @Column(name = "user_id", nullable = false)
     @Builder.Default
     private Set<UUID> participantIds = new HashSet<>();
 
