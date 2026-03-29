@@ -14,13 +14,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ContactResponse {
-
     private UUID id;
-    private UUID userId;
-    private UUID contactUserId;
-    private String displayName;
-    private String avatarUrl;
+    private UUID requesterId;
+    private UUID recipientId;
     private ContactStatus status;
-    private boolean isOnline;
+    private LocalDateTime acceptedAt;
     private LocalDateTime createdAt;
 }

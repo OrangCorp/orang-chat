@@ -1,7 +1,9 @@
 package com.orang.userservice.controller;
 
+import com.orang.userservice.dto.BatchUserRequest;
 import com.orang.userservice.dto.ProfileResponse;
 import com.orang.userservice.dto.UpdateProfileRequest;
+import com.orang.userservice.dto.UserSummaryDto;
 import com.orang.userservice.service.ProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -41,5 +44,10 @@ public class ProfileController {
     @GetMapping("/search")
     public ResponseEntity<List<ProfileResponse>> searchProfiles(@RequestParam String query) {
         return ResponseEntity.ok(profileService.searchProfiles(query));
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<Map<UUID, UserSummaryDto>> getProfilesByIds(@Valid @RequestBody BatchUserRequest request) {
+        return ResponseEntity.ok(profileService.getBatchUserSummaries(request.getUserIds()));
     }
 }
