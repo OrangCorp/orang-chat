@@ -1,7 +1,9 @@
 package com.orang.messageservice.controller;
 
+import com.orang.messageservice.dto.AddParticipantsRequest;
 import com.orang.messageservice.dto.ConversationResponse;
 import com.orang.messageservice.dto.CreateGroupRequest;
+import com.orang.messageservice.dto.RenameConversationRequest;
 import com.orang.messageservice.service.ConversationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -45,5 +47,85 @@ public class ConversationController {
                 request.getParticipantIds(),
                 userUUID1);
         return ResponseEntity.status(HttpStatus.CREATED).body(conversation);
+    }
+
+    @PostMapping("/{conversationId}/participants")
+    public ResponseEntity<ConversationResponse> addParticipants(
+            @AuthenticationPrincipal String myUserId,
+            @PathVariable UUID conversationId,
+            @Valid @RequestBody AddParticipantsRequest request) {
+        UUID userUUID = UUID.fromString(myUserId);
+        ConversationResponse conversation = conversationService.addParticipants(
+                conversationId,
+                request.getUserIds(),
+                userUUID);
+        return ResponseEntity.ok(conversation);
+    }
+
+    @DeleteMapping("/{conversationId}/participants/{userId}")
+    public ResponseEntity<Void> removeParticipant(
+            @PathVariable UUID conversationId,
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal String myUserId) {
+        UUID myUserUUID = UUID.fromString(myUserId);
+        conversationService.removeParticipant(conversationId, userId, myUserUUID);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{conversationId}/leave")
+    public ResponseEntity<Void> leaveConversation(
+            @PathVariable UUID conversationId,
+            @AuthenticationPrincipal String myUserId) {
+        UUID myUserUUID = UUID.fromString(myUserId);
+        conversationService.leaveConversation(conversationId, myUserUUID);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{conversationId}")
+    public ResponseEntity<ConversationResponse> renameConversation(
+            @PathVariable UUID conversationId,
+            @RequestBody @Valid RenameConversationRequest request,
+            @AuthenticationPrincipal String myUserId) {
+        UUID myUserUUID = UUID.fromString(myUserId);
+        ConversationResponse conversation = conversationService.renameConversation(
+                conversationId,
+                request.getName(),
+                myUserUUID);
+        return ResponseEntity.ok(conversation);
+    }
+
+    @PostMapping("/{conversationId}/participants/{userId}/promote")
+    public ResponseEntity<ConversationResponse> promoteParticipant(
+            @PathVariable UUID conversationId,
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal String myUserId) {
+        UUID myUserUUID = UUID.fromString(myUserId);
+        ConversationResponse conversation = conversationService.promoteParticipant(
+                conversationId,
+                userId,
+                myUserUUID);
+        return ResponseEntity.ok(conversation);
+    }
+
+    @PostMapping("/{conversationId}/participants/{userId}/demote")
+    public ResponseEntity<ConversationResponse> demoteParticipant(
+            @PathVariable UUID conversationId,
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal String myUserId) {
+        UUID myUserUUID = UUID.fromString(myUserId);
+        ConversationResponse conversation = conversationService.demoteParticipant(
+                conversationId,
+                userId,
+                myUserUUID);
+        return ResponseEntity.ok(conversation);
+    }
+
+    @DeleteMapping("/{conversationId}")
+    public ResponseEntity<Void> deleteConversation(
+            @PathVariable UUID conversationId,
+            @AuthenticationPrincipal String myUserId) {
+        UUID myUserUUID = UUID.fromString(myUserId);
+        conversationService.deleteConversation(conversationId, myUserUUID);
+        return ResponseEntity.noContent().build();
     }
 }

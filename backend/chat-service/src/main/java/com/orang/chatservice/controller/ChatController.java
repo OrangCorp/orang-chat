@@ -1,7 +1,7 @@
 package com.orang.chatservice.controller;
 
-import com.orang.chatservice.dto.ChatMessage;
-import com.orang.chatservice.dto.MessageType;
+import com.orang.shared.dto.ChatMessagePayload;
+import com.orang.shared.dto.MessageType;
 import com.orang.chatservice.service.PresenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,13 +23,13 @@ public class ChatController {
     private final PresenceService presenceService;
 
     @MessageMapping("/chat.send")
-    public void processMessage(@Payload ChatMessage message) {
+    public void processMessage(@Payload ChatMessagePayload message) {
         log.info("Received {} message from {} to {}",
                 message.getType() ,
                 message.getSenderId(),
                 message.getRecipientId());
 
-        if (message.getSenderId().equals(message.getRecipientId())) {
+        if (MessageType.DIRECT.equals(message.getType()) && message.getSenderId().equals(message.getRecipientId())) {
             throw new IllegalArgumentException("You cannot send a message to yourself");
         }
 
@@ -39,7 +39,7 @@ public class ChatController {
 
         if (MessageType.GROUP.equals(message.getType())) {
             messagingTemplate.convertAndSend(
-                    "/topic/group/" + message.getRecipientId(),
+                    "/topic/group." + message.getConversationId(),
                     message
             );
         } else {

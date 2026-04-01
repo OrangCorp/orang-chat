@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "conversations")
@@ -30,13 +31,12 @@ public class Conversation {
     @Column
     private String name;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
-            name = "conversation_participants",
-            joinColumns = @JoinColumn(name = "conversation_id"))
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "created_by")
+    private UUID createdBy;
+
+    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private Set<UUID> participantIds = new HashSet<>();
+    private Set<ConversationParticipant> participants = new HashSet<>();
 
     @CreationTimestamp
     @Column(updatable = false)
@@ -50,4 +50,9 @@ public class Conversation {
         DIRECT, GROUP
     }
 
+    public Set<UUID> getParticipantIds() {
+        return participants.stream()
+                .map(ConversationParticipant::getUserId)
+                .collect(Collectors.toSet());
+    }
 }
