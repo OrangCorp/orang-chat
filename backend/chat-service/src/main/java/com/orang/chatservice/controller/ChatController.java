@@ -39,7 +39,7 @@ public class ChatController {
 
         if (MessageType.GROUP.equals(message.getType())) {
             messagingTemplate.convertAndSend(
-                    "/topic/group/" + message.getConversationId(),
+                    "/topic/group." + message.getConversationId(),
                     message
             );
         } else {
