@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +46,6 @@ public class ConversationService {
                 .type(Conversation.ConversationType.DIRECT)
                 .build();
 
-        // Add participants
         addParticipant(newConversation, userId1, ConversationParticipant.ParticipantRole.MEMBER, null);
         addParticipant(newConversation, userId2, ConversationParticipant.ParticipantRole.MEMBER, null);
 
@@ -67,10 +67,8 @@ public class ConversationService {
                 .createdBy(creatorId)
                 .build();
 
-        // Add creator as ADMIN
         addParticipant(newConversation, creatorId, ConversationParticipant.ParticipantRole.ADMIN, null);
 
-        // Add others as MEMBER
         for (UUID participantId : participantIds) {
             if (!participantId.equals(creatorId)) {
                 addParticipant(newConversation, participantId, ConversationParticipant.ParticipantRole.MEMBER, creatorId);
@@ -93,12 +91,55 @@ public class ConversationService {
         conversation.getParticipants().add(participant);
     }
 
+    @Transactional
+    public ConversationResponse addParticipants(UUID conversationId, Set<UUID> userIds, UUID addedBy) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot add participants to a direct conversation");
+        }
+
+        // Verify requester is a participant
+        boolean isParticipant = conversation.getParticipants().stream()
+                .anyMatch(p -> p.getUserId().equals(addedBy));
+
+        if (!isParticipant) {
+            throw new ForbiddenException("You are not a participant of this conversation");
+        }
+
+        // Get existing participant IDs
+        Set<UUID> existingIds = conversation.getParticipants().stream()
+                .map(ConversationParticipant::getUserId)
+                .collect(Collectors.toSet());
+
+        // Add only new participants
+        for (UUID userId : userIds) {
+            if (!existingIds.contains(userId)) {
+                addParticipant(conversation, userId, ConversationParticipant.ParticipantRole.MEMBER, addedBy);
+            }
+        }
+
+        return toConversationResponse(conversationRepository.save(conversation));
+    }
+
     private ConversationResponse toConversationResponse(Conversation conversation) {
+        List<ConversationResponse.ParticipantInfo> participants = conversation.getParticipants().stream()
+                .map(p -> ConversationResponse.ParticipantInfo.builder()
+                        .userId(p.getUserId())
+                        .role(p.getRole().name())
+                        .joinedAt(p.getJoinedAt())
+                        .addedBy(p.getAddedBy())
+                        .build())
+                .toList();
+
         return ConversationResponse.builder()
                 .id(conversation.getId())
                 .type(conversation.getType())
                 .name(conversation.getName())
-                .participantIds(conversation.getParticipantIds())
+                .createdBy(conversation.getCreatedBy())
+                .participants(participants)
+                .createdAt(conversation.getCreatedAt())
                 .build();
     }
 
@@ -106,8 +147,208 @@ public class ConversationService {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
-        if (!conversation.getParticipantIds().contains(userId)) {
+        boolean isParticipant = conversation.getParticipants().stream()
+                .anyMatch(p -> p.getUserId().equals(userId));
+
+        if (!isParticipant) {
             throw new ForbiddenException("You are not a participant of this conversation");
         }
+    }
+
+    @Transactional
+    public void removeParticipant(UUID conversationId, UUID userIdToRemove, UUID requesterId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot remove participants from a direct conversation");
+        }
+
+        // Find requester's participant record
+        ConversationParticipant requester = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(requesterId))
+                .findFirst()
+                .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
+
+        // Only admins can remove others
+        if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new ForbiddenException("Only admins can remove participants");
+        }
+
+        // Find participant to remove
+        ConversationParticipant toRemove = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(userIdToRemove))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("User is not a participant"));
+
+        // Prevent self-removal via this endpoint (use leave instead)
+        if (userIdToRemove.equals(requesterId)) {
+            throw new BadRequestException("Use the leave endpoint to remove yourself");
+        }
+
+        // Remove participant
+        conversation.getParticipants().remove(toRemove);
+
+        // If removed user was admin and now no admins left, promote oldest member
+        promoteOldestMemberIfNoAdmins(conversation);
+    }
+
+    private void promoteOldestMemberIfNoAdmins(Conversation conversation) {
+        boolean hasAdmin = conversation.getParticipants().stream()
+                .anyMatch(p -> p.getRole() == ConversationParticipant.ParticipantRole.ADMIN);
+
+        if (!hasAdmin && !conversation.getParticipants().isEmpty()) {
+            // Find oldest member by joinedAt
+            ConversationParticipant oldest = conversation.getParticipants().stream()
+                    .min(Comparator.comparing(ConversationParticipant::getJoinedAt))
+                    .orElseThrow();
+
+            oldest.setRole(ConversationParticipant.ParticipantRole.ADMIN);
+        }
+    }
+
+    @Transactional
+    public void leaveConversation(UUID conversationId, UUID userId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot leave a direct conversation");
+        }
+
+        ConversationParticipant participant = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
+
+        conversation.getParticipants().remove(participant);
+
+        // If no participants left, delete the conversation
+        if (conversation.getParticipants().isEmpty()) {
+            conversationRepository.delete(conversation);
+            return;
+        }
+
+        // If leaving user was admin, promote oldest member if no admins remain
+        promoteOldestMemberIfNoAdmins(conversation);
+
+        conversationRepository.save(conversation);
+    }
+
+    @Transactional
+    public ConversationResponse renameConversation(UUID conversationId, String newName, UUID requesterId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot rename a direct conversation");
+        }
+
+        ConversationParticipant requester = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(requesterId))
+                .findFirst()
+                .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
+
+        if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new ForbiddenException("Only admins can rename the conversation");
+        }
+
+        conversation.setName(newName);
+
+        return toConversationResponse(conversationRepository.save(conversation));
+    }
+
+    @Transactional
+    public ConversationResponse promoteParticipant(UUID conversationId, UUID userIdToPromote, UUID requesterId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot promote participants in a direct conversation");
+        }
+
+        ConversationParticipant requester = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(requesterId))
+                .findFirst()
+                .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
+
+        if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new ForbiddenException("Only admins can promote participants");
+        }
+
+        ConversationParticipant toPromote = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(userIdToPromote))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("User is not a participant"));
+
+        if (toPromote.getRole() == ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new BadRequestException("User is already an admin");
+        }
+
+        toPromote.setRole(ConversationParticipant.ParticipantRole.ADMIN);
+
+        return toConversationResponse(conversationRepository.save(conversation));
+    }
+
+    @Transactional
+    public ConversationResponse demoteParticipant(UUID conversationId, UUID userIdToDemote, UUID requesterId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot demote participants in a direct conversation");
+        }
+
+        ConversationParticipant requester = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(requesterId))
+                .findFirst()
+                .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
+
+        if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new ForbiddenException("Only admins can demote participants");
+        }
+
+        ConversationParticipant toDemote = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(userIdToDemote))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("User is not a participant"));
+
+        if (toDemote.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new BadRequestException("User is not an admin");
+        }
+
+        // Count admins
+        long adminCount = conversation.getParticipants().stream()
+                .filter(p -> p.getRole() == ConversationParticipant.ParticipantRole.ADMIN)
+                .count();
+
+        if (adminCount <= 1) {
+            throw new BadRequestException("Cannot demote the only admin");
+        }
+
+        toDemote.setRole(ConversationParticipant.ParticipantRole.MEMBER);
+
+        return toConversationResponse(conversationRepository.save(conversation));
+    }
+
+    @Transactional
+    public void deleteConversation(UUID conversationId, UUID requesterId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        if (conversation.getType() != Conversation.ConversationType.GROUP) {
+            throw new BadRequestException("Cannot delete a direct conversation");
+        }
+
+        ConversationParticipant requester = conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(requesterId))
+                .findFirst()
+                .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
+
+        if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+            throw new ForbiddenException("Only admins can delete the conversation");
+        }
+
+        conversationRepository.delete(conversation);
     }
 }
