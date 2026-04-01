@@ -1,4 +1,4 @@
-package com.orang.chatservice.dto;
+package com.orang.shared.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,10 +12,13 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatMessage {
+public class ChatMessagePayload {
     private UUID senderId;
     private UUID recipientId;
+    private UUID conversationId;
     private String content;
-    private LocalDateTime timestamp;
     private MessageType type;
+
+    @Builder.Default
+    private LocalDateTime timestamp = LocalDateTime.now();
 }

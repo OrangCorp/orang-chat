@@ -2,6 +2,8 @@ package com.orang.messageservice.service;
 
 import com.orang.messageservice.dto.ConversationResponse;
 import com.orang.messageservice.entity.Conversation;
+import com.orang.messageservice.entity.ConversationParticipant;
+import com.orang.messageservice.entity.ConversationParticipantId;
 import com.orang.messageservice.repository.ConversationRepository;
 import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.ForbiddenException;
@@ -10,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
@@ -40,28 +43,54 @@ public class ConversationService {
 
         Conversation newConversation = Conversation.builder()
                 .type(Conversation.ConversationType.DIRECT)
-                .participantIds(Set.of(userId1, userId2))
                 .build();
+
+        // Add participants
+        addParticipant(newConversation, userId1, ConversationParticipant.ParticipantRole.MEMBER, null);
+        addParticipant(newConversation, userId2, ConversationParticipant.ParticipantRole.MEMBER, null);
 
         return toConversationResponse(conversationRepository.save(newConversation));
     }
 
     @Transactional
     public ConversationResponse createGroupConversation(String name, Set<UUID> participantIds, UUID creatorId) {
-        Set<UUID> uniqueParticipantIds = new HashSet<>(participantIds); // Safely create a new modifiable set and add the creator
-        uniqueParticipantIds.add(creatorId);
+        Set<UUID> allParticipantIds = new HashSet<>(participantIds);
+        allParticipantIds.add(creatorId);
 
-        if (uniqueParticipantIds.size() < 3) {
+        if (allParticipantIds.size() < 3) {
             throw new BadRequestException("A group conversation must have at least 3 participants");
         }
 
         Conversation newConversation = Conversation.builder()
                 .type(Conversation.ConversationType.GROUP)
                 .name(name)
-                .participantIds(uniqueParticipantIds)
+                .createdBy(creatorId)
                 .build();
 
+        // Add creator as ADMIN
+        addParticipant(newConversation, creatorId, ConversationParticipant.ParticipantRole.ADMIN, null);
+
+        // Add others as MEMBER
+        for (UUID participantId : participantIds) {
+            if (!participantId.equals(creatorId)) {
+                addParticipant(newConversation, participantId, ConversationParticipant.ParticipantRole.MEMBER, creatorId);
+            }
+        }
+
         return toConversationResponse(conversationRepository.save(newConversation));
+    }
+
+    private void addParticipant(Conversation conversation, UUID userId,
+                                ConversationParticipant.ParticipantRole role, UUID addedBy) {
+        ConversationParticipant participant = ConversationParticipant.builder()
+                .id(new ConversationParticipantId(conversation.getId(), userId))
+                .conversation(conversation)
+                .role(role)
+                .joinedAt(LocalDateTime.now())
+                .addedBy(addedBy)
+                .build();
+
+        conversation.getParticipants().add(participant);
     }
 
     private ConversationResponse toConversationResponse(Conversation conversation) {
