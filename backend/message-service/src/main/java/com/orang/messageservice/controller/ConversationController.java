@@ -4,7 +4,6 @@ import com.orang.messageservice.dto.AddParticipantsRequest;
 import com.orang.messageservice.dto.ConversationResponse;
 import com.orang.messageservice.dto.CreateGroupRequest;
 import com.orang.messageservice.dto.RenameConversationRequest;
-import com.orang.messageservice.entity.ConversationParticipant;
 import com.orang.messageservice.service.ConversationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

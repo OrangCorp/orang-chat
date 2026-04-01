@@ -193,7 +193,7 @@ public class ConversationService {
         // If removed user was admin and now no admins left, promote oldest member
         promoteOldestMemberIfNoAdmins(conversation);
 
-        // MISSING: save the conversation
+        // Save the updated conversation
         conversationRepository.save(conversation);
 
         groupEventService.memberRemoved(conversationId, userIdToRemove, requesterId);
