@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class ConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final GroupEventService groupEventService;
 
     public List<ConversationResponse> getConversations(UUID userId) {
         List<Conversation> conversations = conversationRepository.findByParticipantIdsContaining(userId);
@@ -117,6 +118,7 @@ public class ConversationService {
         for (UUID userId : userIds) {
             if (!existingIds.contains(userId)) {
                 addParticipant(conversation, userId, ConversationParticipant.ParticipantRole.MEMBER, addedBy);
+                groupEventService.memberAdded(conversationId, userId, addedBy);
             }
         }
 
@@ -186,11 +188,15 @@ public class ConversationService {
             throw new BadRequestException("Use the leave endpoint to remove yourself");
         }
 
-        // Remove participant
         conversation.getParticipants().remove(toRemove);
 
         // If removed user was admin and now no admins left, promote oldest member
         promoteOldestMemberIfNoAdmins(conversation);
+
+        // MISSING: save the conversation
+        conversationRepository.save(conversation);
+
+        groupEventService.memberRemoved(conversationId, userIdToRemove, requesterId);
     }
 
     private void promoteOldestMemberIfNoAdmins(Conversation conversation) {
@@ -233,6 +239,8 @@ public class ConversationService {
         promoteOldestMemberIfNoAdmins(conversation);
 
         conversationRepository.save(conversation);
+
+        groupEventService.memberLeft(conversationId, userId);
     }
 
     @Transactional
@@ -254,6 +262,8 @@ public class ConversationService {
         }
 
         conversation.setName(newName);
+
+        groupEventService.groupRenamed(conversationId, newName, requesterId);
 
         return toConversationResponse(conversationRepository.save(conversation));
     }
@@ -286,6 +296,7 @@ public class ConversationService {
         }
 
         toPromote.setRole(ConversationParticipant.ParticipantRole.ADMIN);
+        groupEventService.adminPromoted(conversationId, userIdToPromote, requesterId);
 
         return toConversationResponse(conversationRepository.save(conversation));
     }
@@ -327,6 +338,7 @@ public class ConversationService {
         }
 
         toDemote.setRole(ConversationParticipant.ParticipantRole.MEMBER);
+        groupEventService.adminDemoted(conversationId, userIdToDemote, requesterId);
 
         return toConversationResponse(conversationRepository.save(conversation));
     }
@@ -350,5 +362,6 @@ public class ConversationService {
         }
 
         conversationRepository.delete(conversation);
+        groupEventService.groupDeleted(conversationId, requesterId);
     }
 }
