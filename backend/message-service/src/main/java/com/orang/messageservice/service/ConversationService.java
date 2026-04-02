@@ -4,11 +4,16 @@ import com.orang.messageservice.dto.ConversationResponse;
 import com.orang.messageservice.entity.Conversation;
 import com.orang.messageservice.entity.ConversationParticipant;
 import com.orang.messageservice.entity.ConversationParticipantId;
+import com.orang.messageservice.event.GroupMemberInternalEvent;
+import com.orang.messageservice.event.GroupUpdatedInternalEvent;
 import com.orang.messageservice.repository.ConversationRepository;
+import com.orang.shared.event.GroupMemberEvent;
+import com.orang.shared.event.GroupUpdatedEvent;
 import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.ForbiddenException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +26,7 @@ import java.util.stream.Collectors;
 public class ConversationService {
 
     private final ConversationRepository conversationRepository;
-    private final GroupEventService groupEventService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public List<ConversationResponse> getConversations(UUID userId) {
         List<Conversation> conversations = conversationRepository.findByParticipantIdsContaining(userId);
@@ -118,7 +123,8 @@ public class ConversationService {
         for (UUID userId : userIds) {
             if (!existingIds.contains(userId)) {
                 addParticipant(conversation, userId, ConversationParticipant.ParticipantRole.MEMBER, addedBy);
-                groupEventService.memberAdded(conversationId, userId, addedBy);
+                applicationEventPublisher.publishEvent(new GroupMemberInternalEvent(
+                        conversationId, userId, addedBy, GroupMemberEvent.EventType.MEMBER_ADDED));
             }
         }
 
@@ -196,7 +202,8 @@ public class ConversationService {
         // Save the updated conversation
         conversationRepository.save(conversation);
 
-        groupEventService.memberRemoved(conversationId, userIdToRemove, requesterId);
+        applicationEventPublisher.publishEvent(new GroupMemberInternalEvent(
+                conversationId, userIdToRemove, requesterId, GroupMemberEvent.EventType.MEMBER_REMOVED));
     }
 
     private void promoteOldestMemberIfNoAdmins(Conversation conversation) {
@@ -240,7 +247,8 @@ public class ConversationService {
 
         conversationRepository.save(conversation);
 
-        groupEventService.memberLeft(conversationId, userId);
+        applicationEventPublisher.publishEvent(new GroupMemberInternalEvent(
+                conversationId, userId, userId, GroupMemberEvent.EventType.MEMBER_LEFT));
     }
 
     @Transactional
@@ -263,7 +271,8 @@ public class ConversationService {
 
         conversation.setName(newName);
 
-        groupEventService.groupRenamed(conversationId, newName, requesterId);
+        applicationEventPublisher.publishEvent(new GroupUpdatedInternalEvent(
+                conversationId, requesterId, GroupUpdatedEvent.UpdateType.RENAMED, newName));
 
         return toConversationResponse(conversationRepository.save(conversation));
     }
@@ -296,7 +305,8 @@ public class ConversationService {
         }
 
         toPromote.setRole(ConversationParticipant.ParticipantRole.ADMIN);
-        groupEventService.adminPromoted(conversationId, userIdToPromote, requesterId);
+        applicationEventPublisher.publishEvent(new GroupMemberInternalEvent(
+                conversationId, userIdToPromote, requesterId, GroupMemberEvent.EventType.ADMIN_PROMOTED));
 
         return toConversationResponse(conversationRepository.save(conversation));
     }
@@ -338,7 +348,8 @@ public class ConversationService {
         }
 
         toDemote.setRole(ConversationParticipant.ParticipantRole.MEMBER);
-        groupEventService.adminDemoted(conversationId, userIdToDemote, requesterId);
+        applicationEventPublisher.publishEvent(new GroupMemberInternalEvent(
+                conversationId, userIdToDemote, requesterId, GroupMemberEvent.EventType.ADMIN_DEMOTED));
 
         return toConversationResponse(conversationRepository.save(conversation));
     }
@@ -362,7 +373,8 @@ public class ConversationService {
         }
 
         conversationRepository.delete(conversation);
-        groupEventService.groupDeleted(conversationId, requesterId);
+        applicationEventPublisher.publishEvent(new GroupUpdatedInternalEvent(
+                conversationId, requesterId, GroupUpdatedEvent.UpdateType.DELETED, null));
     }
 
     public boolean isAdmin(UUID conversationId, UUID userId) {

@@ -2,6 +2,7 @@ package com.orang.messageservice.service;
 
 import com.orang.messageservice.entity.Message;
 import com.orang.messageservice.entity.PinnedMessage;
+import com.orang.messageservice.event.MessagePinChangedInternalEvent;
 import com.orang.messageservice.repository.MessageRepository;
 import com.orang.messageservice.repository.PinnedMessageRepository;
 import com.orang.shared.event.MessagePinnedEvent;
@@ -10,6 +11,7 @@ import com.orang.shared.exception.ForbiddenException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +26,7 @@ public class PinnedMessageService {
     private final PinnedMessageRepository pinnedMessageRepository;
     private final MessageRepository messageRepository;
     private final ConversationService conversationService;
-    private final MessageEventPublisher messageEventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public void pinMessage(UUID conversationId, UUID messageId, UUID userId) {
@@ -51,12 +53,12 @@ public class PinnedMessageService {
         pinnedMessageRepository.save(pin);
         log.info("User {} pinned message {} in conversation {}", userId, messageId, conversationId);
 
-        messageEventPublisher.publishMessagePinChanged(
+        applicationEventPublisher.publishEvent(new MessagePinChangedInternalEvent(
                 messageId,
                 conversationId,
                 userId,
                 MessagePinnedEvent.Action.PINNED
-        );
+        ));
     }
 
     @Transactional
@@ -75,12 +77,12 @@ public class PinnedMessageService {
         pinnedMessageRepository.delete(pin);
         log.info("User {} unpinned message {} in conversation {}", userId, messageId, conversationId);
 
-        messageEventPublisher.publishMessagePinChanged(
+        applicationEventPublisher.publishEvent(new MessagePinChangedInternalEvent(
                 messageId,
                 conversationId,
                 userId,
                 MessagePinnedEvent.Action.UNPINNED
-        );
+        ));
     }
 
     public List<UUID> getPinnedMessageIds(UUID conversationId, UUID userId) {

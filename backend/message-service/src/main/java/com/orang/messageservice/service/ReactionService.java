@@ -4,12 +4,14 @@ import com.orang.messageservice.dto.ReactionCountProjection;
 import com.orang.messageservice.entity.Message;
 import com.orang.messageservice.entity.MessageReaction;
 import com.orang.messageservice.entity.ReactionType;
+import com.orang.messageservice.event.MessageReactionChangedInternalEvent;
 import com.orang.messageservice.repository.MessageReactionRepository;
 import com.orang.messageservice.repository.MessageRepository;
 import com.orang.shared.event.MessageReactionEvent;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +29,7 @@ public class ReactionService {
     private final MessageReactionRepository reactionRepository;
     private final MessageRepository messageRepository;
     private final ConversationService conversationService;
-    private final MessageEventPublisher messageEventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public Map<ReactionType, Long> toggleReaction(UUID messageId, UUID userId, ReactionType reactionType) {
@@ -67,14 +69,14 @@ public class ReactionService {
 
         Map<ReactionType, Long> counts = getReactionCounts(messageId);
 
-        messageEventPublisher.publishReactionChanged(
+        applicationEventPublisher.publishEvent(new MessageReactionChangedInternalEvent(
                 messageId,
                 message.getConversationId(),
                 userId,
                 action,
                 reactionType,
                 counts
-        );
+        ));
 
         return counts;
     }

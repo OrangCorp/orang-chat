@@ -3,6 +3,8 @@ package com.orang.messageservice.service;
 import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.entity.Conversation;
 import com.orang.messageservice.entity.Message;
+import com.orang.messageservice.event.MessageDeletedInternalEvent;
+import com.orang.messageservice.event.MessageEditedInternalEvent;
 import com.orang.messageservice.mapper.MessageMapper;
 import com.orang.messageservice.repository.ConversationRepository;
 import com.orang.messageservice.repository.MessageRepository;
@@ -10,6 +12,7 @@ import com.orang.shared.exception.ForbiddenException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -26,7 +29,7 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final ConversationService conversationService;
     private final MessageMapper messageMapper;
-    private final MessageEventPublisher messageEventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public Page<MessageResponse> getMessagesForConversation(
             UUID conversationId,
@@ -79,13 +82,13 @@ public class MessageService {
         Message saved = messageRepository.save(message);
         log.info("Message {} edited by user {}", messageId, userId);
 
-        messageEventPublisher.publishMessageEdited(
+        applicationEventPublisher.publishEvent(new MessageEditedInternalEvent(
                 saved.getId(),
                 saved.getConversationId(),
                 userId,
                 saved.getContent(),
                 saved.getEditedAt()
-        );
+        ));
 
         return messageMapper.toMessageResponse(saved);
     }
@@ -108,11 +111,11 @@ public class MessageService {
         log.info("Message {} deleted by user {} (isSender: {}, isAdmin: {})",
                 messageId, userId, isSender, isAdmin);
 
-        messageEventPublisher.publishMessageDeleted(
+        applicationEventPublisher.publishEvent(new MessageDeletedInternalEvent(
                 saved.getId(),
                 saved.getConversationId(),
                 saved.getDeletedBy(),
                 saved.getDeletedAt()
-        );
+        ));
     }
 }
