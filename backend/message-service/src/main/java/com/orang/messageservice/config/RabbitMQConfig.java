@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     public static final String GROUP_EXCHANGE = "group.exchange";
+    public static final String CHAT_EXCHANGE = "chat.exchange";
 
     @Bean
     public MessageConverter jsonMessageConverter() {
@@ -19,5 +20,10 @@ public class RabbitMQConfig {
     @Bean
     public TopicExchange groupExchange() {
         return new TopicExchange(GROUP_EXCHANGE);
+    }
+
+    @Bean
+    public TopicExchange chatExchange() {
+        return new TopicExchange(CHAT_EXCHANGE);
     }
 }

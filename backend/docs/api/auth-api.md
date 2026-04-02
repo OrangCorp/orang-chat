@@ -27,13 +27,15 @@ Base URL (via gateway): `http://localhost:8080`
   "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
   "refreshToken": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
-  "expiresIn": 86400
+  "expiresIn": 900
 }
 ```
 
+Note:
+- expiresIn is environment-configurable and returned in seconds.
+
 **Errors:**
- * `400 Bad Request` - Validation failed
- * `409 Conflict` - Email already registered
+ * `400 Bad Request` - Validation failed or email already exists
 
 ### 2. Login
    **POST** `/api/auth/login`
@@ -72,7 +74,22 @@ Same as registration response (returns new access and refresh tokens)
 **Errors:**
 `401 Unauthorized` - Invalid or reused refresh token (token reuse triggers full user session revocation)
 
-### 4. Health Check
+### 4. Logout
+
+**POST** `/api/auth/logout`
+
+**Headers:**
+
+```text
+Authorization: Bearer <access-token>
+```
+
+**Response (204 No Content)**
+
+Behavior:
+- Extracts userId from access token and blacklists the user session key in Redis.
+
+### 5. Health Check
 
    **GET** `/actuator/health`
 

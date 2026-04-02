@@ -14,11 +14,11 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode
-public class ConversationParticipantId implements Serializable {
-
-    @Column(name = "conversation_id")
-    private UUID conversationId;
+public class ReadReceiptId implements Serializable {
 
     @Column(name = "user_id")
     private UUID userId;
+
+    @Column(name = "conversation_id")
+    private UUID conversationId;
 }

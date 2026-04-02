@@ -1,5 +1,6 @@
 package com.orang.messageservice.controller;
 
+import com.orang.messageservice.dto.EditMessageRequest;
 import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.dto.MessageSearchResponse;
 import com.orang.messageservice.dto.MessagesAroundResponse;
@@ -41,7 +42,8 @@ public class MessageController {
 
         return ResponseEntity.ok(
                 messageService.getMessagesForConversation(conversationId, userUUID, pageable)
-        );    }
+        );
+    }
 
     @GetMapping("/{conversationId}/search")
     public ResponseEntity<Page<MessageSearchResponse>> searchMessages(
@@ -68,5 +70,30 @@ public class MessageController {
         return ResponseEntity.ok(
                 messageSearchService.getMessagesAround(conversationId, userUUID, messageId, size)
         );
+    }
+
+    @PutMapping("/{messageId}")
+    public ResponseEntity<MessageResponse> editMessage(
+            @PathVariable UUID messageId,
+            @Valid @RequestBody EditMessageRequest request,
+            @AuthenticationPrincipal String myUserId) {
+        UUID userUUID = UUID.fromString(myUserId);
+
+        log.info("User {} editing message {}", userUUID, messageId);
+
+        MessageResponse response = messageService.editMessage(messageId, userUUID, request.getContent());
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{messageId}")
+    public ResponseEntity<Void> deleteMessage(
+            @PathVariable UUID messageId,
+            @AuthenticationPrincipal String myUserId) {
+        UUID userUUID = UUID.fromString(myUserId);
+
+        log.info("User {} deleting message {}", userUUID, messageId);
+
+        messageService.deleteMessage(messageId, userUUID);
+        return ResponseEntity.noContent().build();
     }
 }

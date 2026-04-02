@@ -4,6 +4,7 @@ import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.dto.MessageSearchResponse;
 import com.orang.messageservice.dto.MessagesAroundResponse;
 import com.orang.messageservice.entity.Message;
+import com.orang.messageservice.mapper.MessageMapper;
 import com.orang.messageservice.repository.MessageRepository;
 import com.orang.messageservice.repository.MessageRepositoryProjection;
 import com.orang.shared.exception.BadRequestException;
@@ -28,6 +29,7 @@ public class MessageSearchService {
 
     private final MessageRepository messageRepository;
     private final ConversationService conversationService;
+    private final MessageMapper messageMapper;
 
     private static final int MIN_QUERY_LENGTH = 2;
     private static final int MAX_PAGE_SIZE = 50;
@@ -40,7 +42,7 @@ public class MessageSearchService {
             Pageable pageable) {
 
         String trimmedQuery = query.trim();
-        if(trimmedQuery.length() < MIN_QUERY_LENGTH) {
+        if (trimmedQuery.length() < MIN_QUERY_LENGTH) {
             throw new BadRequestException("Query must be at least 2 characters long");
         }
 
@@ -72,12 +74,12 @@ public class MessageSearchService {
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("Message not found"));
 
-        if(!message.getConversationId().equals(conversationId)) {
+        if (!message.getConversationId().equals(conversationId)) {
             throw new BadRequestException("Message is not part of the conversation");
         }
 
         int halfSize = numMessages / 2;
-        int afterSize = numMessages - halfSize - 1; // -1 for the target message
+        int afterSize = numMessages - halfSize - 1;
         LocalDateTime timestamp = message.getCreatedAt();
 
         List<Message> messagesBefore = messageRepository.findMessagesBeforeTimestamp(
@@ -104,7 +106,7 @@ public class MessageSearchService {
                 combinedMessages.getLast().getCreatedAt());
 
         List<MessageResponse> messageDtos = combinedMessages.stream()
-                .map(this::toMessageResponse)
+                .map(messageMapper::toMessageResponse)
                 .toList();
 
         log.debug("Messages around {}: {} messages found", messageId, combinedMessages.size());
@@ -134,16 +136,6 @@ public class MessageSearchService {
                 .highlightedContent(result.getHighlightedContent())
                 .rank(result.getRank())
                 .createdAt(result.getCreatedAt())
-                .build();
-    }
-
-    private MessageResponse toMessageResponse(Message message) {
-        return MessageResponse.builder()
-                .id(message.getId())
-                .conversationId(message.getConversationId())
-                .senderId(message.getSenderId())
-                .content(message.getContent())
-                .createdAt(message.getCreatedAt())
                 .build();
     }
 }
