@@ -1,11 +1,10 @@
-package com.orang.chatservice.event;
+package com.orang.chatservice.listener;
 
 import com.orang.chatservice.service.PresenceService;
 import com.orang.shared.constants.PresenceConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;

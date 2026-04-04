@@ -117,6 +117,8 @@ public class ContactService {
         if (!contact.isRequester(userId)) {
             throw new ForbiddenException("You are not a part of this contact");
         }
+
+        contactRepository.delete(contact);
     }
 
     @Transactional

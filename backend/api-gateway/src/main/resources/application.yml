@@ -46,12 +46,12 @@ spring:
             - id: user-service-docs
               uri: ${USER_SERVICE_URL:http://localhost:8082}
               predicates:
-                - Path=/v3/api-docs/api/users
+                - Path=/v3/api-docs/api/users, /v3/api-docs/api/contacts, /v3/api-docs/api/presence
 
             - id: user-service
               uri: ${USER_SERVICE_URL:http://localhost:8082}
               predicates:
-                - Path=/api/users/**
+                - Path=/api/users/**, /api/contacts/**, /api/presence/**
               filters:
                 - name: RequestRateLimiter
                   args:
@@ -110,6 +110,10 @@ springdoc:
         url: /v3/api-docs/api/auth
       - name: User Service
         url: /v3/api-docs/api/users
+      - name: Contacts Service
+        url: /v3/api-docs/api/contacts
+      - name: Presence Service
+        url: /v3/api-docs/api/presence
       - name: Message Service
         url: /v3/api-docs/api/messages
   api-docs:

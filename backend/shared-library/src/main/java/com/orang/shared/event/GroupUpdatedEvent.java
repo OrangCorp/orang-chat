@@ -1,4 +1,4 @@
-package com.orang.messageservice.event;
+package com.orang.shared.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,15 +9,20 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class ChatMessageEvent {
-    private UUID senderId;
-    private UUID recipientId;
-    private String content;
-    private String type;
+public class GroupUpdatedEvent implements GroupEvent {
+    private UUID conversationId;
+    private UUID triggeredBy;
+    private UpdateType updateType;
+    private String newName;
 
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();
+
+    public enum UpdateType {
+        RENAMED,
+        DELETED
+    }
 }

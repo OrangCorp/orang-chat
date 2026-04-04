@@ -1,20 +1,17 @@
 package com.orang.chatservice.controller;
 
-import com.orang.chatservice.dto.ChatMessage;
-import com.orang.chatservice.dto.MessageType;
+import com.orang.shared.dto.ChatMessagePayload;
+import com.orang.shared.dto.MessageType;
 import com.orang.chatservice.service.PresenceService;
-import com.orang.shared.event.MessageReceiptEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Slf4j
 @Controller
@@ -26,13 +23,13 @@ public class ChatController {
     private final PresenceService presenceService;
 
     @MessageMapping("/chat.send")
-    public void processMessage(@Payload ChatMessage message) {
+    public void processMessage(@Payload ChatMessagePayload message) {
         log.info("Received {} message from {} to {}",
                 message.getType() ,
                 message.getSenderId(),
                 message.getRecipientId());
 
-        if (message.getSenderId().equals(message.getRecipientId())) {
+        if (MessageType.DIRECT.equals(message.getType()) && message.getSenderId().equals(message.getRecipientId())) {
             throw new IllegalArgumentException("You cannot send a message to yourself");
         }
 
@@ -42,7 +39,7 @@ public class ChatController {
 
         if (MessageType.GROUP.equals(message.getType())) {
             messagingTemplate.convertAndSend(
-                    "/topic/group/" + message.getRecipientId(),
+                    "/topic/group." + message.getConversationId(),
                     message
             );
         } else {

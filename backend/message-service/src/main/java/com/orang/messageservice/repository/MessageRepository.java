@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -87,4 +88,34 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     boolean existsNewerMessages(
             @Param("conversationId") UUID conversationId,
             @Param("timestamp") LocalDateTime timestamp);
+
+    // Find message only if NOT deleted (for most operations)
+    @Query("""
+        SELECT m FROM Message m
+        WHERE m.id = :messageId
+        AND m.deletedAt IS NULL
+        """)
+    Optional<Message> findActiveById(@Param("messageId") UUID messageId);
+
+    // Count unread messages (messages after the last read message)
+    @Query("""
+        SELECT COUNT(m) FROM Message m
+        WHERE m.conversationId = :conversationId
+        AND m.deletedAt IS NULL
+        AND m.createdAt > (
+            SELECT m2.createdAt FROM Message m2 WHERE m2.id = :lastReadMessageId
+        )
+        """)
+    long countUnreadMessages(
+            @Param("conversationId") UUID conversationId,
+            @Param("lastReadMessageId") UUID lastReadMessageId
+    );
+
+    // Count all active messages in conversation (when user has no read receipt)
+    @Query("""
+        SELECT COUNT(m) FROM Message m
+        WHERE m.conversationId = :conversationId
+        AND m.deletedAt IS NULL
+        """)
+    long countActiveMessagesByConversationId(@Param("conversationId") UUID conversationId);
 }

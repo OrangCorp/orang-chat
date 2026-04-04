@@ -1,8 +1,9 @@
 package com.orang.messageservice.listener;
 
-import com.orang.messageservice.event.ChatMessageEvent;
 import com.orang.messageservice.service.ConversationService;
 import com.orang.messageservice.service.MessageService;
+import com.orang.shared.dto.ChatMessagePayload;
+import com.orang.shared.dto.MessageType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -10,6 +11,8 @@ import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
+
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -24,18 +27,25 @@ public class ChatMessageListener {
             exchange = @Exchange(value = "chat.exchange", type = "topic"),
             key = "chat.message.sent"
     ))
-    public void receiveMessage(ChatMessageEvent event) {
-        log.info("Received message from {} to {}", event.getSenderId(), event.getRecipientId());
+    public void receiveMessage(ChatMessagePayload event) {
+        log.info("Received {} message from {}", event.getType(), event.getSenderId());
 
         try {
-            var conversation = conversationService.getOrCreateDirectConversation(
-                    event.getSenderId(),
-                    event.getRecipientId()
-            );
+            UUID conversationId;
 
-            messageService.saveMessage(conversation.getId(), event.getSenderId(), event.getContent());
+            if (MessageType.GROUP.equals(event.getType())) {
+                conversationId = event.getConversationId();
+            } else {
+                var conversation = conversationService.getOrCreateDirectConversation(
+                        event.getSenderId(),
+                        event.getRecipientId()
+                );
+                conversationId = conversation.getId();
+            }
 
-            log.info("Message saved successfully");
+            messageService.saveMessage(conversationId, event.getSenderId(), event.getContent());
+
+            log.info("Message saved successfully to conversation {}", conversationId);
         } catch (Exception e) {
             log.error("Error saving message", e);
             throw new RuntimeException("Error saving message", e);
