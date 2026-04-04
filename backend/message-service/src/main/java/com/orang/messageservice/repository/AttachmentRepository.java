@@ -15,6 +15,7 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
 
     List<Attachment> findByMessageIdAndDeletedAtIsNull(UUID messageId);
     List<Attachment> findByConversationIdAndDeletedAtIsNullOrderByUploadedAtDesc(UUID conversationId);
+    List<Attachment> findByIdIn(List<UUID> ids);
 
     /**
      * Find expired attachments ready for permanent deletion.
