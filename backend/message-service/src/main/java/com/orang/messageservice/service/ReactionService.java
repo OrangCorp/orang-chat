@@ -82,6 +82,7 @@ public class ReactionService {
     public Map<ReactionType, Long> getReactionCounts(UUID messageId) {
         List<ReactionCountProjection> counts = reactionRepository.countByMessageIdGroupByType(messageId);
         return counts.stream()
+                .filter(count -> count.getReactionType() != null && count.getCount() != null)
                 .collect(Collectors.toMap(
                         ReactionCountProjection::getReactionType,
                         ReactionCountProjection::getCount

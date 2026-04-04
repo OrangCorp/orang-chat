@@ -119,6 +119,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-message:5432/message_db
       - SPRING_RABBITMQ_HOST=orangchat-rabbitmq
+      - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
     depends_on:
       postgres-message:
         condition: service_healthy

@@ -8,7 +8,7 @@ spring:
   application:
     name: message-service
   datasource:
-    url: jdbc:postgresql://localhost:5434/message_db
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/message_db}
     username: messageuser
     password: messagepass
   jpa:
@@ -29,7 +29,7 @@ spring:
     baseline-on-migrate: true
 
 jwt:
-  secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
 
 management:
   endpoints:
