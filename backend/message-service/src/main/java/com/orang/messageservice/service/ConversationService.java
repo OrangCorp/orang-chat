@@ -364,4 +364,15 @@ public class ConversationService {
         conversationRepository.delete(conversation);
         groupEventService.groupDeleted(conversationId, requesterId);
     }
+
+    public boolean isAdmin(UUID conversationId, UUID userId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        return conversation.getParticipants().stream()
+                .filter(p -> p.getUserId().equals(userId))
+                .findFirst()
+                .map(p -> p.getRole() == ConversationParticipant.ParticipantRole.ADMIN)
+                .orElse(false);
+    }
 }

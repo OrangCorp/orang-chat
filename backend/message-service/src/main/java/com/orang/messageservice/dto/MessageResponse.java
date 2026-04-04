@@ -1,4 +1,5 @@
 package com.orang.messageservice.dto;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,4 +18,10 @@ public class MessageResponse {
     private UUID senderId;
     private String content;
     private LocalDateTime createdAt;
+
+    private boolean edited;
+    private LocalDateTime editedAt;
+
+    private boolean deleted;
+    private LocalDateTime deletedAt;
 }
