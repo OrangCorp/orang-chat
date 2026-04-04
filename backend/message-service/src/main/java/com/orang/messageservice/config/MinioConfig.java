@@ -4,9 +4,10 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
 
 @Configuration
 @Slf4j
@@ -25,6 +26,7 @@ public class MinioConfig {
     private String bucketName;
 
     @Bean
+    @Primary
     public MinioClient minioClient() {
         try {
             MinioClient client = MinioClient.builder()
@@ -32,20 +34,15 @@ public class MinioConfig {
                     .credentials(accessKey, secretKey)
                     .build();
 
-            log.info("MinIo client created: endpoint={}", endpoint);
+            log.info("MinIO client created: endpoint={}", endpoint);
 
             ensureBucketExists(client);
 
             return client;
         } catch (Exception e) {
-            log.error("Failed to create MinIo client: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to create MinIo client", e);
+            log.error("Failed to create MinIO client", e);
+            throw new RuntimeException("Failed to initialize MinIO client", e);
         }
-    }
-
-    @Bean
-    public String miniBucketName() {
-        return bucketName;
     }
 
     private void ensureBucketExists(MinioClient client) {
@@ -55,12 +52,14 @@ public class MinioConfig {
                             .bucket(bucketName)
                             .build()
             );
+
             if (!exists) {
-                client.makeBucket(MakeBucketArgs.builder()
-                        .bucket(bucketName)
-                        .build()
+                client.makeBucket(
+                        MakeBucketArgs.builder()
+                                .bucket(bucketName)
+                                .build()
                 );
-                log.info("Bucket created: {}", bucketName);
+                log.info("Created MinIO bucket: {}", bucketName);
             } else {
                 log.info("MinIO bucket already exists: {}", bucketName);
             }

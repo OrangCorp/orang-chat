@@ -7,11 +7,13 @@ import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -26,12 +28,11 @@ public class AttachmentService {
     private final FileStorageService fileStorageService;
     private final ConversationService conversationService;
 
+    @Value("${minio.download-mode:backend}")
+    private String downloadMode;
+
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
     private static final Duration DOWNLOAD_URL_EXPIRY = Duration.ofHours(1);
-
-    // =========================================
-    // Upload
-    // =========================================
 
     public Attachment uploadAttachment(
             MultipartFile file,
@@ -53,7 +54,6 @@ public class AttachmentService {
         );
 
         Attachment attachment = Attachment.builder()
-                .id(attachmentId)
                 .conversationId(conversationId)
                 .uploaderId(uploaderId)
                 .fileName(file.getOriginalFilename())
@@ -70,31 +70,38 @@ public class AttachmentService {
         return saved;
     }
 
-    // =========================================
-    // Get Download URL
-    // =========================================
-
     @Transactional(readOnly = true)
     public String getDownloadUrl(UUID attachmentId, UUID userId) {
         Attachment attachment = findAttachmentOrThrow(attachmentId);
 
-        // Security: verify user can access this conversation
         conversationService.verifyParticipant(attachment.getConversationId(), userId);
 
-        // Check if deleted
         if (attachment.isDeleted()) {
             throw new ResourceNotFoundException("Attachment has been deleted");
         }
 
-        return fileStorageService.generatePresignedDownloadUrl(
-                attachment.getStorageKey(),
-                DOWNLOAD_URL_EXPIRY
-        );
+        if ("minio".equalsIgnoreCase(downloadMode)) {
+            return fileStorageService.generatePresignedDownloadUrl(
+                    attachment.getStorageKey(),
+                    DOWNLOAD_URL_EXPIRY
+            );
+        }
+
+        return "/api/messages/attachments/" + attachmentId + "/download";
     }
 
-    // =========================================
-    // Get Attachment Metadata
-    // =========================================
+    @Transactional(readOnly = true)
+    public InputStream downloadAttachment(UUID attachmentId, UUID userId) throws IOException {
+        Attachment attachment = findAttachmentOrThrow(attachmentId);
+
+        conversationService.verifyParticipant(attachment.getConversationId(), userId);
+
+        if (attachment.isDeleted()) {
+            throw new ResourceNotFoundException("Attachment has been deleted");
+        }
+
+        return fileStorageService.downloadFile(attachment.getStorageKey());
+    }
 
     @Transactional(readOnly = true)
     public Attachment getAttachment(UUID attachmentId, UUID userId) {
@@ -109,19 +116,13 @@ public class AttachmentService {
         return attachment;
     }
 
-    // =========================================
-    // Soft Delete
-    // =========================================
-
     public void softDeleteAttachment(UUID attachmentId, UUID userId) {
         Attachment attachment = findAttachmentOrThrow(attachmentId);
 
-        // Only uploader can delete
         if (!attachment.getUploaderId().equals(userId)) {
             throw new BadRequestException("You can only delete your own attachments");
         }
 
-        // Already deleted?
         if (attachment.isDeleted()) {
             throw new BadRequestException("Attachment is already deleted");
         }
@@ -131,10 +132,6 @@ public class AttachmentService {
 
         log.info("User {} soft-deleted attachment {}", userId, attachmentId);
     }
-
-    // =========================================
-    // Link Attachments to Message
-    // =========================================
 
     public void linkAttachmentsToMessage(List<UUID> attachmentIds, UUID messageId, UUID userId) {
         if (attachmentIds == null || attachmentIds.isEmpty()) {
@@ -172,18 +169,10 @@ public class AttachmentService {
         log.info("Linked {} attachments to message {}", attachments.size(), messageId);
     }
 
-    // =========================================
-    // Get Attachments for Message
-    // =========================================
-
     @Transactional(readOnly = true)
     public List<Attachment> getAttachmentsForMessage(UUID messageId) {
         return attachmentRepository.findByMessageIdAndDeletedAtIsNull(messageId);
     }
-
-    // =========================================
-    // Private Helpers
-    // =========================================
 
     private Attachment findAttachmentOrThrow(UUID attachmentId) {
         return attachmentRepository.findById(attachmentId)

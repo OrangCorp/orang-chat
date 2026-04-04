@@ -1,10 +1,10 @@
 package com.orang.messageservice.service;
 
-
 import io.minio.*;
 import io.minio.http.Method;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -15,12 +15,17 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @Primary
-@RequiredArgsConstructor
 @Slf4j
-public class MinioFileStorageService implements FileStorageService{
+@RequiredArgsConstructor
+public class MinioFileStorageService implements FileStorageService {
 
     private final MinioClient minioClient;
-    private final String bucketName;
+
+    @Value("${minio.bucket-name}")
+    private String bucketName;
+
+    @Value("${minio.download-mode:backend}")
+    private String downloadMode;
 
     @Override
     public String uploadFile(
@@ -44,7 +49,6 @@ public class MinioFileStorageService implements FileStorageService{
                     bucketName, storagePath, fileSize);
 
             return storagePath;
-
         } catch (Exception e) {
             log.error("Failed to upload file to MinIO: {}", storagePath, e);
             throw new IOException("Failed to upload file to storage", e);
@@ -53,11 +57,15 @@ public class MinioFileStorageService implements FileStorageService{
 
     @Override
     public String generatePresignedDownloadUrl(String storageKey, Duration expiry) {
+        if (!"minio".equalsIgnoreCase(downloadMode)) {
+            throw new IllegalStateException("Presigned URLs are disabled in backend download mode");
+        }
+
         try {
             return minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
-                            .bucket(bucketName)
                             .method(Method.GET)
+                            .bucket(bucketName)
                             .object(storageKey)
                             .expiry((int) expiry.toSeconds(), TimeUnit.SECONDS)
                             .build()

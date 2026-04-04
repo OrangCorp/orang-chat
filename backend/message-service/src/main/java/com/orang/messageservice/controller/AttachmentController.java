@@ -6,6 +6,8 @@ import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.service.AttachmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -65,6 +67,22 @@ public class AttachmentController {
         String url = attachmentService.getDownloadUrl(attachmentId, userId);
 
         return ResponseEntity.ok(new DownloadUrlResponse(url, 3600));
+    }
+
+    @GetMapping("/{attachmentId}/download")
+    public ResponseEntity<InputStreamResource> downloadAttachment(
+            @PathVariable UUID attachmentId,
+            @AuthenticationPrincipal String userId) throws IOException {
+        UUID userUUID = UUID.fromString(userId);
+
+        var attachment = attachmentService.getAttachment(attachmentId, userUUID);
+        var inputStream = attachmentService.downloadAttachment(attachmentId, userUUID);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(attachment.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + attachment.getFileName() + "\"")
+                .body(new InputStreamResource(inputStream));
     }
 
     @DeleteMapping("/{attachmentId}")

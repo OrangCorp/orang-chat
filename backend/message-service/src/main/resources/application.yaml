@@ -32,14 +32,16 @@ spring:
       enabled: true
       max-file-size: 50MB
       max-request-size: 250MB
+
 jwt:
   secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
 
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  endpoint: ${MINIO_ENDPOINT:http://minio:9000}
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin123}
   bucket-name: ${MINIO_BUCKET_NAME:chat-attachments}
+  download-mode: ${MINIO_DOWNLOAD_MODE:backend}
 
 management:
   endpoints:
