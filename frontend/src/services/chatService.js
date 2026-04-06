@@ -1,4 +1,4 @@
-// services/ChatService.js
+// services/chatService.js
 import { Client } from '@stomp/stompjs';
 
 class ChatService {
@@ -32,8 +32,6 @@ class ChatService {
         },
         debug: (msg) => console.log('Chat STOMP:', msg),
         reconnectDelay: 5000,
-        //heartbeatIncoming: 0,  // Disable default heartbeat
-        //heartbeatOutgoing: 0,  // Use custom heartbeat via presence service
         onConnect: () => {
           console.log('Chat service connected');
           this.connected = true;
@@ -73,20 +71,70 @@ class ChatService {
     }
   }
 
-  // Send a message (updated for new API)
+  // Send a chat message
   sendMessage(messagePayload) {
     if (!this.connected) {
       console.error('Chat service not connected');
       return;
     }
 
+    // Format the message with the correct type (DIRECT or GROUP)
+    const formattedMessage = {
+      senderId: messagePayload.senderId,
+      recipientId: messagePayload.recipientId,
+      content: messagePayload.content,
+      type: messagePayload.type, // Should be 'DIRECT' or 'GROUP'
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('📤 Sending message:', formattedMessage);
+
     this.stompClient.publish({
       destination: '/app/chat.send',
-      body: JSON.stringify(messagePayload)
+      body: JSON.stringify(formattedMessage)
     });
   }
 
-  // Subscribe to group messages
+  // Send typing indicator
+  sendTyping(senderId, recipientId, isTyping) {
+    if (!this.connected) return;
+    
+    const typingMessage = {
+      senderId: senderId,
+      recipientId: recipientId,
+      content: isTyping ? 'typing...' : '',
+      type: 'TYPING',
+      timestamp: new Date().toISOString()
+    };
+    
+    this.stompClient.publish({
+      destination: '/app/chat.send',
+      body: JSON.stringify(typingMessage)
+    });
+  }
+
+  // Subscribe to user's private message queue
+  subscribeToUserQueue(callback) {
+    this.connect().then(() => {
+      const destination = `/user/queue/messages`;
+      console.log('📡 Subscribing to private queue:', destination);
+      
+      const subscription = this.stompClient.subscribe(destination, (message) => {
+        const data = JSON.parse(message.body);
+        console.log('📨 Received message:', data);
+        callback(data);
+      });
+
+      this.subscriptions.set(destination, subscription);
+    }).catch(err => console.error('Failed to subscribe to private queue:', err));
+  }
+
+  // Alias for backward compatibility
+  subscribeToPrivateMessages(callback) {
+    this.subscribeToUserQueue(callback);
+  }
+
+  // Subscribe to group topic
   subscribeToGroup(groupId, callback) {
     this.connect().then(() => {
       const destination = `/topic/group/${groupId}`;
@@ -97,6 +145,7 @@ class ChatService {
 
       const subscription = this.stompClient.subscribe(destination, (message) => {
         const data = JSON.parse(message.body);
+        console.log('📨 Received group message:', data);
         callback(data);
       });
 
@@ -104,20 +153,7 @@ class ChatService {
     }).catch(err => console.error('Failed to subscribe to group:', err));
   }
 
-  // Subscribe to user queue for private messages
-  subscribeToUserQueue(callback) {
-    this.connect().then(() => {
-      const destination = `/user/queue/messages`;
-      
-      const subscription = this.stompClient.subscribe(destination, (message) => {
-        const data = JSON.parse(message.body);
-        callback(data);
-      });
-
-      this.subscriptions.set(destination, subscription);
-    });
-  }
-
+  // Unsubscribe from a destination
   unsubscribe(destination) {
     if (this.subscriptions.has(destination)) {
       this.subscriptions.get(destination).unsubscribe();

@@ -158,7 +158,7 @@ const Chat = () => {
             return;
           }
           // CHAT message
-          if (message.type === 'CHAT' && message.senderId) {
+          if ((message.type === 'DIRECT' || message.type === 'GROUP') && message.senderId) {
             if (typingIndicatorTimeoutsRef.current.has(message.senderId)) {
               clearTimeout(typingIndicatorTimeoutsRef.current.get(message.senderId));
               typingIndicatorTimeoutsRef.current.delete(message.senderId);
@@ -228,13 +228,16 @@ const Chat = () => {
     setInput('');
     setSending(true);
     
-    // Get recipient ID based on conversation type
     let recipientId;
+    let messageType;
+    
     if (conversation.type === 'DIRECT') {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
       recipientId = otherParticipant?.userId;
+      messageType = 'DIRECT';  // Changed from 'CHAT' to 'DIRECT'
     } else {
       recipientId = conversation.id;
+      messageType = 'GROUP';   // Changed from 'CHAT' to 'GROUP'
     }
     
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -245,12 +248,17 @@ const Chat = () => {
       senderId: user.id,
       recipientId,
       content,
-      type: 'CHAT',
+      type: messageType,  // Use DIRECT or GROUP
       createdAt: new Date().toISOString()
     };
     setMessages(prev => [...prev, tempMessage]);
     if (wasAtBottom) setTimeout(() => scrollToBottom(true), 50);
-    chatService.sendMessage({ senderId: user.id, recipientId, content, type: 'CHAT' });
+    chatService.sendMessage({ 
+      senderId: user.id, 
+      recipientId, 
+      content, 
+      type: messageType  // Use DIRECT or GROUP
+    });
     setSending(false);
   };
 
