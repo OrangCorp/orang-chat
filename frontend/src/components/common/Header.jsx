@@ -38,7 +38,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
-import { conversationService } from '../../services/messageService';
+import messageService from '../../services/messageService';
 import logoImg from '../../assets/logo.png';
 
 const Header = () => {
@@ -211,7 +211,7 @@ const Header = () => {
     setSearchOpen(false);
     setSearchQuery('');
     try {
-      const conversation = await conversationService.getOrCreateDirectChat(targetUser.userId);
+      const conversation = await messageService.getOrCreateDirectChat(targetUser.userId);
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       console.error('Failed to start chat:', error);

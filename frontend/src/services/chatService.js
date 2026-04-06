@@ -1,11 +1,17 @@
+// services/ChatService.js
 import { Client } from '@stomp/stompjs';
 
 class ChatService {
   constructor() {
+    if (ChatService.instance) {
+      return ChatService.instance;
+    }
+    
     this.stompClient = null;
     this.connected = false;
     this.subscriptions = new Map();
     this.connectionPromise = null;
+    ChatService.instance = this;
   }
 
   connect() {
@@ -20,33 +26,33 @@ class ChatService {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       this.stompClient = new Client({
-        brokerURL: 'ws://localhost:8080/ws',
+        brokerURL: 'ws://localhost:8083/ws',
         connectHeaders: {
           Authorization: `Bearer ${token}`
         },
-        debug: (msg) => console.log('STOMP:', msg),
+        debug: (msg) => console.log('Chat STOMP:', msg),
         reconnectDelay: 5000,
-        heartbeatIncoming: 4000,
-        heartbeatOutgoing: 4000,
+        //heartbeatIncoming: 0,  // Disable default heartbeat
+        //heartbeatOutgoing: 0,  // Use custom heartbeat via presence service
         onConnect: () => {
-          console.log('Connected to WebSocket');
+          console.log('Chat service connected');
           this.connected = true;
           resolve(this);
         },
         onStompError: (frame) => {
-          console.log('STOMP error:', frame);
+          console.error('Chat STOMP error:', frame);
           this.connected = false;
           this.connectionPromise = null;
           reject(frame);
         },
         onWebSocketError: (event) => {
-          console.error('WebSocket error:', event);
+          console.error('Chat WebSocket error:', event);
           this.connected = false;
           this.connectionPromise = null;
           reject(event);
         },
         onDisconnect: () => {
-          console.log('Disconnected from WebSocket');
+          console.log('Chat service disconnected');
           this.connected = false;
           this.connectionPromise = null;
         }
@@ -58,7 +64,6 @@ class ChatService {
     return this.connectionPromise;
   }
 
-  // Disconnect
   disconnect() {
     if (this.stompClient && this.connected) {
       this.stompClient.deactivate();
@@ -68,18 +73,16 @@ class ChatService {
     }
   }
 
-  // Subscribe to private messages for current user
-  subscribeToPrivateMessages(callback) {
-    this.connect().then(() => {
-      const destination = `/user/queue/messages`;
-      console.log('📡 Subscribing to:', destination);
-      
-      const subscription = this.stompClient.subscribe(destination, (message) => {
-        const chatMessage = JSON.parse(message.body);
-        callback(chatMessage);
-      });
+  // Send a message (updated for new API)
+  sendMessage(messagePayload) {
+    if (!this.connected) {
+      console.error('Chat service not connected');
+      return;
+    }
 
-      this.subscriptions.set(destination, subscription);
+    this.stompClient.publish({
+      destination: '/app/chat.send',
+      body: JSON.stringify(messagePayload)
     });
   }
 
@@ -93,54 +96,28 @@ class ChatService {
       }
 
       const subscription = this.stompClient.subscribe(destination, (message) => {
-        const chatMessage = JSON.parse(message.body);
-        callback(chatMessage);
+        const data = JSON.parse(message.body);
+        callback(data);
       });
 
       this.subscriptions.set(destination, subscription);
     }).catch(err => console.error('Failed to subscribe to group:', err));
   }
 
-  // Send a message
-  sendMessage(message) {
-    if (!this.connected) {
-      console.error('Not connected to WebSocket');
-      return;
-    }
+  // Subscribe to user queue for private messages
+  subscribeToUserQueue(callback) {
+    this.connect().then(() => {
+      const destination = `/user/queue/messages`;
+      
+      const subscription = this.stompClient.subscribe(destination, (message) => {
+        const data = JSON.parse(message.body);
+        callback(data);
+      });
 
-    // Remove id - let backend generate it
-    const chatMessage = {
-      senderId: message.senderId,
-      recipientId: message.recipientId,
-      content: message.content,
-      type: 'CHAT',  // Use CHAT from the enum
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('📤 Sending message:', chatMessage);
-
-    this.stompClient.publish({
-      destination: '/app/chat.send',
-      body: JSON.stringify(chatMessage)
+      this.subscriptions.set(destination, subscription);
     });
   }
 
-  // Send typing indicator
-  sendTyping(senderId, recipientId, isTyping = true) {
-    if (!this.connected) return;
-
-    this.stompClient.publish({
-      destination: '/app/chat.send',
-      body: JSON.stringify({
-        senderId: senderId,
-        recipientId: recipientId,
-        content: isTyping ? 'typing...' : '',
-        type: 'TYPING'
-      })
-    });
-  }
-
-  // Unsubscribe from a destination
   unsubscribe(destination) {
     if (this.subscriptions.has(destination)) {
       this.subscriptions.get(destination).unsubscribe();
@@ -148,11 +125,9 @@ class ChatService {
     }
   }
 
-  // Check connection status
   isConnected() {
     return this.connected;
   }
 }
 
-// Export as singleton
 export default new ChatService();

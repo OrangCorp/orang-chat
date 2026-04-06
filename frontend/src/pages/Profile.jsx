@@ -36,7 +36,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import userService from '../services/userService';
-import { conversationService } from '../services/messageService';
+import messageService from '../services/messageService';
 
 const Profile = () => {
   const { userId } = useParams();
@@ -113,7 +113,7 @@ const Profile = () => {
     if (!profileUserId || isOwnProfile) return;
     try {
       setActionInProgress(true);
-      const conversation = await conversationService.getOrCreateDirectChat(profileUserId);
+      const conversation = await messageService.getOrCreateDirectChat(profileUserId);
       navigate(`/chat/${conversation.id}`);
     } catch (err) {
       console.error('Failed to start chat:', err);

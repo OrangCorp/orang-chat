@@ -1,3 +1,4 @@
+// Sidebar.js - Fixed for new participants structure
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -27,7 +28,7 @@ import {
   Chat as ChatIcon,
   Group as GroupIcon
 } from '@mui/icons-material';
-import { conversationService } from '../../services/messageService';
+import messageService from '../../services/messageService';
 import userService from '../../services/userService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -39,14 +40,13 @@ const Sidebar = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(true);
-  const [profiles, setProfiles] = useState(new Map()); // Store profiles in state
+  const [profiles, setProfiles] = useState(new Map());
   const { user } = useAuth();
   const navigate = useNavigate();
   const { chatId } = useParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // Auto-close drawer on mobile
   useEffect(() => {
     if (isMobile) {
       setOpen(false);
@@ -60,7 +60,6 @@ const Sidebar = () => {
     }
   }, [isMobile]);
 
-  // Save drawer state to localStorage
   useEffect(() => {
     if (!isMobile) {
       localStorage.setItem('sidebar-open', open);
@@ -74,11 +73,9 @@ const Sidebar = () => {
   const loadConversations = async () => {
     try {
       setLoading(true);
-      const data = await conversationService.getConversations();
+      const data = await messageService.getConversations();
       setConversations(data);
       setError(null);
-      
-      // After loading conversations, fetch all profiles
       await fetchAllProfiles(data);
     } catch (err) {
       setError('Failed to load conversations');
@@ -90,17 +87,21 @@ const Sidebar = () => {
 
   const fetchAllProfiles = async (conversationsData) => {
     // Get all unique user IDs from direct conversations
+    // participants is now an array of objects with userId and role
     const userIds = conversationsData
       .filter(conv => conv.type === 'DIRECT')
-      .map(conv => conv.participantIds.find(id => id !== user?.id))
-      .filter(id => id && id !== user?.id);
+      .flatMap(conv => conv.participants)
+      .filter(participant => participant.userId !== user?.id)
+      .map(participant => participant.userId);
     
-    if (userIds.length > 0) {
+    // Remove duplicates
+    const uniqueUserIds = [...new Set(userIds)];
+    
+    if (uniqueUserIds.length > 0) {
       try {
-        // Fetch all profiles at once - this will populate the service cache
-        const profileMap = await userService.getProfiles(userIds);
+        console.log('sidebar ids: ', uniqueUserIds);
+        const profileMap = await userService.getProfiles(uniqueUserIds);
         
-        // Convert Map to plain object for state
         const profilesMap = new Map();
         profileMap.forEach((profile, userId) => {
           if (profile) {
@@ -114,19 +115,18 @@ const Sidebar = () => {
     }
   };
 
-  // Update profiles when they change in the cache (e.g., online status updates)
   useEffect(() => {
-    // Set up an interval to check for profile updates? 
-    // Or better, we could use a subscription, but for now we'll just 
-    // update when conversations change
     const updateProfiles = async () => {
       const userIds = conversations
         .filter(conv => conv.type === 'DIRECT')
-        .map(conv => conv.participantIds.find(id => id !== user?.id))
-        .filter(id => id && id !== user?.id);
+        .flatMap(conv => conv.participants)
+        .filter(participant => participant.userId !== user?.id)
+        .map(participant => participant.userId);
       
-      if (userIds.length > 0) {
-        const profileMap = await userService.getProfiles(userIds);
+      const uniqueUserIds = [...new Set(userIds)];
+      
+      if (uniqueUserIds.length > 0) {
+        const profileMap = await userService.getProfiles(uniqueUserIds);
         const profilesMap = new Map();
         profileMap.forEach((profile, userId) => {
           if (profile) {
@@ -137,7 +137,6 @@ const Sidebar = () => {
       }
     };
     
-    // Update profiles when conversations change
     if (conversations.length > 0 && user) {
       updateProfiles();
     }
@@ -156,27 +155,31 @@ const Sidebar = () => {
 
   const getConversationDisplay = (conv) => {
     if (conv.type === 'DIRECT') {
-      const otherId = conv.participantIds.find(id => id !== user?.id);
-      if (!otherId) return { name: 'Unknown', avatar: null, id: null, online: false };
+      // Find the other participant (not the current user)
+      const otherParticipant = conv.participants.find(p => p.userId !== user?.id);
+      if (!otherParticipant) return { name: 'Unknown', avatar: null, id: null, online: false };
       
-      // Get profile from state (which is updated after fetch)
+      const otherId = otherParticipant.userId;
       const profile = profiles.get(otherId);
       const displayName = profile?.displayName;
       const avatarUrl = profile?.avatarUrl;
       const online = profile?.online || false;
       
-      // Use the display name if available, otherwise show a placeholder
-      const name = displayName || otherId.slice(0, 8);
+      const name = displayName || 'Unknown User';
       
       return { name, avatar: avatarUrl, id: otherId, online, type: 'DIRECT' };
     } else {
-      // Group chat
+      // Group chat - participants is array of objects
+      const participantCount = conv.participants?.length || 0;
+      const displayName = conv.name || `Group (${participantCount})`;
+      
       return { 
-        name: conv.name || 'Unnamed Group', 
+        name: displayName, 
         avatar: null, 
         id: conv.id, 
         online: false, 
-        type: 'GROUP' 
+        type: 'GROUP',
+        participantCount
       };
     }
   };
@@ -208,14 +211,13 @@ const Sidebar = () => {
 
   const getLastMessagePreview = (conv) => {
     if (!conv.lastMessagePreview) {
-      return ''; // Return empty string instead of "No messages yet"
+      return '';
     }
     return conv.lastMessagePreview;
   };
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header with toggle button */}
       <Box sx={{ 
         p: 2, 
         display: 'flex', 
@@ -249,14 +251,12 @@ const Sidebar = () => {
 
       <Divider />
 
-      {/* Loading State */}
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
           <CircularProgress size={24} />
         </Box>
       )}
 
-      {/* Error State */}
       {error && (
         <Box sx={{ p: 2 }}>
           <Typography color="error" variant="body2" align="center" component="div">
@@ -272,7 +272,6 @@ const Sidebar = () => {
         </Box>
       )}
 
-      {/* Empty State */}
       {!loading && !error && conversations.length === 0 && (
         <Box sx={{ p: 2, textAlign: 'center', mt: 4 }}>
           <ChatIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 2 }} />
@@ -285,7 +284,6 @@ const Sidebar = () => {
         </Box>
       )}
 
-      {/* Conversations List */}
       {!loading && conversations.length > 0 && (
         <List sx={{ flex: 1, overflow: 'auto', pt: 0 }}>
           {conversations.map((conv) => {
@@ -296,7 +294,6 @@ const Sidebar = () => {
             const unreadCount = conv.unreadCount || 0;
 
             if (!open) {
-              // Mini view - only show icons
               return (
                 <ListItem key={conv.id} disablePadding sx={{ justifyContent: 'center' }}>
                   <Tooltip title={name} placement="right">
@@ -335,7 +332,7 @@ const Sidebar = () => {
                             height: 40
                           }}
                         >
-                          {!avatar && getAvatarLetter(name)}
+                          {!avatar && (type === 'GROUP' ? <GroupIcon /> : getAvatarLetter(name))}
                         </Avatar>
                       </Badge>
                       {unreadCount > 0 && (
@@ -356,7 +353,6 @@ const Sidebar = () => {
               );
             }
 
-            // Expanded view - show full conversation item with custom layout
             return (
               <ListItem key={conv.id} disablePadding>
                 <ListItemButton
@@ -397,7 +393,6 @@ const Sidebar = () => {
                     </Badge>
                   </ListItemAvatar>
                   
-                  {/* Custom layout to avoid nested p tags */}
                   <Box sx={{ 
                     flex: 1,
                     minWidth: 0,
@@ -473,7 +468,6 @@ const Sidebar = () => {
                       </Box>
                     )}
                     
-                    {/* Show unread count alone if no message preview and has unread messages */}
                     {!lastMessagePreview && unreadCount > 0 && (
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <Badge
@@ -503,7 +497,6 @@ const Sidebar = () => {
 
   return (
     <>
-      {/* Floating menu button for mobile when drawer is closed */}
       {isMobile && !open && (
         <IconButton
           onClick={toggleDrawer}
@@ -545,7 +538,7 @@ const Sidebar = () => {
           },
         }}
       >
-        <Toolbar /> {/* Spacer for header */}
+        <Toolbar />
         {drawerContent}
       </Drawer>
     </>

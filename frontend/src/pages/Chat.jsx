@@ -9,7 +9,7 @@ import {
   Person as PersonIcon, KeyboardArrowDown as KeyboardArrowDownIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
-import { conversationService, messageService } from '../services/messageService';
+import messageService from '../services/messageService';
 import userService from '../services/userService';
 import chatService from '../services/chatService';
 import MessageBubble from '../components/chat/MessageBubble';
@@ -77,24 +77,30 @@ const Chat = () => {
     }
   }, [checkIfAtBottom, updateIsAtBottom]);
 
-  // --- Load conversation & messages (unchanged) ---
+  // --- Load conversation & messages ---
   useEffect(() => {
     if (!chatId || !user) return;
     const loadData = async () => {
       setLoading(true);
       try {
-        const convs = await conversationService.getConversations();
+        const convs = await messageService.getConversations();
         const found = convs.find(c => c.id === chatId);
         if (!found) throw new Error('Conversation not found');
         setConversation(found);
-        setCurrentRecipient(found.type === 'DIRECT' ? found.participantIds.find(id => id !== user.id) : found.id);
+        
+        // Get the other participant for direct chats (participants is now array of objects)
+        const otherParticipant = found.type === 'DIRECT' 
+          ? found.participants.find(p => p.userId !== user.id) 
+          : null;
+        setCurrentRecipient(otherParticipant ? otherParticipant.userId : found.id);
 
         const messagePage = await messageService.getMessages(chatId, 0, 50);
         setMessages(messagePage.content.reverse());
         setHasMore(!messagePage.last);
         setPage(0);
 
-        const participantIds = found.participantIds || [];
+        // Get all participant userIds from the participants array
+        const participantIds = found.participants?.map(p => p.userId) || [];
         if (participantIds.length) {
           const profileMap = await userService.getProfiles(participantIds);
           const profiles = {};
@@ -122,7 +128,7 @@ const Chat = () => {
     };
   }, []);
 
-  // --- WebSocket (simplified) ---
+  // --- WebSocket ---
   useEffect(() => {
     if (!conversation || !user || !chatId) return;
     if (subscriptionSetupRef.current) return;
@@ -183,7 +189,7 @@ const Chat = () => {
     };
   }, [conversation, user, chatId, scrollToBottom, checkIfAtBottom]);
 
-  // --- Typing indicator send (simple debounce) ---
+  // --- Typing indicator send ---
   const sendTyping = useCallback((userId, recipientId, isTyping) => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (isTyping) {
@@ -200,7 +206,16 @@ const Chat = () => {
     const value = e.target.value;
     setInput(value);
     if (!conversation) return;
-    const recipientId = conversation.type === 'DIRECT' ? conversation.participantIds.find(id => id !== user.id) : conversation.id;
+    
+    // Get recipient ID based on conversation type
+    let recipientId;
+    if (conversation.type === 'DIRECT') {
+      const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
+      recipientId = otherParticipant?.userId;
+    } else {
+      recipientId = conversation.id;
+    }
+    
     if (value.length > 0) sendTyping(user.id, recipientId, true);
     else sendTyping(user.id, recipientId, false);
   };
@@ -212,7 +227,16 @@ const Chat = () => {
     const content = input.trim();
     setInput('');
     setSending(true);
-    const recipientId = conversation.type === 'DIRECT' ? conversation.participantIds.find(id => id !== user.id) : conversation.id;
+    
+    // Get recipient ID based on conversation type
+    let recipientId;
+    if (conversation.type === 'DIRECT') {
+      const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
+      recipientId = otherParticipant?.userId;
+    } else {
+      recipientId = conversation.id;
+    }
+    
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     chatService.sendTyping(user.id, recipientId, false);
     const wasAtBottom = checkIfAtBottom();
@@ -261,13 +285,16 @@ const Chat = () => {
     if (userId === user.id) navigate('/profile');
     else navigate(`/profile/${userId}`);
   };
+  
   const getDisplayName = (userId) => {
     if (userId === user.id) return 'You';
     const p = participants[userId];
     return p?.displayName || userId.slice(0, 8);
   };
+  
   const getAvatar = (userId) => (userId === user.id ? null : participants[userId]?.avatarUrl);
   const isUserOnline = (userId) => (userId === user.id ? true : participants[userId]?.online || false);
+  
   const getMessageTime = (msg) => {
     const d = msg.createdAt || msg.timestamp;
     if (!d) return 'Just now';
@@ -284,7 +311,11 @@ const Chat = () => {
     </Box>
   );
 
-  const otherId = conversation.type === 'DIRECT' ? conversation.participantIds?.find(id => id !== user.id) : null;
+  // Get other participant info for direct chats
+  const otherParticipant = conversation.type === 'DIRECT' 
+    ? conversation.participants?.find(p => p.userId !== user.id) 
+    : null;
+  const otherId = otherParticipant?.userId;
   const otherProfile = otherId ? participants[otherId] : null;
 
   return (
