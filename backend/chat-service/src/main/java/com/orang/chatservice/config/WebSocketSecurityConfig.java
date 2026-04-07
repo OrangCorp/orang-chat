@@ -32,7 +32,7 @@ public class WebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer
             @Override
             public Message<?> preSend(@NonNull Message<?> message,@NonNull MessageChannel channel) {
 
-                // Look at te STOMP headers
+                // Look at the STOMP headers
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
                 if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {

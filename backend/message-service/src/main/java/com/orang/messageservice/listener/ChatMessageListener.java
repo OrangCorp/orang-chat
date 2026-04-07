@@ -43,7 +43,12 @@ public class ChatMessageListener {
                 conversationId = conversation.getId();
             }
 
-            messageService.saveMessage(conversationId, event.getSenderId(), event.getContent());
+            messageService.saveMessage(
+                    conversationId,
+                    event.getSenderId(),
+                    event.getContent(),
+                    event.getAttachmentIds()
+            );
 
             log.info("Message saved successfully to conversation {}", conversationId);
         } catch (Exception e) {

@@ -2,16 +2,14 @@ package com.orang.messageservice.service;
 
 import com.orang.messageservice.config.RabbitMQConfig;
 import com.orang.messageservice.entity.ReactionType;
-import com.orang.shared.event.MessageDeletedEvent;
-import com.orang.shared.event.MessageEditedEvent;
-import com.orang.shared.event.MessagePinnedEvent;
-import com.orang.shared.event.MessageReactionEvent;
+import com.orang.shared.event.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -92,5 +90,21 @@ public class MessageEventPublisher {
 
         rabbitTemplate.convertAndSend(EXCHANGE, "message.pin", event);
         log.info("Published MessagePinnedEvent: {} for message {}", action, messageId);
+    }
+
+    public void publishMessageSent(UUID messageId, UUID conversationId, UUID senderId,
+                                   String content, List<UUID> attachmentIds) {
+        MessageSentEvent event = MessageSentEvent.builder()
+                .messageId(messageId)
+                .conversationId(conversationId)
+                .triggeredBy(senderId)
+                .timestamp(LocalDateTime.now())
+                .content(content)
+                .attachmentIds(attachmentIds != null ? attachmentIds : List.of())
+                .build();
+
+        rabbitTemplate.convertAndSend(EXCHANGE, "message.sent", event);
+        log.info("Published MessageSentEvent for message {} with {} attachments",
+                messageId, attachmentIds != null ? attachmentIds.size() : 0);
     }
 }
