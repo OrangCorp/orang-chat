@@ -50,4 +50,24 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
           AND a.uploadedAt < :cutoffDate
         """)
     List<Attachment> findOrphanedAttachments(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    /**
+     * Find attachments that failed thumbnail generation but can still retry.
+     * Used by scheduled retry job.
+     *
+     * Criteria:
+     * - Thumbnail not generated yet
+     * - Has at least 1 failed attempt
+     * - Less than 3 total attempts
+     * - Last attempt was more than backoffMinutes ago
+     */
+    @Query("""
+    SELECT a FROM Attachment a
+    WHERE a.thumbnailGenerated = FALSE
+      AND a.thumbnailAttempts > 0
+      AND a.thumbnailAttempts < 3
+      AND a.thumbnailLastAttempt < :cutoffTime
+      AND a.deletedAt IS NULL
+    """)
+    List<Attachment> findAttachmentsNeedingThumbnailRetry(@Param("cutoffTime") LocalDateTime cutoffTime);
 }
