@@ -1,15 +1,12 @@
 package com.orang.messageservice.service;
 
-import com.orang.messageservice.config.RabbitMQConfig;
 import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.entity.FileType;
-import com.orang.messageservice.event.ThumbnailRequestedEvent;
 import com.orang.messageservice.repository.AttachmentRepository;
 import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

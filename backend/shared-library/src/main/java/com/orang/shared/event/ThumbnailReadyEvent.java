@@ -1,4 +1,4 @@
-package com.orang.messageservice.event;
+package com.orang.shared.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

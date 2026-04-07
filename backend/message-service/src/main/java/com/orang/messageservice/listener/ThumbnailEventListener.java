@@ -2,12 +2,14 @@ package com.orang.messageservice.listener;
 
 import com.orang.messageservice.config.RabbitMQConfig;
 import com.orang.messageservice.entity.Attachment;
+import com.orang.shared.event.ThumbnailReadyEvent;
 import com.orang.messageservice.event.ThumbnailRequestedEvent;
 import com.orang.messageservice.repository.AttachmentRepository;
 import com.orang.messageservice.service.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ public class ThumbnailEventListener {
 
     private final ThumbnailService thumbnailService;
     private final AttachmentRepository attachmentRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     @RabbitListener(queues = RabbitMQConfig.THUMBNAIL_QUEUE)
     @Transactional
@@ -53,14 +56,31 @@ public class ThumbnailEventListener {
                 event.getAttachmentId()
         );
 
-        if (thumbnailStorageKey != null) {
-            attachment.setThumbnailStorageKey(thumbnailStorageKey);
-            attachment.setThumbnailGenerated(true);
-            attachmentRepository.save(attachment);
-
-            log.info("Thumbnail saved for attachment {}", event.getAttachmentId());
-        } else {
+        if (thumbnailStorageKey == null) {
             log.warn("Thumbnail generation failed for attachment {}", event.getAttachmentId());
+            return;
         }
+
+        attachment.setThumbnailStorageKey(thumbnailStorageKey);
+        attachment.setThumbnailGenerated(true);
+        attachmentRepository.save(attachment);
+
+        log.info("Thumbnail saved for attachment {}", event.getAttachmentId());
+
+        // Publish thumbnail ready event for real-time updates
+        ThumbnailReadyEvent readyEvent = ThumbnailReadyEvent.builder()
+                .attachmentId(attachment.getId())
+                .conversationId(attachment.getConversationId())
+                .messageId(attachment.getMessageId())
+                .thumbnailUrl("/api/attachments/" + attachment.getId() + "/thumbnail")
+                .build();
+
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.CHAT_EXCHANGE,
+                RabbitMQConfig.THUMBNAIL_READY_ROUTING_KEY,
+                readyEvent
+        );
+
+        log.debug("Published thumbnail ready event for attachment {}", attachment.getId());
     }
 }
