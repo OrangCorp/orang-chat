@@ -123,6 +123,8 @@ services:
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_DOWNLOAD_MODE=backend
+      - MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
     depends_on:
       postgres-message:
         condition: service_healthy

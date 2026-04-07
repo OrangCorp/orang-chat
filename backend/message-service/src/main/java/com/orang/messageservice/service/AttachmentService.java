@@ -71,10 +71,8 @@ public class AttachmentService {
     }
 
     @Transactional(readOnly = true)
-    public String getDownloadUrl(UUID attachmentId, UUID userId) {
+    public String getDownloadUrl(UUID attachmentId) {
         Attachment attachment = findAttachmentOrThrow(attachmentId);
-
-        conversationService.verifyParticipant(attachment.getConversationId(), userId);
 
         if (attachment.isDeleted()) {
             throw new ResourceNotFoundException("Attachment has been deleted");
@@ -87,7 +85,16 @@ public class AttachmentService {
             );
         }
 
-        return "/api/messages/attachments/" + attachmentId + "/download";
+        return "/api/attachments/" + attachmentId + "/download";
+    }
+
+    @Transactional(readOnly = true)
+    public String getDownloadUrl(UUID attachmentId, UUID userId) {
+        Attachment attachment = findAttachmentOrThrow(attachmentId);
+
+        conversationService.verifyParticipant(attachment.getConversationId(), userId);
+
+        return getDownloadUrl(attachmentId);
     }
 
     @Transactional(readOnly = true)

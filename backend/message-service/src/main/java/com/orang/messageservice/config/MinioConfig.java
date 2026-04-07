@@ -4,6 +4,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +26,9 @@ public class MinioConfig {
     @Value("${minio.bucket-name}")
     private String bucketName;
 
+    @Value("${minio.external-endpoint}")
+    private String externalEndpoint;
+
     @Bean
     @Primary
     public MinioClient minioClient() {
@@ -42,6 +46,20 @@ public class MinioConfig {
         } catch (Exception e) {
             log.error("Failed to create MinIO client", e);
             throw new RuntimeException("Failed to initialize MinIO client", e);
+        }
+    }
+
+    @Bean
+    @Qualifier("externalMinioClient")
+    public MinioClient externalMinioClient() {
+        try {
+            return MinioClient.builder()
+                    .endpoint(externalEndpoint)
+                    .credentials(accessKey, secretKey)
+                    .build();
+        } catch (Exception e) {
+            log.error("Failed to create external MinIO client", e);
+            throw new RuntimeException("Failed to initialize external MinIO client", e);
         }
     }
 

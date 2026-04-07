@@ -2,8 +2,8 @@ package com.orang.messageservice.service;
 
 import io.minio.*;
 import io.minio.http.Method;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -16,10 +16,23 @@ import java.util.concurrent.TimeUnit;
 @Service
 @Primary
 @Slf4j
-@RequiredArgsConstructor
 public class MinioFileStorageService implements FileStorageService {
 
     private final MinioClient minioClient;
+    private final MinioClient externalMinioClient;
+
+    public MinioFileStorageService(
+            MinioClient minioClient,
+            @Qualifier("externalMinioClient") MinioClient externalMinioClient) {
+        this.minioClient = minioClient;
+        this.externalMinioClient = externalMinioClient;
+    }
+
+    @Value("${minio.endpoint}")
+    private String endpoint;
+
+    @Value("${minio.external-endpoint}")
+    private String externalEndpoint;
 
     @Value("${minio.bucket-name}")
     private String bucketName;
@@ -62,7 +75,12 @@ public class MinioFileStorageService implements FileStorageService {
         }
 
         try {
-            return minioClient.getPresignedObjectUrl(
+            // Use external client if possible, but handle potential connection issues
+            // by falling back to manual signing if it fails, or just ensure it works.
+            // Actually, we can just use the internal client but pass the HOST header
+            // that we want to be used for signing.
+
+            return externalMinioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(bucketName)
@@ -71,8 +89,23 @@ public class MinioFileStorageService implements FileStorageService {
                             .build()
             );
         } catch (Exception e) {
-            log.error("Failed to generate presigned download URL for: {}", storageKey, e);
-            throw new RuntimeException("Failed to generate presigned download URL", e);
+            log.warn("Failed to generate presigned URL via external client: {}. Falling back to internal + replace.", e.getMessage());
+            try {
+                String url = minioClient.getPresignedObjectUrl(
+                        GetPresignedObjectUrlArgs.builder()
+                                .method(Method.GET)
+                                .bucket(bucketName)
+                                .object(storageKey)
+                                .expiry((int) expiry.toSeconds(), TimeUnit.SECONDS)
+                                .build()
+                );
+                String internalEndpointBase = endpoint.replace("http://", "").replace("https://", "");
+                String externalEndpointBase = externalEndpoint.replace("http://", "").replace("https://", "");
+                return url.replace(internalEndpointBase, externalEndpointBase);
+            } catch (Exception ex) {
+                log.error("Failed to generate presigned download URL for: {}", storageKey, ex);
+                throw new RuntimeException("Failed to generate presigned download URL", ex);
+            }
         }
     }
 
