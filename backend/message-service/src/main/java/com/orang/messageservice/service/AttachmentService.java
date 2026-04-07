@@ -55,6 +55,7 @@ public class AttachmentService {
         );
 
         Attachment attachment = Attachment.builder()
+                .id(attachmentId)
                 .conversationId(conversationId)
                 .uploaderId(uploaderId)
                 .fileName(file.getOriginalFilename())
