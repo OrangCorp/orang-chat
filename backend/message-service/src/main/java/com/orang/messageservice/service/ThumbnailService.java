@@ -9,6 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -65,17 +68,22 @@ public class ThumbnailService {
 
     /**
      * Downloads original image, generates thumbnail, uploads result.
-     **/
+     * Retries up to 3 times with exponential backoff on failure.
+     */
+    @Retryable(
+            retryFor = {IOException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
     public String generateAndUploadThumbnail(
             String originalStorageKey,
             UUID conversationId,
-            UUID attachmentId) {
+            UUID attachmentId) throws IOException {
 
         String thumbnailPath = buildThumbnailPath(conversationId, attachmentId);
 
         try (InputStream originalStream = fileStorageService.downloadFile(originalStorageKey)) {
 
-            // Generate thumbnail (small size, so in-memory is fine)
             ByteArrayOutputStream thumbnailOutput = new ByteArrayOutputStream();
 
             Thumbnails.of(originalStream)
@@ -87,7 +95,6 @@ public class ThumbnailService {
 
             byte[] thumbnailBytes = thumbnailOutput.toByteArray();
 
-            // Upload thumbnail to MinIO
             String storageKey = fileStorageService.uploadFile(
                     new ByteArrayInputStream(thumbnailBytes),
                     "thumbnail.jpg",
@@ -96,16 +103,23 @@ public class ThumbnailService {
                     thumbnailPath
             );
 
-            log.info("Generated thumbnail for attachment {}: {} bytes → {}",
-                    attachmentId, thumbnailBytes.length, storageKey);
+            log.info("Generated thumbnail for attachment {}: {} bytes",
+                    attachmentId, thumbnailBytes.length);
 
             return storageKey;
-
-        } catch (IOException e) {
-            log.error("Failed to generate thumbnail for attachment {}: {}",
-                    attachmentId, e.getMessage(), e);
-            return null;
         }
+    }
+
+    @Recover
+    public String recoverThumbnailGeneration(
+            IOException e,
+            String originalStorageKey,
+            UUID conversationId,
+            UUID attachmentId) {
+
+        log.error("All thumbnail generation attempts failed for attachment {}: {}",
+                attachmentId, e.getMessage());
+        return null;
     }
 
     private String buildThumbnailPath(UUID conversationId, UUID attachmentId) {

@@ -2,8 +2,8 @@ package com.orang.messageservice.listener;
 
 import com.orang.messageservice.config.RabbitMQConfig;
 import com.orang.messageservice.entity.Attachment;
-import com.orang.shared.event.ThumbnailReadyEvent;
 import com.orang.messageservice.event.ThumbnailRequestedEvent;
+import com.orang.shared.event.ThumbnailReadyEvent;
 import com.orang.messageservice.repository.AttachmentRepository;
 import com.orang.messageservice.service.ThumbnailService;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +12,8 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
@@ -50,37 +52,49 @@ public class ThumbnailEventListener {
             return;
         }
 
-        String thumbnailStorageKey = thumbnailService.generateAndUploadThumbnail(
-                event.getStorageKey(),
-                event.getConversationId(),
-                event.getAttachmentId()
-        );
-
-        if (thumbnailStorageKey == null) {
-            log.warn("Thumbnail generation failed for attachment {}", event.getAttachmentId());
+        if (!attachment.canRetryThumbnail()) {
+            log.debug("Attachment {} has exhausted retry attempts, skipping", event.getAttachmentId());
             return;
         }
 
-        attachment.setThumbnailStorageKey(thumbnailStorageKey);
-        attachment.setThumbnailGenerated(true);
-        attachmentRepository.save(attachment);
+        try {
+            String thumbnailStorageKey = thumbnailService.generateAndUploadThumbnail(
+                    event.getStorageKey(),
+                    event.getConversationId(),
+                    event.getAttachmentId()
+            );
 
-        log.info("Thumbnail saved for attachment {}", event.getAttachmentId());
+            if (thumbnailStorageKey != null) {
+                attachment.markThumbnailSuccess(thumbnailStorageKey);
+                attachmentRepository.save(attachment);
 
-        // Publish thumbnail ready event for real-time updates
-        ThumbnailReadyEvent readyEvent = ThumbnailReadyEvent.builder()
-                .attachmentId(attachment.getId())
-                .conversationId(attachment.getConversationId())
-                .messageId(attachment.getMessageId())
-                .thumbnailUrl("/api/attachments/" + attachment.getId() + "/thumbnail")
-                .build();
+                log.info("Thumbnail saved for attachment {}", event.getAttachmentId());
 
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.CHAT_EXCHANGE,
-                RabbitMQConfig.THUMBNAIL_READY_ROUTING_KEY,
-                readyEvent
-        );
+                ThumbnailReadyEvent readyEvent = ThumbnailReadyEvent.builder()
+                        .attachmentId(attachment.getId())
+                        .conversationId(attachment.getConversationId())
+                        .messageId(attachment.getMessageId())
+                        .thumbnailUrl("/api/attachments/" + attachment.getId() + "/thumbnail")
+                        .build();
 
-        log.debug("Published thumbnail ready event for attachment {}", attachment.getId());
+                rabbitTemplate.convertAndSend(
+                        RabbitMQConfig.CHAT_EXCHANGE,
+                        RabbitMQConfig.THUMBNAIL_READY_ROUTING_KEY,
+                        readyEvent
+                );
+
+                log.debug("Published thumbnail ready event for attachment {}", attachment.getId());
+            } else {
+                attachment.recordThumbnailAttempt("Generation returned null");
+                attachmentRepository.save(attachment);
+                log.warn("Thumbnail generation returned null for attachment {}", event.getAttachmentId());
+            }
+
+        } catch (IOException e) {
+            attachment.recordThumbnailAttempt(e.getMessage());
+            attachmentRepository.save(attachment);
+            log.error("Thumbnail generation failed for attachment {}: {}",
+                    event.getAttachmentId(), e.getMessage());
+        }
     }
 }

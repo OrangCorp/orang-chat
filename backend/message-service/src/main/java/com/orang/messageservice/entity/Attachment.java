@@ -48,6 +48,16 @@ public class Attachment {
     @Builder.Default
     private Boolean thumbnailGenerated = false;
 
+    @Column(name = "thumbnail_attempts")
+    @Builder.Default
+    private Integer thumbnailAttempts = 0;
+
+    @Column(name = "thumbnail_last_attempt")
+    private LocalDateTime thumbnailLastAttempt;
+
+    @Column(name = "thumbnail_error")
+    private String thumbnailError;
+
     @CreationTimestamp
     @Column(name = "uploaded_at", nullable = false, updatable = false)
     private LocalDateTime uploadedAt;
@@ -91,5 +101,22 @@ public class Attachment {
         }
         return messageId == null &&
                 uploadedAt.plusHours(gracePeriodHours).isBefore(LocalDateTime.now());
+    }
+
+    public void recordThumbnailAttempt(String error) {
+        this.thumbnailAttempts = (this.thumbnailAttempts == null ? 0 : this.thumbnailAttempts) + 1;
+        this.thumbnailLastAttempt = LocalDateTime.now();
+        this.thumbnailError = error;
+    }
+
+    public void markThumbnailSuccess(String storageKey) {
+        this.thumbnailStorageKey = storageKey;
+        this.thumbnailGenerated = true;
+        this.thumbnailError = null;
+    }
+
+    public boolean canRetryThumbnail() {
+        return !Boolean.TRUE.equals(this.thumbnailGenerated)
+                && (this.thumbnailAttempts == null || this.thumbnailAttempts < 3);
     }
 }
