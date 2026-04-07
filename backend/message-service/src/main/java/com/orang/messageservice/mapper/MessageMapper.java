@@ -3,18 +3,13 @@ package com.orang.messageservice.mapper;
 import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.entity.Message;
-import com.orang.messageservice.service.AttachmentService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.List;
 
 @Component
-@RequiredArgsConstructor
 public class MessageMapper {
-
-    private final AttachmentService attachmentService;
 
     public MessageResponse toMessageResponse(Message message) {
         MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
@@ -51,13 +46,20 @@ public class MessageMapper {
     }
 
     private MessageResponse.AttachmentInfo toAttachmentInfo(Attachment attachment) {
+        String thumbnailUrl = null;
+        if (Boolean.TRUE.equals(attachment.getThumbnailGenerated())) {
+            thumbnailUrl = "/api/attachments/" + attachment.getId() + "/thumbnail";
+        }
+
         return MessageResponse.AttachmentInfo.builder()
                 .id(attachment.getId())
                 .fileName(attachment.getFileName())
                 .contentType(attachment.getContentType())
                 .fileSize(attachment.getFileSize())
                 .fileType(attachment.getFileType())
-                .downloadUrl(attachmentService.getDownloadUrl(attachment.getId()))
+                .downloadUrl("/api/attachments/" + attachment.getId() + "/download")
+                .thumbnailAvailable(Boolean.TRUE.equals(attachment.getThumbnailGenerated()))
+                .thumbnailUrl(thumbnailUrl)
                 .build();
     }
 }

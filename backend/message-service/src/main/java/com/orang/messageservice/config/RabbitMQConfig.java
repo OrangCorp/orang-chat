@@ -18,6 +18,7 @@ public class RabbitMQConfig {
     // Thumbnail processing
     public static final String THUMBNAIL_QUEUE = "attachment.thumbnail.queue";
     public static final String THUMBNAIL_ROUTING_KEY = "attachment.thumbnail.requested";
+    public static final String THUMBNAIL_READY_ROUTING_KEY = "attachment.thumbnail.ready";
 
     @Bean
     public MessageConverter jsonMessageConverter() {

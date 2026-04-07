@@ -33,5 +33,8 @@ public class MessageResponse {
         private Long fileSize;
         private FileType fileType;
         private String downloadUrl;
+
+        private boolean thumbnailAvailable;
+        private String thumbnailUrl;
     }
 }

@@ -4,6 +4,7 @@ import com.orang.messageservice.dto.AttachmentResponse;
 import com.orang.messageservice.dto.DownloadUrlResponse;
 import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.service.AttachmentService;
+import com.orang.messageservice.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.time.Duration;
 import java.util.UUID;
 
 @RestController
@@ -26,6 +29,7 @@ import java.util.UUID;
 public class AttachmentController {
 
     private final AttachmentService attachmentService;
+    private final FileStorageService fileStorageService;
 
     @Value("${minio.download-mode:backend}")
     private String downloadMode;
@@ -84,6 +88,39 @@ public class AttachmentController {
                 .contentType(MediaType.parseMediaType(attachment.getContentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + attachment.getFileName() + "\"")
+                .body(new InputStreamResource(inputStream));
+    }
+
+    @GetMapping("/{attachmentId}/thumbnail")
+    public ResponseEntity<?> downloadThumbnail(
+            @PathVariable UUID attachmentId,
+            @AuthenticationPrincipal String userId) throws IOException {
+
+        UUID userUUID = UUID.fromString(userId);
+        Attachment attachment = attachmentService.getAttachment(attachmentId, userUUID);
+
+        if (!Boolean.TRUE.equals(attachment.getThumbnailGenerated()) ||
+                attachment.getThumbnailStorageKey() == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Thumbnail not available");
+        }
+
+        // Mode 1: Return presigned URL (client downloads directly from MinIO)
+        if ("minio".equalsIgnoreCase(downloadMode)) {
+            String url = fileStorageService.generatePresignedDownloadUrl(
+                    attachment.getThumbnailStorageKey(),
+                    Duration.ofHours(1)
+            );
+            return ResponseEntity.ok(new DownloadUrlResponse(url, 3600));
+        }
+
+        // Mode 2: Stream through backend
+        InputStream inputStream = fileStorageService.downloadFile(attachment.getThumbnailStorageKey());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"thumbnail.jpg\"")
                 .body(new InputStreamResource(inputStream));
     }
 
