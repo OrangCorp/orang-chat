@@ -32,7 +32,7 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
           AND a.permanentlyDeletedAt IS NULL
           AND a.deletedAt < :cutoffDate
         """)
-    List<Attachment> findExpiredAttachments(@Param("cutoffDate") LocalDateTime messageId);
+    List<Attachment> findExpiredAttachments(@Param("cutoffDate") LocalDateTime cutoffDate);
 
     /**
      * Find orphaned attachments (uploaded but never linked to a message).

@@ -79,6 +79,17 @@ public class Attachment {
     }
 
     public void linkToMessage(UUID messageId) {
+        if (this.messageId != null) {
+            throw new IllegalStateException("Already linked to message " + this.messageId);
+        }
         this.messageId = messageId;
+    }
+
+    public boolean isOrphaned(int gracePeriodHours) {
+        if (gracePeriodHours < 0) {
+            throw new IllegalArgumentException("Grace period must be non-negative");
+        }
+        return messageId == null &&
+                uploadedAt.plusHours(gracePeriodHours).isBefore(LocalDateTime.now());
     }
 }
