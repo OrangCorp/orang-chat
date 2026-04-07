@@ -6,6 +6,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -29,6 +31,10 @@ public class Message {
 
     @Column(nullable = false, length = 2000)
     private String content;
+
+    @OneToMany(fetch = FetchType.LAZY)
+    @JoinColumn(name = "message_id")
+    private List<Attachment> attachments = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -62,5 +68,9 @@ public class Message {
     public void softDelete(UUID deleterId) {
         this.deletedAt = LocalDateTime.now();
         this.deletedBy = deleterId;
+    }
+
+    public void addAttachment(Attachment attachment) {
+        attachments.add(attachment);
     }
 }
