@@ -6,12 +6,24 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 @Repository
 public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Attachment a SET a.messageId = :messageId, a.version = a.version + 1 WHERE a.id IN :attachmentIds AND a.uploaderId = :userId AND a.messageId IS NULL AND a.deletedAt IS NULL")
+    int linkAttachmentsToMessage(
+            @Param("attachmentIds") List<UUID> attachmentIds,
+            @Param("messageId") UUID messageId,
+            @Param("userId") UUID userId
+    );
 
     List<Attachment> findByMessageIdAndDeletedAtIsNull(UUID messageId);
     List<Attachment> findByConversationIdAndDeletedAtIsNullOrderByUploadedAtDesc(UUID conversationId);

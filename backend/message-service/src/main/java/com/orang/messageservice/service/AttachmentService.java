@@ -43,28 +43,33 @@ public class AttachmentService {
         validateFile(file);
         conversationService.verifyParticipant(conversationId, uploaderId);
 
-        UUID attachmentId = UUID.randomUUID();
-        String storagePath = buildStoragePath(conversationId, attachmentId, file.getOriginalFilename());
-
-        String storageKey = fileStorageService.uploadFile(
-                file.getInputStream(),
-                file.getOriginalFilename(),
-                file.getContentType(),
-                file.getSize(),
-                storagePath
-        );
+        String originalFilename = file.getOriginalFilename();
+        String contentType = file.getContentType();
+        long fileSize = file.getSize();
 
         Attachment attachment = Attachment.builder()
-                .id(attachmentId)
                 .conversationId(conversationId)
                 .uploaderId(uploaderId)
-                .fileName(file.getOriginalFilename())
-                .contentType(file.getContentType())
-                .fileSize(file.getSize())
-                .storageKey(storageKey)
+                .fileName(originalFilename)
+                .contentType(contentType)
+                .fileSize(fileSize)
+                .storageKey("temp") // Temporary placeholder
                 .build();
 
         Attachment saved = attachmentRepository.save(attachment);
+
+        String storagePath = buildStoragePath(conversationId, saved.getId(), originalFilename);
+
+        String storageKey = fileStorageService.uploadFile(
+                file.getInputStream(),
+                originalFilename,
+                contentType,
+                fileSize,
+                storagePath
+        );
+
+        saved.setStorageKey(storageKey);
+        saved = attachmentRepository.save(saved);
 
         log.info("User {} uploaded attachment {} to conversation {}",
                 uploaderId, saved.getId(), conversationId);
@@ -143,6 +148,7 @@ public class AttachmentService {
         log.info("User {} soft-deleted attachment {}", userId, attachmentId);
     }
 
+    @Transactional
     public void linkAttachmentsToMessage(List<UUID> attachmentIds, UUID messageId, UUID userId) {
         if (attachmentIds == null || attachmentIds.isEmpty()) {
             return;
@@ -152,31 +158,16 @@ public class AttachmentService {
             throw new BadRequestException("Maximum 5 attachments per message");
         }
 
-        List<Attachment> attachments = attachmentRepository.findByIdIn(attachmentIds);
+        int updated = attachmentRepository.linkAttachmentsToMessage(attachmentIds, messageId, userId);
 
-        if (attachments.size() != attachmentIds.size()) {
-            throw new BadRequestException("Some attachments not found");
+        if (updated != attachmentIds.size()) {
+            log.warn("Failed to link some attachments. Requested: {}, Updated: {}. " +
+                    "This may be due to: some attachments not found, not belonging to user, already linked, or deleted.",
+                    attachmentIds.size(), updated);
+            throw new BadRequestException("Some attachments could not be linked (not found, unauthorized, or already linked)");
         }
 
-        for (Attachment attachment : attachments) {
-            if (!attachment.getUploaderId().equals(userId)) {
-                throw new BadRequestException("You can only attach your own uploads");
-            }
-
-            if (attachment.getMessageId() != null) {
-                throw new BadRequestException("Attachment already linked to another message");
-            }
-
-            if (attachment.isDeleted()) {
-                throw new BadRequestException("Cannot attach deleted file");
-            }
-
-            attachment.linkToMessage(messageId);
-        }
-
-        attachmentRepository.saveAll(attachments);
-
-        log.info("Linked {} attachments to message {}", attachments.size(), messageId);
+        log.info("Linked {} attachments to message {}", updated, messageId);
     }
 
     @Transactional(readOnly = true)
