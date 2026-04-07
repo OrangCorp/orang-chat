@@ -43,6 +43,11 @@ minio:
   bucket-name: ${MINIO_BUCKET_NAME:chat-attachments}
   download-mode: ${MINIO_DOWNLOAD_MODE:backend}
 
+thumbnail:
+  width: 200
+  height: 200
+  quality: 0.8
+
 management:
   endpoints:
     web:

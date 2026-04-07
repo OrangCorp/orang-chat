@@ -99,6 +99,11 @@ public class AttachmentController {
     }
 
     private AttachmentResponse toResponse(Attachment attachment) {
+        String thumbnailUrl = null;
+        if (Boolean.TRUE.equals(attachment.getThumbnailGenerated())) {
+            thumbnailUrl = "/api/attachments/" + attachment.getId() + "/thumbnail";
+        }
+
         return AttachmentResponse.builder()
                 .id(attachment.getId())
                 .conversationId(attachment.getConversationId())
@@ -109,6 +114,8 @@ public class AttachmentController {
                 .fileSize(attachment.getFileSize())
                 .fileType(attachment.getFileType().name())
                 .uploadedAt(attachment.getUploadedAt())
+                .thumbnailAvailable(Boolean.TRUE.equals(attachment.getThumbnailGenerated()))
+                .thumbnailUrl(thumbnailUrl)
                 .build();
     }
 }

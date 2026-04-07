@@ -22,4 +22,7 @@ public class AttachmentResponse {
     private Long fileSize;
     private String fileType;
     private LocalDateTime uploadedAt;
+
+    private boolean thumbnailAvailable;
+    private String thumbnailUrl;
 }
