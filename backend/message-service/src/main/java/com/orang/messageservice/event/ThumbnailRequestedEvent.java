@@ -13,7 +13,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ThumbnailRequestEvent implements Serializable {
+public class ThumbnailRequestedEvent implements Serializable {
 
     private UUID attachmentId;
     private UUID conversationId;

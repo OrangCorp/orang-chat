@@ -1,9 +1,13 @@
 package com.orang.messageservice.service;
 
+import com.orang.messageservice.config.RabbitMQConfig;
+import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.entity.FileType;
+import com.orang.messageservice.event.ThumbnailRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +23,7 @@ import java.util.UUID;
 public class ThumbnailService {
 
     private final FileStorageService fileStorageService;
+    private final RabbitTemplate rabbitTemplate;
 
     @Value("${thumbnail.width:200}")
     private int thumbnailWidth;
@@ -31,6 +36,31 @@ public class ThumbnailService {
 
     public boolean supportsFileType(FileType fileType) {
         return FileType.IMAGE.equals(fileType);
+    }
+
+    /**
+     * Requests async thumbnail generation for an attachment.
+     * Does nothing if the file type is not supported.
+     */
+    public void requestThumbnailGeneration(Attachment attachment) {
+        if (!supportsFileType(attachment.getFileType())) {
+            return;
+        }
+
+        ThumbnailRequestedEvent event = ThumbnailRequestedEvent.builder()
+                .attachmentId(attachment.getId())
+                .conversationId(attachment.getConversationId())
+                .storageKey(attachment.getStorageKey())
+                .fileType(attachment.getFileType())
+                .build();
+
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.CHAT_EXCHANGE,
+                RabbitMQConfig.THUMBNAIL_ROUTING_KEY,
+                event
+        );
+
+        log.debug("Requested thumbnail generation for attachment {}", attachment.getId());
     }
 
     /**
