@@ -20,6 +20,10 @@ public class Attachment {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "conversation_id", nullable = false)
     private UUID conversationId;
 
