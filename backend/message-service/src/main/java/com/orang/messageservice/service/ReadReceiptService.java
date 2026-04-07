@@ -79,6 +79,8 @@ public class ReadReceiptService {
                         .build()
         );
 
+        conversationService.verifyParticipant(conversationId, userId);
+
         return receipt.map(readReceipt -> messageRepository.countUnreadMessages(
                 conversationId,
                 readReceipt.getLastReadMessageId()
@@ -86,6 +88,7 @@ public class ReadReceiptService {
     }
 
     public Optional<UUID> getLastReadMessageId(UUID userId, UUID conversationId) {
+        conversationService.verifyParticipant(conversationId, userId);
         return readReceiptRepository.findById(
                 ReadReceiptId.builder()
                         .userId(userId)

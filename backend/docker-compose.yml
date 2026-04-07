@@ -119,10 +119,18 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-message:5432/message_db
       - SPRING_RABBITMQ_HOST=orangchat-rabbitmq
+      - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_DOWNLOAD_MODE=backend
+      - MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
     depends_on:
       postgres-message:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]

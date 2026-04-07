@@ -1,6 +1,6 @@
 # Feature Status Overview
 
-Current Date: 2026-04-02
+Current Date: 2026-04-07
 Project: Orang Chat backend microservices
 Source of truth: backend code (controllers, services, listeners, config, tests)
 
@@ -35,7 +35,7 @@ Contacts:
 - Accept request: POST /api/contacts/{contactId}/accept
 - Reject request: POST /api/contacts/{contactId}/reject
 - Cancel request: POST /api/contacts/{contactId}/cancel
-- Remove contact endpoint exists: DELETE /api/contacts/{contactId}
+- Remove contact: DELETE /api/contacts/{contactId}
 - Block user: POST /api/contacts/block/{targetUserId}
 - Unblock user: DELETE /api/contacts/block/{targetUserId}
 - List accepted/incoming/outgoing/blocked
@@ -68,7 +68,26 @@ Messages:
 - History: GET /api/messages/{conversationId}
 - Search: GET /api/messages/{conversationId}/search
 - Context around message: GET /api/messages/{conversationId}/around/{messageId}
+- Edit message: PUT /api/messages/{messageId}
+- Delete message: DELETE /api/messages/{messageId}
 - Async persistence from RabbitMQ route chat.message.sent
+
+Reactions & Read Receipts:
+- Add/remove reaction: POST /api/reactions/{messageId}
+- List reactions: GET /api/reactions/{messageId}
+- Update read receipt: POST /api/read-receipts/{conversationId}
+- Get read receipts: GET /api/read-receipts/{conversationId}
+
+Attachments & Thumbnails:
+- Upload: POST /api/attachments/upload
+- Download: GET /api/attachments/{attachmentId}/download
+- Metadata: GET /api/attachments/{attachmentId}/metadata
+- Thumbnail: GET /api/attachments/{attachmentId}/thumbnail
+- STOMP support: `ChatMessagePayload` includes `attachmentIds`
+- Async thumbnails: RabbitMQ-driven generation with WebSocket notification (`THUMBNAIL_READY`)
+- Pin message: POST /api/pinned-messages/{messageId}
+- Unpin message: DELETE /api/pinned-messages/{messageId}
+- List pinned: GET /api/pinned-messages/{conversationId}
 
 ### 1.4 Chat Service (port 8083)
 
@@ -77,6 +96,7 @@ Realtime:
 - Inbound mapping: /app/chat.send
 - Routes direct messages to user queue and group messages to topic
 - Typing indicator routing for MessageType.TYPING (broadcast only)
+- Realtime thumbnail notifications: `THUMBNAIL_READY` event broadcast to group topics
 
 Presence lifecycle:
 - Session add on WebSocket connect
@@ -97,15 +117,7 @@ Implemented:
 
 ## 2. Partially Implemented or Risky Areas
 
-### 2.1 Contact removal has a functional bug
-
-Current state:
-- removeContact validates input and authorization but does not delete the contact entity.
-
-Impact:
-- Endpoint can return success without actually removing contact relationship.
-
-### 2.2 WebSocket auth error handling is too generic
+### 2.1 WebSocket auth error handling is too generic
 
 Current state:
 - RuntimeException is thrown for invalid/missing JWT header in STOMP CONNECT interceptor.
@@ -113,15 +125,15 @@ Current state:
 Impact:
 - Poor error semantics and weaker operational diagnostics.
 
-### 2.3 JWT filters swallow errors silently
+### 2.2 JWT filter swallows errors silently (user-service)
 
 Current state:
-- User service and message service JWT filters catch Exception and ignore it.
+- User service JWT filter catches Exception and ignores it. (Fixed in message-service).
 
 Impact:
-- Harder troubleshooting and weaker security observability.
+- Harder troubleshooting in user-service and weaker security observability.
 
-### 2.4 WebSocket CORS is permissive
+### 2.3 WebSocket CORS is permissive
 
 Current state:
 - setAllowedOriginPatterns("*")
@@ -134,12 +146,7 @@ Impact:
 ## 3. Not Implemented Yet
 
 Messaging domain gaps:
-- Message edit
-- Message delete
-- Message reactions
-- Message pinning
-- Read receipts (payload type, persistence flow, API retrieval)
-- Attachments/media metadata and storage
+- None (Core edit/delete/reaction/pin/read-receipt/attachment flows are implemented).
 
 Platform/ops gaps:
 - Flyway/Liquibase migration ownership across all services
@@ -167,16 +174,14 @@ Missing tests with highest impact:
 ## 5. Implementation Priority
 
 P0 (fix immediately):
-- Fix ContactService.removeContact to perform delete.
-- Replace silent auth filter catches with logging + explicit auth handling.
+- Replace silent auth filter catch in user-service with logging + explicit auth handling.
 - Replace generic RuntimeException in WebSocket security path.
+- Restrict WebSocket CORS by environment.
 
 P1 (next sprint):
-- Implement read receipts end-to-end.
-- Add edit/delete message APIs and service logic.
 - Add tests for contact/conversation/message services.
+- Expand service-level integration tests for async flows.
 
 P2 (after core reliability):
-- Add attachments/media pipeline.
 - Add observability stack and SLO metrics.
 - Complete migration strategy standardization.

@@ -44,7 +44,6 @@ public class ReactionController {
     public ResponseEntity<Optional<ReactionType>> getMyReaction(
             @PathVariable UUID messageId,
             @AuthenticationPrincipal String myUserId) {
-
         UUID userUUID = UUID.fromString(myUserId);
         Optional<ReactionType> reaction = reactionService.getReactionType(messageId, userUUID);
         return ResponseEntity.ok(reaction);

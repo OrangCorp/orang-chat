@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -18,6 +19,7 @@ public class ChatMessagePayload {
     private UUID conversationId;
     private String content;
     private MessageType type;
+    private List<UUID> attachmentIds;
 
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();
