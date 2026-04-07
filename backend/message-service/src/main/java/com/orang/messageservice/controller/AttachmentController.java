@@ -6,6 +6,7 @@ import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.service.AttachmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,9 @@ import java.util.UUID;
 public class AttachmentController {
 
     private final AttachmentService attachmentService;
+
+    @Value("${minio.download-mode:backend}")
+    private String downloadMode;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<AttachmentResponse> uploadAttachment(
@@ -59,22 +63,20 @@ public class AttachmentController {
     }
 
     @GetMapping("/{attachmentId}/download")
-    public ResponseEntity<DownloadUrlResponse> getDownloadUrl(
-            @PathVariable UUID attachmentId,
-            @AuthenticationPrincipal String userIdStr) {
-
-        UUID userId = UUID.fromString(userIdStr);
-        String url = attachmentService.getDownloadUrl(attachmentId, userId);
-
-        return ResponseEntity.ok(new DownloadUrlResponse(url, 3600));
-    }
-
-    @GetMapping("/{attachmentId}/download")
-    public ResponseEntity<InputStreamResource> downloadAttachment(
+    public ResponseEntity<?> downloadAttachment(
             @PathVariable UUID attachmentId,
             @AuthenticationPrincipal String userId) throws IOException {
+
         UUID userUUID = UUID.fromString(userId);
 
+        // This will return either a presigned URL or a backend download path based on mode
+        String url = attachmentService.getDownloadUrl(attachmentId, userUUID);
+
+        if ("minio".equalsIgnoreCase(downloadMode)) {
+            return ResponseEntity.ok(new DownloadUrlResponse(url, 3600));
+        }
+
+        // Mode 2: Stream through backend (backend downloads from MinIO, streams to client)
         var attachment = attachmentService.getAttachment(attachmentId, userUUID);
         var inputStream = attachmentService.downloadAttachment(attachmentId, userUUID);
 
