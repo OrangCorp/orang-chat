@@ -52,6 +52,9 @@ public class PushSubscriptionService {
                     .lastUsedAt(LocalDateTime.now())
                     .build();
         }
+
+        PushSubscription saved = pushSubscriptionRepository.save(subscription);
+        return toResponse(saved);
     }
 
     @Transactional
