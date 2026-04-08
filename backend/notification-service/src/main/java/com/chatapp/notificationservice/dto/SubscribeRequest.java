@@ -23,6 +23,7 @@ public class SubscribeRequest {
 
     private Long expirationTime;
 
+    @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
