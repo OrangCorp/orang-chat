@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -17,4 +18,5 @@ import java.util.UUID;
 public class MessageSentEvent extends MessageEvent {
     private String content;
     private List<UUID> attachmentIds;
+    private Set<UUID> participantIds;
 }
