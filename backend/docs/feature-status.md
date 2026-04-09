@@ -1,6 +1,6 @@
 # Feature Status Overview
 
-Current Date: 2026-04-07
+Current Date: 2026-04-09
 Project: Orang Chat backend microservices
 Source of truth: backend code (controllers, services, listeners, config, tests)
 
@@ -65,6 +65,7 @@ Conversations:
 - Delete group: DELETE /api/conversations/{conversationId}
 
 Messages:
+- Send message (REST): POST /api/messages (added for testing/fallback)
 - History: GET /api/messages/{conversationId}
 - Search: GET /api/messages/{conversationId}/search
 - Context around message: GET /api/messages/{conversationId}/around/{messageId}
@@ -72,11 +73,13 @@ Messages:
 - Delete message: DELETE /api/messages/{messageId}
 - Async persistence from RabbitMQ route chat.message.sent
 
-Reactions & Read Receipts:
+Reactions, Read Receipts & Notifications:
 - Add/remove reaction: POST /api/reactions/{messageId}
 - List reactions: GET /api/reactions/{messageId}
 - Update read receipt: POST /api/read-receipts/{conversationId}
 - Get read receipts: GET /api/read-receipts/{conversationId}
+- Mute/Unmute notifications: POST /api/conversations/{id}/notifications/mute|unmute
+- Get notification preferences: GET /api/conversations/{id}/notifications
 
 Attachments & Thumbnails:
 - Upload: POST /api/attachments/upload
@@ -143,10 +146,11 @@ Impact:
 
 ---
 
-## 3. Not Implemented Yet
+## 3. Not Implemented Yet / Known Issues
 
 Messaging domain gaps:
-- None (Core edit/delete/reaction/pin/read-receipt/attachment flows are implemented).
+- WebSocket direct message routing logic (Needs verification for self-messaging edge cases).
+- REST message sending endpoint is added to code but may require container restart to be active in some environments.
 
 Platform/ops gaps:
 - Flyway/Liquibase migration ownership across all services

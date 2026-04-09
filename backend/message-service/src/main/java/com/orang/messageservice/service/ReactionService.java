@@ -73,7 +73,8 @@ public class ReactionService {
                 userId,
                 action,
                 reactionType,
-                counts
+                counts,
+                message.getSenderId()
         );
 
         return counts;
