@@ -11,6 +11,7 @@ COPY user-service/pom.xml user-service/
 COPY chat-service/pom.xml chat-service/
 COPY message-service/pom.xml message-service/
 COPY api-gateway/pom.xml api-gateway/
+COPY notification-service/pom.xml notification-service/
 
 # 2. Pre-fetch dependencies using BuildKit cache.
 RUN --mount=type=cache,target=/root/.m2 \
