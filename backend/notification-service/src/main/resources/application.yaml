@@ -42,6 +42,12 @@ web-push:
     private-key: ${VAPID_PRIVATE_KEY:Hf17E44Uk_VegHbti_boVg68zgFQV6pXZ8Pg3Ct5ylk}
     subject: ${VAPID_SUBJECT:mailto:admin@chatapp.com}
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs/api/notifications
+  swagger-ui:
+    enabled: false
+
 # Actuator
 management:
   endpoints:
