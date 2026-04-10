@@ -1,6 +1,7 @@
-// Sidebar.js - Fixed for new participants structure
+// Sidebar.js - With Create Group functionality
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+// Material UI components
 import {
   Drawer,
   Toolbar,
@@ -19,14 +20,27 @@ import {
   useTheme,
   useMediaQuery,
   Stack,
-  Button
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Checkbox,
+  ListItemText,
+  InputAdornment
 } from '@mui/material';
+
+// Material UI Icons
 import { 
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Menu as MenuIcon,
   Chat as ChatIcon,
-  Group as GroupIcon
+  Group as GroupIcon,
+  Add as AddIcon,
+  Close as CloseIcon,
+  Search as SearchIcon
 } from '@mui/icons-material';
 import messageService from '../../services/messageService';
 import userService from '../../services/userService';
@@ -46,6 +60,17 @@ const Sidebar = () => {
   const { chatId } = useParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Group creation dialog state
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [contacts, setContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [creatingGroup, setCreatingGroup] = useState(false);
 
   useEffect(() => {
     if (isMobile) {
@@ -68,6 +93,7 @@ const Sidebar = () => {
 
   useEffect(() => {
     loadConversations();
+    loadContacts();
   }, []);
 
   const loadConversations = async () => {
@@ -85,23 +111,50 @@ const Sidebar = () => {
     }
   };
 
+  const loadContacts = async () => {
+    try {
+      setContactsLoading(true);
+      // Get accepted contacts
+      const contactsList = await userService.getContacts();
+      setContacts(contactsList.filter(c => c.status === 'ACCEPTED'));
+    } catch (err) {
+      console.error('Failed to load contacts:', err);
+    } finally {
+      setContactsLoading(false);
+    }
+  };
+
+  const searchUsers = async (query) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      setSearching(true);
+      const results = await userService.searchUsers(query);
+      // Filter out current user and already selected users
+      const filtered = results.filter(u => u.userId !== user.id);
+      setSearchResults(filtered);
+    } catch (err) {
+      console.error('Failed to search users:', err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const fetchAllProfiles = async (conversationsData) => {
-    // Get all unique user IDs from direct conversations
-    // participants is now an array of objects with userId and role
     const userIds = conversationsData
       .filter(conv => conv.type === 'DIRECT')
       .flatMap(conv => conv.participants)
       .filter(participant => participant.userId !== user?.id)
       .map(participant => participant.userId);
     
-    // Remove duplicates
     const uniqueUserIds = [...new Set(userIds)];
     
     if (uniqueUserIds.length > 0) {
       try {
-        console.log('sidebar ids: ', uniqueUserIds);
         const profileMap = await userService.getProfiles(uniqueUserIds);
-        
         const profilesMap = new Map();
         profileMap.forEach((profile, userId) => {
           if (profile) {
@@ -153,9 +206,54 @@ const Sidebar = () => {
     setOpen(!open);
   };
 
+  const handleCreateGroupClick = () => {
+    setCreateGroupOpen(true);
+    setGroupName('');
+    setSelectedUsers(new Set());
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const handleCloseCreateGroup = () => {
+    setCreateGroupOpen(false);
+    setGroupName('');
+    setSelectedUsers(new Set());
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const handleToggleUser = (userId) => {
+    const newSelected = new Set(selectedUsers);
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId);
+    } else {
+      newSelected.add(userId);
+    }
+    setSelectedUsers(newSelected);
+  };
+
+  const handleCreateGroup = async () => {
+    if (!groupName.trim() || selectedUsers.size === 0) return;
+    
+    try {
+      setCreatingGroup(true);
+      const participantIds = Array.from(selectedUsers);
+      participantIds.push(user.id);
+      console.log(participantIds);
+      const newConversation = await messageService.createGroupChat(groupName, participantIds);
+      handleCloseCreateGroup();
+      navigate(`/chat/${newConversation.id}`);
+      await loadConversations(); // Refresh conversation list
+    } catch (err) {
+      console.error('Failed to create group:', err);
+      alert('Failed to create group. Please try again.');
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
   const getConversationDisplay = (conv) => {
     if (conv.type === 'DIRECT') {
-      // Find the other participant (not the current user)
       const otherParticipant = conv.participants.find(p => p.userId !== user?.id);
       if (!otherParticipant) return { name: 'Unknown', avatar: null, id: null, online: false };
       
@@ -169,7 +267,6 @@ const Sidebar = () => {
       
       return { name, avatar: avatarUrl, id: otherId, online, type: 'DIRECT' };
     } else {
-      // Group chat - participants is array of objects
       const participantCount = conv.participants?.length || 0;
       const displayName = conv.name || `Group (${participantCount})`;
       
@@ -231,6 +328,11 @@ const Sidebar = () => {
               Chats
             </Typography>
             <Stack direction="row" spacing={1}>
+              <Tooltip title="New Group">
+                <IconButton size="small" onClick={handleCreateGroupClick}>
+                  <AddIcon />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Collapse">
                 <IconButton size="small" onClick={toggleDrawer}>
                   <ChevronLeftIcon />
@@ -239,10 +341,15 @@ const Sidebar = () => {
             </Stack>
           </>
         ) : (
-          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
             <Tooltip title="Expand">
               <IconButton onClick={toggleDrawer}>
                 <ChevronRightIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="New Group">
+              <IconButton onClick={handleCreateGroupClick}>
+                <AddIcon />
               </IconButton>
             </Tooltip>
           </Box>
@@ -279,7 +386,7 @@ const Sidebar = () => {
             No chats yet
           </Typography>
           <Typography variant="body2" color="text.secondary" component="div">
-            Start a conversation to see it here
+            Click the + button to create a group
           </Typography>
         </Box>
       )}
@@ -495,6 +602,151 @@ const Sidebar = () => {
     </Box>
   );
 
+  // Create Group Dialog
+  const createGroupDialog = (
+    <Dialog 
+      open={createGroupOpen} 
+      onClose={handleCloseCreateGroup}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{ sx: { borderRadius: 3 } }}
+    >
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        Create New Group
+        <IconButton size="small" onClick={handleCloseCreateGroup}>
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      
+      <DialogContent dividers>
+        <TextField
+          autoFocus
+          margin="dense"
+          label="Group Name"
+          type="text"
+          fullWidth
+          variant="outlined"
+          value={groupName}
+          onChange={(e) => setGroupName(e.target.value)}
+          sx={{ mb: 3 }}
+        />
+        
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          Add Members ({selectedUsers.size} selected)
+        </Typography>
+        
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search users..."
+          value={searchQuery}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            searchUsers(e.target.value);
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mb: 2 }}
+        />
+        
+        <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+          {/* Search Results */}
+          {searchQuery && (
+            <>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                Search Results
+              </Typography>
+              {searching ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : searchResults.length > 0 ? (
+                searchResults.map((result) => (
+                  <ListItem key={result.userId} disablePadding dense>
+                    <ListItemButton onClick={() => handleToggleUser(result.userId)}>
+                      <Checkbox
+                        checked={selectedUsers.has(result.userId)}
+                        size="small"
+                      />
+                      <Avatar 
+                        src={result.avatarUrl} 
+                        sx={{ width: 32, height: 32, mr: 2 }}
+                      >
+                        {result.displayName?.charAt(0).toUpperCase()}
+                      </Avatar>
+                      <ListItemText 
+                        primary={result.displayName}
+                        secondary={result.email}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+                  No users found
+                </Typography>
+              )}
+            </>
+          )}
+          
+          {/* Contacts List */}
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', mt: 2 }}>
+            Your Contacts
+          </Typography>
+          {contactsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : contacts.length > 0 ? (
+            contacts.map((contact) => {
+              const contactId = contact.userId;
+              const profile = profiles.get(contactId);
+              return (
+                <ListItem key={contactId} disablePadding dense>
+                  <ListItemButton onClick={() => handleToggleUser(contactId)}>
+                    <Checkbox
+                      checked={selectedUsers.has(contactId)}
+                      size="small"
+                    />
+                    <Avatar 
+                      src={profile?.avatarUrl} 
+                      sx={{ width: 32, height: 32, mr: 2 }}
+                    >
+                      {profile?.displayName?.charAt(0).toUpperCase() || '?'}
+                    </Avatar>
+                    <ListItemText 
+                      primary={profile?.displayName || 'Unknown User'}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+              No contacts yet. Add friends to create groups.
+            </Typography>
+          )}
+        </Box>
+      </DialogContent>
+      
+      <DialogActions sx={{ p: 2 }}>
+        <Button onClick={handleCloseCreateGroup}>Cancel</Button>
+        <Button 
+          onClick={handleCreateGroup}
+          variant="contained"
+          disabled={!groupName.trim() || selectedUsers.size === 0 || creatingGroup}
+        >
+          {creatingGroup ? <CircularProgress size={24} /> : 'Create Group'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   return (
     <>
       {isMobile && !open && (
@@ -541,6 +793,8 @@ const Sidebar = () => {
         <Toolbar />
         {drawerContent}
       </Drawer>
+      
+      {createGroupDialog}
     </>
   );
 };
