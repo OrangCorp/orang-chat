@@ -24,6 +24,10 @@ public class ChatController {
 
     @MessageMapping("/chat.send")
     public void processMessage(@Payload ChatMessagePayload message) {
+        if (!isValidPayload(message)) {
+            return;
+        }
+
         log.info("Received {} message from {} to {}",
                 message.getType() ,
                 message.getSenderId(),
@@ -61,5 +65,34 @@ public class ChatController {
         } else {
             log.info("Typing indicator routed");
         }
+    }
+
+    private boolean isValidPayload(ChatMessagePayload message) {
+        if (message == null) {
+            log.warn("Dropping websocket message: payload is null");
+            return false;
+        }
+
+        if (message.getType() == null) {
+            log.warn("Dropping websocket message: type is required");
+            return false;
+        }
+
+        if (message.getSenderId() == null) {
+            log.warn("Dropping websocket message: senderId is required for type {}", message.getType());
+            return false;
+        }
+
+        if (MessageType.GROUP.equals(message.getType()) && message.getConversationId() == null) {
+            log.warn("Dropping websocket GROUP message: conversationId is required");
+            return false;
+        }
+
+        if (!MessageType.GROUP.equals(message.getType()) && message.getRecipientId() == null) {
+            log.warn("Dropping websocket {} message: recipientId is required", message.getType());
+            return false;
+        }
+
+        return true;
     }
 }
