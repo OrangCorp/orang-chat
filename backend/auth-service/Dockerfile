@@ -37,6 +37,6 @@ USER javauser:javauser
 
 COPY --from=builder /build/auth-service/target/*.jar app.jar
 
-EXPOSE 8084
+EXPOSE 8081
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
