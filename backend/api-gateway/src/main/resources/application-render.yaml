@@ -1,0 +1,134 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  main:
+    allow-bean-definition-overriding: true
+    web-application-type: reactive
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}  # będzie z Render Redis
+      port: 6379
+      password: ${SPRING_DATA_REDIS_PASSWORD:}  # Render Redis ma hasło
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            # Auth Service
+            - id: auth-service-docs
+              uri: ${AUTH_SERVICE_URL}
+              predicates:
+                - Path=/v3/api-docs/api/auth
+
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URL}
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 5
+                    redis-rate-limiter.burstCapacity: 10
+                    key-resolver: "#{@ipKeyResolver}"
+
+            # User Service
+            - id: user-service-docs
+              uri: ${USER_SERVICE_URL}
+              predicates:
+                - Path=/v3/api-docs/api/users, /v3/api-docs/api/contacts, /v3/api-docs/api/presence
+
+            - id: user-service
+              uri: ${USER_SERVICE_URL}
+              predicates:
+                - Path=/api/users/**, /api/contacts/**, /api/presence/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    key-resolver: "#{@userKeyResolver}"
+
+            # Message Service
+            - id: message-service-docs
+              uri: ${MESSAGE_SERVICE_URL}
+              predicates:
+                - Path=/v3/api-docs/api/messages
+
+            - id: message-service
+              uri: ${MESSAGE_SERVICE_URL}
+              predicates:
+                - Path=/api/messages/**, /api/conversations/**, /api/attachments/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 50
+                    redis-rate-limiter.burstCapacity: 100
+                    key-resolver: "#{@userKeyResolver}"
+
+            # Chat Service (WebSocket)
+            - id: chat-service
+              uri: ${CHAT_SERVICE_URL}
+              predicates:
+                - Path=/ws/**
+              filters:
+                - name: DedupeResponseHeader
+                  args:
+                    name: Access-Control-Allow-Origin
+                    strategy: RETAIN_UNIQUE
+
+            # Notification Service
+            - id: notification-service-docs
+              uri: ${NOTIFICATION_SERVICE_URL}
+              predicates:
+                - Path=/v3/api-docs/api/notifications
+
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL}
+              predicates:
+                - Path=/api/push/**, /api/conversations/*/notifications/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    key-resolver: "#{@userKeyResolver}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      access: unrestricted
+      show-details: always
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO  # mniej logów na produkcji
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: Auth Service
+        url: /v3/api-docs/api/auth
+      - name: User Service
+        url: /v3/api-docs/api/users
+      - name: Message Service
+        url: /v3/api-docs/api/messages
+      - name: Notification Service
+        url: /v3/api-docs/api/notifications
+  api-docs:
+    path: /v3/api-docs
+
+jwt:
+  secret: ${JWT_SECRET}
