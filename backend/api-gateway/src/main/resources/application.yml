@@ -104,7 +104,21 @@ spring:
                     redis-rate-limiter.replenishRate: 10
                     redis-rate-limiter.burstCapacity: 20
                     key-resolver: "#{@userKeyResolver}"
-
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]': # Applies CORS to all routes
+                          allowedOriginPatterns: "*" # Use specific origins in production e.g., "http://localhost:3000"
+                          allowedMethods:
+                            - GET
+                            - POST
+                            - PUT
+                            - DELETE
+                            - OPTIONS
+                            - PATCH
+                          allowedHeaders: "*"
+                          allowCredentials: true
+                          maxAge: 3600
 management:
   endpoints:
     web:
