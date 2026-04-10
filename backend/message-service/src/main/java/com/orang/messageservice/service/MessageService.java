@@ -15,7 +15,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -30,6 +32,7 @@ public class MessageService {
     private final MessageEventPublisher messageEventPublisher;
     private final AttachmentService attachmentService;
 
+    @Transactional(readOnly = true)
     public Page<MessageResponse> getMessagesForConversation(
             UUID conversationId,
             UUID requesterId,
@@ -74,12 +77,15 @@ public class MessageService {
             saved = messageRepository.findById(saved.getId()).orElseThrow();
         }
 
+        Set<UUID> participantIds = new HashSet<>(conversation.getParticipantIds());
+
         messageEventPublisher.publishMessageSent(
                 saved.getId(),
                 saved.getConversationId(),
                 saved.getSenderId(),
                 saved.getContent(),
-                attachmentIds
+                attachmentIds,
+                participantIds
         );
 
         log.info("Message {} created by user {} with {} attachments",

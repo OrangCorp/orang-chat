@@ -15,15 +15,15 @@ COPY notification-service/pom.xml notification-service/
 
 # 2. Pre-fetch dependencies using BuildKit cache
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn dependency:go-offline -pl user-service -am -B -q || true
+    mvn dependency:go-offline -pl notification-service -am -B -q || true
 
 # 3. Copy source code for required modules
 COPY shared-library/src shared-library/src
-COPY user-service/src user-service/src
+COPY notification-service/src notification-service/src
 
 # 4. Build with BuildKit cache and parallel threads
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn clean package -pl user-service -am -DskipTests -T 1C -B -q
+    mvn package -pl notification-service -am -DskipTests -T 1C -B -q
 
 # --- Runtime Stage ---
 FROM eclipse-temurin:21-jre-alpine
@@ -35,8 +35,8 @@ RUN apk add --no-cache wget
 RUN addgroup -S javauser && adduser -S javauser -G javauser
 USER javauser:javauser
 
-COPY --from=builder /build/user-service/target/*.jar app.jar
+COPY --from=builder /build/notification-service/target/*.jar app.jar
 
-EXPOSE 8082
+EXPOSE 8085
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
