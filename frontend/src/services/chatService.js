@@ -1,4 +1,5 @@
 // services/chatService.js
+import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
 
 class ChatService {
@@ -11,7 +12,7 @@ class ChatService {
     this.connected = false;
     this.subscriptions = new Map();
     this.connectionPromise = null;
-    ChatService.instance = this;
+    //ChatService.instance = this;
   }
 
   connect() {
@@ -26,12 +27,14 @@ class ChatService {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       this.stompClient = new Client({
-        brokerURL: 'ws://localhost:8083/ws',
+        brokerURL: 'ws://localhost:8080/ws',
         connectHeaders: {
           Authorization: `Bearer ${token}`
         },
         debug: (msg) => console.log('Chat STOMP:', msg),
         reconnectDelay: 5000,
+        heartbeatIncoming: 4000,
+        heartbeatOutgoing: 4000,
         onConnect: () => {
           console.log('Chat service connected');
           this.connected = true;

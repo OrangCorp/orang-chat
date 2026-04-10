@@ -26,11 +26,6 @@ class AuthService {
     
     // API endpoints
     this.apiBaseUrl = '/api';
-    this.wsBaseUrl = '/ws';
-    
-    // Bind methods
-    this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
-    this.handleUserActivity = this.handleUserActivity.bind(this);
     
     AuthService.instance = this;
   }
@@ -41,13 +36,6 @@ class AuthService {
     // Only load tokens from storage, DON'T auto-connect
     this.loadTokensFromStorage();
     
-    // Setup activity tracking (doesn't require connection)
-    this.setupActivityTracking();
-    
-    // Setup visibility API
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    }
     
     // If we have tokens, schedule refresh but DON'T auto-connect WebSocket yet
     if (this.refreshToken && this.accessToken) {
@@ -218,183 +206,6 @@ class AuthService {
     }
   }
 
-  // ==================== WebSocket with STOMP ====================
-
-  async connectWebSocket() {
-    // Don't connect if already connected or connecting
-    if (this.stompClient?.connected) {
-      console.log('WebSocket already connected');
-      return;
-    }
-
-    if (this.isConnecting) {
-      console.log('WebSocket connection already in progress');
-      return;
-    }
-
-    // Don't connect if no access token
-    if (!this.accessToken) {
-      console.warn('No access token available for WebSocket connection');
-      throw new Error('No access token available');
-    }
-
-    this.isConnecting = true;
-
-    return new Promise((resolve, reject) => {
-      // Construct WebSocket URL with token in query parameter
-      const wsUrl = `${this.wsBaseUrl}?access_token=${this.accessToken}`;
-      console.log('Connecting to WebSocket:', wsUrl);
-      
-      this.stompClient = new Client({
-        brokerURL: wsUrl,
-        connectHeaders: {
-          'Authorization': `Bearer ${this.accessToken}`,
-        },
-        debug: process.env.NODE_ENV === 'development' ? (str) => console.log('[STOMP]', str) : undefined,
-        reconnectDelay: 5000,
-        heartbeatIncoming: 0,
-        heartbeatOutgoing: 0,
-        onConnect: () => {
-          console.log('STOMP client connected successfully');
-          this.isConnecting = false;
-          
-          // Start heartbeat after connection
-          this.startHeartbeat();
-          
-          resolve();
-        },
-        onStompError: (frame) => {
-          console.error('STOMP error:', frame);
-          this.isConnecting = false;
-          reject(new Error(frame.headers?.message || 'STOMP connection error'));
-        },
-        onWebSocketError: (event) => {
-          console.error('WebSocket error:', event);
-          this.isConnecting = false;
-          reject(new Error('WebSocket connection error'));
-        },
-        onDisconnect: () => {
-          console.log('STOMP client disconnected');
-          this.stopHeartbeat();
-        },
-      });
-
-      this.stompClient.activate();
-    });
-  }
-
-  disconnectWebSocket() {
-    this.stopHeartbeat();
-    if (this.stompClient) {
-      if (this.stompClient.connected) {
-        this.stompClient.deactivate();
-      }
-      this.stompClient = null;
-    }
-  }
-
-  startHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-    }
-    
-    // Send initial heartbeat
-    this.sendHeartbeat();
-    
-    this.heartbeatInterval = setInterval(() => {
-      this.sendHeartbeat();
-    }, this.heartbeatDelayMs);
-    
-    console.log('Heartbeat started');
-  }
-
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-      console.log('Heartbeat stopped');
-    }
-  }
-
-  sendHeartbeat() {
-    if (this.stompClient?.connected) {
-      try {
-        this.stompClient.publish({
-          destination: '/app/presence.heartbeat',
-          body: JSON.stringify({
-            timestamp: Date.now(),
-            active: this.isActive,
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to send heartbeat:', error);
-      }
-    }
-  }
-
-  // ==================== Activity Tracking ====================
-
-  setupActivityTracking() {
-    if (typeof window === 'undefined') return;
-    
-    const activities = ['click', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    
-    activities.forEach(event => {
-      window.addEventListener(event, this.handleUserActivity);
-    });
-    
-    console.log('Activity tracking setup');
-  }
-
-  handleUserActivity() {
-    if (!this.isActive) {
-      this.isActive = true;
-      this.onActivityDetected();
-    }
-    
-    // Debounce to avoid excessive heartbeats
-    if (this.activityTimeout) {
-      clearTimeout(this.activityTimeout);
-    }
-    
-    this.activityTimeout = setTimeout(() => {
-      this.isActive = false;
-      this.onInactivityDetected();
-    }, 5000); // Consider inactive after 5 seconds of no activity
-  }
-
-  onActivityDetected() {
-    this.sendHeartbeat();
-    this.notifyActivityListeners(true);
-  }
-
-  onInactivityDetected() {
-    this.sendHeartbeat();
-    this.notifyActivityListeners(false);
-  }
-
-  handleVisibilityChange() {
-    const isVisible = document.visibilityState === 'visible';
-    this.isActive = isVisible;
-    this.sendHeartbeat();
-  }
-
-  addActivityListener(callback) {
-    this.activityListeners.push(callback);
-  }
-
-  removeActivityListener(callback) {
-    const index = this.activityListeners.indexOf(callback);
-    if (index > -1) {
-      this.activityListeners.splice(index, 1);
-    }
-  }
-
-  notifyActivityListeners(isActive) {
-    this.activityListeners.forEach(callback => {
-      callback(isActive);
-    });
-  }
 
   // ==================== Public API Methods with Token Management ====================
 
@@ -462,40 +273,7 @@ class AuthService {
     return this.authenticatedFetch(url, { method: 'DELETE' });
   }
 
-  // ==================== WebSocket Message Sending ====================
-
-  sendChatMessage(messagePayload) {
-    if (this.stompClient?.connected) {
-      this.stompClient.publish({
-        destination: '/app/chat.send',
-        body: JSON.stringify(messagePayload),
-      });
-      this.handleUserActivity();
-    } else {
-      console.error('STOMP client not connected, cannot send message');
-      // Don't auto-connect - let the app handle it
-    }
-  }
-
-  subscribeToTopic(destination, callback) {
-    if (this.stompClient?.connected) {
-      return this.stompClient.subscribe(destination, (message) => {
-        try {
-          const parsedMessage = JSON.parse(message.body);
-          callback(parsedMessage);
-        } catch (error) {
-          console.error('Failed to parse message:', error);
-          callback(message.body);
-        }
-      });
-    } else {
-      console.error('STOMP client not connected, cannot subscribe');
-      return null;
-    }
-  }
-
-  // ==================== Helper Methods ====================
-
+  
   isAuthenticated() {
     return !!this.accessToken && !!this.refreshToken;
   }
@@ -535,15 +313,11 @@ class AuthService {
       localStorage.removeItem('tokenExpiryTime');
       console.log('Tokens removed from localStorage');
     }
-    
-    this.disconnectWebSocket();
   }
 
   destroy() {
     if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     }
-    this.disconnectWebSocket();
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
