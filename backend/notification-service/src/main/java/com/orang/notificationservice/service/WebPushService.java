@@ -13,6 +13,7 @@ import org.apache.http.HttpResponse;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -85,7 +86,7 @@ public class WebPushService {
                     subscription.getEndpoint(),
                     subscription.getP256dhKey(),
                     subscription.getAuthKey(),
-                    payload.getBytes()
+                    payload.getBytes(StandardCharsets.UTF_8)
             );
 
             HttpResponse response = pushService.send(notification);
@@ -121,9 +122,8 @@ public class WebPushService {
             }
 
         } catch (Exception e) {
-            log.error("Exception sending notification to {}...: {}",
-                    truncateEndpoint(subscription.getEndpoint()),
-                    e.getMessage());
+            log.error("Exception sending notification to {}...",
+                    truncateEndpoint(subscription.getEndpoint()), e);
         }
     }
 
