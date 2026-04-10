@@ -15,6 +15,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -27,7 +30,9 @@ public class MessageService {
     private final ConversationService conversationService;
     private final MessageMapper messageMapper;
     private final MessageEventPublisher messageEventPublisher;
+    private final AttachmentService attachmentService;
 
+    @Transactional(readOnly = true)
     public Page<MessageResponse> getMessagesForConversation(
             UUID conversationId,
             UUID requesterId,
@@ -45,7 +50,10 @@ public class MessageService {
     }
 
     @Transactional
-    public void saveMessage(UUID conversationId, UUID senderId, String content) {
+    public MessageResponse saveMessage(UUID conversationId,
+                                       UUID senderId,
+                                       String content,
+                                       List<UUID> attachmentIds) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Conversation not found with id: " + conversationId));
@@ -61,7 +69,29 @@ public class MessageService {
                 .content(content)
                 .build();
 
-        messageRepository.save(message);
+        Message saved = messageRepository.save(message);
+
+        if (attachmentIds != null && !attachmentIds.isEmpty()) {
+            attachmentService.linkAttachmentsToMessage(attachmentIds, saved.getId(), senderId);
+            // Refresh to load linked attachments
+            saved = messageRepository.findById(saved.getId()).orElseThrow();
+        }
+
+        Set<UUID> participantIds = new HashSet<>(conversation.getParticipantIds());
+
+        messageEventPublisher.publishMessageSent(
+                saved.getId(),
+                saved.getConversationId(),
+                saved.getSenderId(),
+                saved.getContent(),
+                attachmentIds,
+                participantIds
+        );
+
+        log.info("Message {} created by user {} with {} attachments",
+                saved.getId(), senderId, attachmentIds != null ? attachmentIds.size() : 0);
+
+        return messageMapper.toMessageResponse(saved);
     }
 
     @Transactional

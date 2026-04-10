@@ -14,31 +14,19 @@ Recommended direction:
 - Keep profile fields (displayName/avatar/bio) owned by user-service only.
 - Auth service should only own identity/authentication data.
 
-## 2) Contact Removal Bug
+## 2) Silent JWT Filter Failures (user-service)
 
 Issue:
-- ContactService.removeContact validates but does not perform delete.
+- JWT filter in user-service catches Exception and ignores it. (Fixed in message-service).
 
 Risk:
-- Endpoint behavior does not match API contract.
-
-Recommended direction:
-- Delete entity after authorization checks.
-- Add unit test coverage for successful remove and forbidden cases.
-
-## 3) Silent JWT Filter Failures
-
-Issue:
-- JWT filters in user-service and message-service catch Exception and ignore it.
-
-Risk:
-- Missing diagnostics and ambiguous auth failures.
+- Missing diagnostics and ambiguous auth failures in user-service.
 
 Recommended direction:
 - Log token parsing failures at debug/warn level with safe details.
 - Keep request unauthenticated when token invalid, but observable in logs.
 
-## 4) WebSocket Security Exception Semantics
+## 3) WebSocket Security Exception Semantics
 
 Issue:
 - STOMP CONNECT auth in chat-service throws generic RuntimeException.
@@ -50,7 +38,7 @@ Recommended direction:
 - Throw explicit authentication/authorization exceptions.
 - Standardize WebSocket error payload strategy for clients.
 
-## 5) WebSocket CORS is Wide Open
+## 4) WebSocket CORS is Wide Open
 
 Issue:
 - setAllowedOriginPatterns("*") in WebSocket endpoint config.
@@ -61,19 +49,20 @@ Risk:
 Recommended direction:
 - Restrict origins by environment config.
 
-## 6) Messaging Feature Gaps
+## 5) Messaging Feature Gaps
 
 Issue:
-- Message lifecycle is read-only after persist (no edit/delete/reaction/read-receipt APIs).
+- Advanced search filters (e.g. by sender, date range) and complex media processing (video transcoding, large file chunking) are not implemented.
+- Thumbnail generation is only supported for image types (JPEG, PNG).
 
 Risk:
-- Product feature incompleteness and client workarounds.
+- Product feature incompleteness.
 
 Recommended direction:
-- Introduce message state transitions with explicit events and APIs.
-- Extend MessageType and payload model as needed.
+- Identify missing niche features based on user feedback.
+- Extend models/APIs as needed.
 
-## 7) Test Coverage Imbalance
+## 6) Test Coverage Imbalance
 
 Issue:
 - Good auth/presence tests, but sparse coverage in message/chat critical paths.
@@ -84,7 +73,7 @@ Risk:
 Recommended direction:
 - Prioritize unit/integration tests for ContactService, ConversationService, ChatMessageListener, and WebSocket handlers.
 
-## 8) Migration Strategy Consistency
+## 7) Migration Strategy Consistency
 
 Issue:
 - Migration approach is not fully standardized across services.

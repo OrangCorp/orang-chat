@@ -70,7 +70,7 @@ spring:
             - id: message-service
               uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
               predicates:
-                - Path=/api/messages/**, /api/conversations/**
+                - Path=/api/messages/**, /api/conversations/**, /api/attachments/**
               filters:
                 - name: RequestRateLimiter
                   args:
@@ -85,6 +85,25 @@ spring:
               uri: ${CHAT_SERVICE_URL:ws://localhost:8083}
               predicates:
                 - Path=/ws/**
+
+            # -----------------------------------------
+            # Notification Service Routes
+            # -----------------------------------------
+            - id: notification-service-docs
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/v3/api-docs/api/notifications
+
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/push/**, /api/conversations/*/notifications/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    key-resolver: "#{@userKeyResolver}"
 
 management:
   endpoints:
@@ -116,6 +135,8 @@ springdoc:
         url: /v3/api-docs/api/presence
       - name: Message Service
         url: /v3/api-docs/api/messages
+      - name: Notification Service
+        url: /v3/api-docs/api/notifications
   api-docs:
     path: /v3/api-docs
 

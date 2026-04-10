@@ -13,6 +13,7 @@ services:
       - USER_SERVICE_URL=http://user-service:8082
       - CHAT_SERVICE_URL=ws://chat-service:8083
       - MESSAGE_SERVICE_URL=http://message-service:8084
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8085
       - SPRING_DATA_REDIS_HOST=redis
       - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
     depends_on:
@@ -119,13 +120,50 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-message:5432/message_db
       - SPRING_RABBITMQ_HOST=orangchat-rabbitmq
+      - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_DOWNLOAD_MODE=backend
+      - MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
     depends_on:
       postgres-message:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: orangchat-notification-service
+    ports:
+      - "8085:8085"
+    networks:
+      - orangchat-network
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-notification:5432/notification_db
+      - SPRING_RABBITMQ_HOST=orangchat-rabbitmq
+      - JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+      - VAPID_PUBLIC_KEY=BJpbtLz1TmeDHqF-SHenqYTjmGFD_rOAomOUXE-aHQ0g8_sENBPI8PiECPHo3Hn566y8BcCS52szGZtQWV0A_vU
+      - VAPID_PRIVATE_KEY=Hf17E44Uk_VegHbti_boVg68zgFQV6pXZ8Pg3Ct5ylk
+      - VAPID_SUBJECT=mailto:admin@chatapp.com
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -185,6 +223,25 @@ services:
       - orangchat-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U messageuser -d message_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-notification:
+    image: postgres:18-alpine3.22
+    container_name: orangchat-postgres-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notificationuser
+      POSTGRES_PASSWORD: notificationpass
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+    networks:
+      - orangchat-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notificationuser -d notification_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -250,6 +307,7 @@ volumes:
   postgres-auth-data:
   postgres-user-data:
   postgres-message-data:
+  postgres-notification-data:
   redis-data:
   rabbitmq-data:
   minio-data:

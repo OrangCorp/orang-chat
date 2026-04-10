@@ -1,5 +1,6 @@
 package com.orang.messageservice.controller;
 
+import com.orang.messageservice.dto.CreateMessageRequest;
 import com.orang.messageservice.dto.EditMessageRequest;
 import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.dto.MessageSearchResponse;
@@ -70,6 +71,23 @@ public class MessageController {
         return ResponseEntity.ok(
                 messageSearchService.getMessagesAround(conversationId, userUUID, messageId, size)
         );
+    }
+
+    @PostMapping
+    public ResponseEntity<MessageResponse> sendMessage(
+            @Valid @RequestBody CreateMessageRequest request,
+            @AuthenticationPrincipal String myUserId) {
+        UUID userUUID = UUID.fromString(myUserId);
+
+        log.info("User {} sending message to conversation {}", userUUID, request.getConversationId());
+
+        MessageResponse response = messageService.saveMessage(
+                request.getConversationId(),
+                userUUID,
+                request.getContent(),
+                request.getAttachmentIds()
+        );
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{messageId}")

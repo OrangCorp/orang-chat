@@ -4,6 +4,7 @@ import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Data
 @SuperBuilder
@@ -19,4 +20,5 @@ public class MessageReactionEvent extends MessageEvent {
     private Action action;
     private String reactionType;  // "LIKE", "HEART", "ORANG", etc.
     private Map<String, Long> currentCounts;  // {"LIKE": 5, "ORANG": 2}
+    private UUID messageAuthorId;
 }

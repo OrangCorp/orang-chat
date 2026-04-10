@@ -55,4 +55,11 @@ public class Conversation {
                 .map(ConversationParticipant::getUserId)
                 .collect(Collectors.toSet());
     }
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

@@ -18,7 +18,7 @@ public interface MessageReactionRepository extends JpaRepository<MessageReaction
     List<MessageReaction> findByMessageId(UUID messageId);
 
     @Query("""
-            SELECT r.reactionType, COUNT(r)
+            SELECT r.reactionType AS reactionType, COUNT(r) AS count
             FROM MessageReaction r
             WHERE r.messageId = :messageId
             GROUP BY r.reactionType
