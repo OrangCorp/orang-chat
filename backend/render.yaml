@@ -1,0 +1,54 @@
+services:
+  # ===== INFRASTRUCTURE ONLY =====
+  
+  - type: private-service
+    name: rabbitmq
+    runtime: image
+    image:
+      url: rabbitmq:4-management-alpine
+    dockerCommand: >
+      sh -c "
+      rabbitmq-plugins enable --offline rabbitmq_stomp rabbitmq_management &&
+      rabbitmq-server
+      "
+    envVars:
+      - key: RABBITMQ_DEFAULT_USER
+        value: orangchat
+      - key: RABBITMQ_DEFAULT_PASS
+        value: orangchat123
+    disk:
+      name: rabbitmq-data
+      mountPath: /var/lib/rabbitmq
+      sizeGB: 1
+      
+  # ===== DATABASES =====
+  
+  - type: pserv
+    name: postgres-auth
+    runtime: postgres
+    plan: free
+    databaseName: auth_db
+    user: authuser
+    
+  - type: pserv
+    name: postgres-user
+    runtime: postgres
+    plan: free
+    databaseName: user_db
+    user: useruser
+    
+  - type: pserv
+    name: postgres-message
+    runtime: postgres
+    plan: free
+    databaseName: message_db
+    user: messageuser
+    
+  - type: pserv
+    name: postgres-notification
+    runtime: postgres
+    plan: free
+    databaseName: notification_db
+    user: notificationuser
+    
+    
