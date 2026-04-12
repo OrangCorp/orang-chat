@@ -1,5 +1,4 @@
 // services/chatService.js
-import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
 
 class ChatService {
@@ -12,7 +11,7 @@ class ChatService {
     this.connected = false;
     this.subscriptions = new Map();
     this.connectionPromise = null;
-    //ChatService.instance = this;
+    ChatService.instance = this;
   }
 
   connect() {

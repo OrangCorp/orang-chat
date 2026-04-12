@@ -1,6 +1,6 @@
 import { Box, Paper, Typography, Avatar, IconButton } from '@mui/material';
 
-const MessageBubble = ({ message, isOwn, senderName, senderAvatar, time, onAvatarClick }) => {
+const MessageBubble = ({ message, isOwn, senderName, senderAvatar, time, onAvatarClick, highlight }) => {
   if (!message) return null;
   
   const isSystem = message.type === 'SYSTEM';
@@ -11,9 +11,10 @@ const MessageBubble = ({ message, isOwn, senderName, senderAvatar, time, onAvata
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
         <Paper
-          elevation={0}
+          elevation={1}
           sx={{
-            p: 1,
+            bgcolor: highlight ? 'warning.light' : (isOwn ? 'primary.light' : 'secondary.light'),
+            p: 1.5,
             bgcolor: 'grey.100',
             color: 'text.secondary',
             borderRadius: '16px',
