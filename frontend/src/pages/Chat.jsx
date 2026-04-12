@@ -23,8 +23,8 @@ const Chat = () => {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const subscriptionSetupRef = useRef(false);
-  const typingTimersRef = useRef(new Map());        // Received typing timeouts
-  const typingCooldownRef = useRef(false);          // Throttle flag for sending
+  const typingTimersRef = useRef(new Map());
+  const typingCooldownRef = useRef(false);
 
   // Core state
   const [conversation, setConversation] = useState(null);
@@ -39,7 +39,6 @@ const Chat = () => {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [currentRecipient, setCurrentRecipient] = useState(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Search state
@@ -99,11 +98,6 @@ const Chat = () => {
         const found = convs.find(c => c.id === chatId);
         if (!found) throw new Error('Conversation not found');
         setConversation(found);
-        
-        const otherParticipant = found.type === 'DIRECT' 
-          ? found.participants.find(p => p.userId !== user.id) 
-          : null;
-        setCurrentRecipient(otherParticipant ? otherParticipant.userId : found.id);
 
         const messagePage = await messageService.getMessages(chatId, 0, 50);
         setMessages(messagePage.content.reverse());
@@ -196,13 +190,49 @@ const Chat = () => {
           
           const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
           const wasAtBottom = checkIfAtBottom();
-          setMessages(prev => [...prev, messageWithId]);
+          
+          // Check if this message is from current user and we already have a temp version
+          setMessages(prev => {
+            // If it's my message and it's a group message, check for duplicates
+            if (message.senderId === user.id && message.type === 'GROUP') {
+              // Look for a temp message with matching content sent in the last few seconds
+              const duplicateIndex = prev.findIndex(m => 
+                m.id?.startsWith('temp-') && 
+                m.content === message.content &&
+                m.senderId === user.id &&
+                Date.now() - new Date(m.createdAt).getTime() < 5000
+              );
+              
+              if (duplicateIndex !== -1) {
+                // Replace temp message with real one
+                const newMessages = [...prev];
+                newMessages[duplicateIndex] = messageWithId;
+                return newMessages;
+              }
+            }
+            
+            // Check for duplicate real messages (in case temp was already replaced)
+            const existingRealMessage = prev.findIndex(m => 
+              m.id === message.id || 
+              (m.id && !m.id.startsWith('temp-') && m.content === message.content && m.senderId === message.senderId && Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 1000)
+            );
+            
+            if (existingRealMessage !== -1) {
+              // Message already exists, don't add duplicate
+              return prev;
+            }
+            
+            // Otherwise just add the message
+            return [...prev, messageWithId];
+          });
+          
           if (wasAtBottom) setTimeout(() => scrollToBottom(true), 50);
         };
         
+        // Subscribe based on conversation type
         if (conversation.type === 'DIRECT') {
           chatService.subscribeToPrivateMessages(handleMessage);
-        } else {
+        } else if (conversation.type === 'GROUP') {
           chatService.subscribeToGroup(conversation.id, handleMessage);
         }
       } catch (err) { 
@@ -215,29 +245,29 @@ const Chat = () => {
       subscriptionSetupRef.current = false;
       if (conversation) {
         if (conversation.type === 'DIRECT') {
-          chatService.unsubscribe(`/user/queue/messages`);
-        } else {
+          chatService.unsubscribe('/user/queue/messages');
+        } else if (conversation.type === 'GROUP') {
           chatService.unsubscribe(`/topic/group/${conversation.id}`);
         }
       }
     };
   }, [conversation, user, chatId, scrollToBottom, checkIfAtBottom]);
 
-  // Send typing event (simple throttle)
+  // Send typing event
   const sendTyping = useCallback(() => {
-    if (!chatService.isConnected?.()) return;
+    if (!chatService.isConnected()) return;
     if (typingCooldownRef.current) return;
 
-    let recipientId;
+    let targetId;
     if (conversation.type === 'DIRECT') {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
-      recipientId = otherParticipant?.userId;
+      targetId = otherParticipant?.userId;
     } else {
-      recipientId = conversation.id;
+      targetId = conversation.id;
     }
 
-    // Send the typing message (no boolean flag)
-    chatService.sendTyping(user.id, recipientId);
+    // Send typing indicator with appropriate chat type
+    chatService.sendTyping(user.id, targetId, true, conversation.type);
     typingCooldownRef.current = true;
 
     // Reset cooldown after 4 seconds
@@ -261,29 +291,38 @@ const Chat = () => {
     setInput('');
     setSending(true);
     
-    let recipientId;
-    let messageType;
+    const messagePayload = {
+      senderId: user.id,
+      content,
+      type: conversation.type
+    };
+
     if (conversation.type === 'DIRECT') {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
-      recipientId = otherParticipant?.userId;
-      messageType = 'DIRECT';
+      messagePayload.recipientId = otherParticipant?.userId; // Note the spelling: recipienTId
     } else {
-      recipientId = conversation.id;
-      messageType = 'GROUP';
+      messagePayload.conversationId = conversation.id; // Groups use conversationId
     }
+    
+    console.log('Sending message payload:', messagePayload);
     
     const wasAtBottom = checkIfAtBottom();
     const tempMessage = {
       id: `temp-${Date.now()}`,
       senderId: user.id,
-      recipientId,
       content,
-      type: messageType,
+      type: conversation.type,
+      ...(conversation.type === 'DIRECT' 
+        ? { recipientId: messagePayload.recipientId }
+        : { conversationId: messagePayload.conversationId }
+      ),
       createdAt: new Date().toISOString()
     };
+    
     setMessages(prev => [...prev, tempMessage]);
     if (wasAtBottom) setTimeout(() => scrollToBottom(true), 50);
-    chatService.sendMessage({ senderId: user.id, recipientId, content, type: messageType });
+    
+    chatService.sendMessage(messagePayload);
     setSending(false);
   };
 
@@ -312,7 +351,7 @@ const Chat = () => {
     } catch (err) { console.error(err); } finally { setLoadingMore(false); }
   };
 
-  // Search handlers (unchanged)
+  // Search handlers
   const handleSearchClick = async () => {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
@@ -548,7 +587,6 @@ const Chat = () => {
 
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
       <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
         
@@ -580,6 +618,11 @@ const Chat = () => {
                   )}
                 </Stack>
               )}
+              {conversation.type === 'GROUP' && (
+                <Typography variant="caption" color="text.secondary">
+                  &nbsp;&nbsp;{conversation.participants?.length || 0} members
+                </Typography>
+              )}
             </Box>
             <Chip label={connected ? 'Connected' : 'Disconnected'} color={connected ? 'success' : 'error'} size="small" variant="outlined" />
             
@@ -604,7 +647,6 @@ const Chat = () => {
         )}
       </Paper>
 
-      {/* Messages container - takes remaining space */}
       <Box 
         ref={messagesContainerRef} 
         sx={{ 
@@ -620,7 +662,6 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </Box>
 
-      {/* Typing indicator - fixed height, always visible in normal mode */}
       {searchMode === 'off' && (
         <Box 
           sx={{ 
@@ -658,7 +699,6 @@ const Chat = () => {
         </Box>
       )}
 
-      {/* Message input */}
       {searchMode === 'off' && (
         <Paper elevation={3} sx={{ p: 2 }}>
           <form onSubmit={handleSend}>

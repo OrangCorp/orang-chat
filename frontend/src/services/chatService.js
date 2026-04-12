@@ -80,16 +80,32 @@ class ChatService {
       return;
     }
 
-    // Format the message with the correct type (DIRECT or GROUP)
+    const { senderId, recipientId, conversationId, content, type } = messagePayload;
+
+    // Build base message
     const formattedMessage = {
-      senderId: messagePayload.senderId,
-      recipientId: messagePayload.recipientId,
-      content: messagePayload.content,
-      type: messagePayload.type, // Should be 'DIRECT' or 'GROUP'
+      senderId,
+      content,
+      type,
       timestamp: new Date().toISOString()
     };
 
-    console.log('📤 Sending message:', formattedMessage);
+    // Add the appropriate field based on message type
+    if (type === 'DIRECT') {
+      if (!recipientId) {
+        console.error('recipientId is required for DIRECT messages');
+        return;
+      }
+      formattedMessage.recipientId = recipientId;
+    } else if (type === 'GROUP') {
+      if (!conversationId) {
+        console.error('conversationId is required for GROUP messages');
+        return;
+      }
+      formattedMessage.conversationId = conversationId;
+    }
+
+    console.log('📤 Sending formatted message:', formattedMessage);
 
     this.stompClient.publish({
       destination: '/app/chat.send',
@@ -133,13 +149,23 @@ class ChatService {
 
   // Alias for backward compatibility
   subscribeToPrivateMessages(callback) {
-    this.subscribeToUserQueue(callback);
+    this.connect().then(() => {
+      // Private messages come to user-specific queue
+      const destination = `/user/queue/messages`;
+      
+      const subscription = this.stompClient.subscribe(destination, (message) => {
+        const data = JSON.parse(message.body);
+        callback(data);
+      });
+
+      this.subscriptions.set(destination, subscription);
+    }).catch(err => console.error('Failed to subscribe to private queue:', err));
   }
 
-  // Subscribe to group topic
   subscribeToGroup(groupId, callback) {
     this.connect().then(() => {
-      const destination = `/topic/group/${groupId}`;
+      // Based on GroupEventListener, it likely sends to a topic like this:
+      const destination = `/topic/group.${groupId}`;  // Note the DOT, not slash
       
       if (this.subscriptions.has(destination)) {
         this.subscriptions.get(destination).unsubscribe();
@@ -147,14 +173,12 @@ class ChatService {
 
       const subscription = this.stompClient.subscribe(destination, (message) => {
         const data = JSON.parse(message.body);
-        console.log('📨 Received group message:', data);
         callback(data);
       });
 
       this.subscriptions.set(destination, subscription);
     }).catch(err => console.error('Failed to subscribe to group:', err));
   }
-
   // Unsubscribe from a destination
   unsubscribe(destination) {
     if (this.subscriptions.has(destination)) {
