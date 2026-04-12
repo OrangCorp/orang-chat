@@ -36,12 +36,9 @@ class AuthService {
     // Only load tokens from storage, DON'T auto-connect
     this.loadTokensFromStorage();
     
-    
-    // If we have tokens, schedule refresh but DON'T auto-connect WebSocket yet
+
     if (this.refreshToken && this.accessToken) {
       this.scheduleTokenRefresh();
-      // Note: WebSocket will be connected only when explicitly called
-      // (e.g., after login or when user navigates to chat)
     }
   }
 
@@ -53,12 +50,22 @@ class AuthService {
       const storedExpiry = localStorage.getItem('tokenExpiryTime');
       
       if (storedAccessToken && storedRefreshToken) {
+        const tokenExpiryTime = storedExpiry ? parseInt(storedExpiry) : null;
+        
+        // If token is expired or will expire in the next 30 seconds, clear it
+        if (tokenExpiryTime && Date.now() >= tokenExpiryTime - 10000) {
+          console.log('Stored token is expired or about to expire, clearing...');
+          this.clearAuth();
+          return;
+        }
+        
         this.accessToken = storedAccessToken;
         this.refreshToken = storedRefreshToken;
         this.userInfo = storedUserInfo ? JSON.parse(storedUserInfo) : null;
-        this.tokenExpiryTime = storedExpiry ? parseInt(storedExpiry) : null;
+        this.tokenExpiryTime = tokenExpiryTime;
         
-        console.log('Tokens loaded from storage');
+        console.log('Tokens loaded from storage, expires in', 
+          Math.round((this.tokenExpiryTime - Date.now()) / 1000), 'seconds');
       }
     }
   }
@@ -133,6 +140,7 @@ class AuthService {
 
   handleAuthResponse(authResponse) {
     // Store tokens
+    //console.log("refresh things: ", this.accessToken, authResponse.accessToken, this.refreshToken, authResponse.refreshToken);
     this.accessToken = authResponse.accessToken;
     this.refreshToken = authResponse.refreshToken;
     this.userInfo = {
@@ -158,6 +166,7 @@ class AuthService {
   }
 
   async refreshAccessToken() {
+    //console.log("refresh things: ", this.accessToken, this.refreshToken);
     if (!this.refreshToken) {
       throw new Error('No refresh token available');
     }
@@ -209,71 +218,6 @@ class AuthService {
 
   // ==================== Public API Methods with Token Management ====================
 
-  async authenticatedFetch(url, options = {}) {
-    // Check if token is about to expire
-    if (this.tokenExpiryTime && (this.tokenExpiryTime - Date.now()) < this.refreshThresholdMs) {
-      console.log('Token about to expire, refreshing...');
-      await this.refreshAccessToken();
-    }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.accessToken}`,
-      ...options.headers,
-    };
-
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    // If unauthorized, try to refresh token and retry once
-    if (response.status === 401) {
-      console.log('Received 401, attempting token refresh...');
-      try {
-        await this.refreshAccessToken();
-        // Retry with new token
-        headers['Authorization'] = `Bearer ${this.accessToken}`;
-        const retryResponse = await fetch(url, {
-          ...options,
-          headers,
-        });
-        return retryResponse;
-      } catch (error) {
-        this.clearAuth();
-        throw new Error('Session expired. Please login again.');
-      }
-    }
-
-    // Track activity on API calls
-    this.handleUserActivity();
-
-    return response;
-  }
-
-  async get(url) {
-    return this.authenticatedFetch(url, { method: 'GET' });
-  }
-
-  async post(url, data) {
-    return this.authenticatedFetch(url, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async put(url, data) {
-    return this.authenticatedFetch(url, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async delete(url) {
-    return this.authenticatedFetch(url, { method: 'DELETE' });
-  }
-
-  
   isAuthenticated() {
     return !!this.accessToken && !!this.refreshToken;
   }

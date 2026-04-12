@@ -277,15 +277,12 @@ const Header = () => {
 
           <Tooltip title="Profile & Settings">
             <Button onClick={handleProfileMenuOpen} sx={{ display: 'flex', alignItems: 'center', gap: 1, textTransform: 'none', color: 'white', borderRadius: 20, px: 2, py: 0.5, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
-              <Badge color="success" variant="dot" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} overlap="circular" invisible={!currentUserProfile?.online}>
-                <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-                  {!profileLoading && getAvatarInitial()}
-                  {profileLoading && <CircularProgress size={24} sx={{ color: 'white' }} />}
-                </Avatar>
-              </Badge>
+              <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
+                {!profileLoading && getAvatarInitial()}
+                {profileLoading && <CircularProgress size={24} sx={{ color: 'white' }} />}
+              </Avatar>
               <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left' }}>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>{getDisplayName()}</Typography>
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>{currentUserProfile?.online ? 'Online' : 'Offline'}</Typography>
               </Box>
               <KeyboardArrowDownIcon sx={{ fontSize: 20 }} />
             </Button>
@@ -338,12 +335,9 @@ const Header = () => {
       {/* Profile menu */}
       <Menu anchorEl={profileMenuAnchor} open={Boolean(profileMenuAnchor)} onClose={handleProfileMenuClose} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }} PaperProps={{ sx: { mt: 1, width: 280, borderRadius: 2, overflow: 'hidden' } }}>
         <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Badge color="success" variant="dot" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} overlap="circular" invisible={!currentUserProfile?.online}>
-            <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 48, height: 48, bgcolor: 'secondary.main', border: '2px solid white' }}>{getAvatarInitial()}</Avatar>
-          </Badge>
+          <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 48, height: 48, bgcolor: 'secondary.main', border: '2px solid white' }}>{getAvatarInitial()}</Avatar>
           <Box>
             <Typography variant="subtitle1" fontWeight="bold">{getDisplayName()}</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>{currentUserProfile?.online ? 'Active now' : 'Offline'}</Typography>
           </Box>
         </Box>
         <Divider />

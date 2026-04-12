@@ -21,7 +21,113 @@ class UserService {
     this.contactCache = new Map();     // 'contacts' -> array, 'incoming' -> array, etc.
     this.pendingRequests = new Map();   // key -> Promise
     
+    // Online status refresh timer
+    this.statusRefreshTimer = null;
+    this.statusRefreshIntervalMs = 2 * 60 * 1000; // 15 minutes
+    
     UserService.instance = this;
+    
+    // Start the refresh timer
+    this.startStatusRefreshTimer();
+  }
+
+  startStatusRefreshTimer() {
+    if (this.statusRefreshTimer) {
+      clearInterval(this.statusRefreshTimer);
+    }
+    
+    console.log(`Starting online status refresh every ${this.statusRefreshIntervalMs / 60000} minutes`);
+    
+    this.statusRefreshTimer = setInterval(() => {
+      this.refreshAllOnlineStatuses().catch(err => {
+        console.error('Failed to refresh online statuses:', err);
+      });
+    }, this.statusRefreshIntervalMs);
+  }
+
+  stopStatusRefreshTimer() {
+    if (this.statusRefreshTimer) {
+      clearInterval(this.statusRefreshTimer);
+      this.statusRefreshTimer = null;
+    }
+  }
+
+  async refreshAllOnlineStatuses() {
+    const cachedUserIds = Array.from(this.profileCache.keys());
+    
+    if (cachedUserIds.length === 0) {
+      console.log('No cached users to refresh status for');
+      return;
+    }
+    
+    // Filter out the current user's own ID
+    const currentUserId = this.getCurrentUserId();
+    const otherUserIds = cachedUserIds.filter(id => id !== currentUserId);
+    
+    if (otherUserIds.length === 0) {
+      return;
+    }
+    
+    console.log(`Refreshing online status for ${otherUserIds.length} cached users`);
+    
+    try {
+      const statuses = await this.getBatchUserStatus(otherUserIds);
+      
+      let updatedCount = 0;
+      for (const status of statuses) {
+        const cachedProfile = this.profileCache.get(status.userId);
+        if (cachedProfile) {
+          const wasOnline = cachedProfile.online;
+          cachedProfile.online = status.online;
+          cachedProfile.lastSeen = status.lastSeen;
+          this.profileCache.set(status.userId, cachedProfile);
+          
+          if (wasOnline !== status.online) {
+            updatedCount++;
+          }
+        }
+      }
+      
+      console.log(`Online status refresh complete. ${updatedCount} users changed status.`);
+      
+      // Dispatch event so components can update
+      window.dispatchEvent(new CustomEvent('online-status-updated'));
+      
+    } catch (error) {
+      console.error('Failed to refresh online statuses:', error);
+    }
+  }
+
+  async refreshOnlineStatusForUsers(userIds) {
+    if (!userIds || userIds.length === 0) {
+      return;
+    }
+    
+    const uniqueIds = [...new Set(userIds)];
+    const currentUserId = this.getCurrentUserId();
+    const otherUserIds = uniqueIds.filter(id => id !== currentUserId);
+    
+    if (otherUserIds.length === 0) {
+      return;
+    }
+    
+    try {
+      const statuses = await this.getBatchUserStatus(otherUserIds);
+      
+      for (const status of statuses) {
+        const cachedProfile = this.profileCache.get(status.userId);
+        if (cachedProfile) {
+          cachedProfile.online = status.online;
+          cachedProfile.lastSeen = status.lastSeen;
+          this.profileCache.set(status.userId, cachedProfile);
+        }
+      }
+      
+      window.dispatchEvent(new CustomEvent('online-status-updated'));
+      
+    } catch (error) {
+      console.error('Failed to refresh online status for specific users:', error);
+    }
   }
 
   clearCache() {
@@ -311,6 +417,11 @@ class UserService {
       } catch (e) {}
     }
     return null;
+  }
+  
+  // Clean up timer when needed (optional - for testing)
+  destroy() {
+    this.stopStatusRefreshTimer();
   }
 }
 

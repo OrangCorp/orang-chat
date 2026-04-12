@@ -1,4 +1,4 @@
-// Sidebar.js - With Create Group functionality
+// Sidebar.js - Simplified with userService cache
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 // Material UI components
@@ -54,7 +54,7 @@ const Sidebar = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(true);
-  const [profiles, setProfiles] = useState(new Map());
+  const [refreshKey, setRefreshKey] = useState(0); // Used to force re-render on status updates
   const { user } = useAuth();
   const navigate = useNavigate();
   const { chatId } = useParams();
@@ -94,6 +94,17 @@ const Sidebar = () => {
   useEffect(() => {
     loadConversations();
     loadContacts();
+    
+    // Listen for online status updates to force re-render
+    const handleStatusUpdate = () => {
+      setRefreshKey(prev => prev + 1);
+    };
+    
+    window.addEventListener('online-status-updated', handleStatusUpdate);
+    
+    return () => {
+      window.removeEventListener('online-status-updated', handleStatusUpdate);
+    };
   }, []);
 
   const loadConversations = async () => {
@@ -102,7 +113,20 @@ const Sidebar = () => {
       const data = await messageService.getConversations();
       setConversations(data);
       setError(null);
-      await fetchAllProfiles(data);
+      
+      // Prefetch profiles for direct chats
+      const userIds = data
+        .filter(conv => conv.type === 'DIRECT')
+        .flatMap(conv => conv.participants)
+        .filter(participant => participant.userId !== user?.id)
+        .map(participant => participant.userId);
+      
+      const uniqueUserIds = [...new Set(userIds)];
+      
+      if (uniqueUserIds.length > 0) {
+        // This will populate the userService cache
+        await userService.getProfiles(uniqueUserIds);
+      }
     } catch (err) {
       setError('Failed to load conversations');
       console.error(err);
@@ -114,7 +138,6 @@ const Sidebar = () => {
   const loadContacts = async () => {
     try {
       setContactsLoading(true);
-      // Get accepted contacts
       const contactsList = await userService.getContacts();
       setContacts(contactsList.filter(c => c.status === 'ACCEPTED'));
     } catch (err) {
@@ -133,7 +156,6 @@ const Sidebar = () => {
     try {
       setSearching(true);
       const results = await userService.searchUsers(query);
-      // Filter out current user and already selected users
       const filtered = results.filter(u => u.userId !== user.id);
       setSearchResults(filtered);
     } catch (err) {
@@ -142,58 +164,6 @@ const Sidebar = () => {
       setSearching(false);
     }
   };
-
-  const fetchAllProfiles = async (conversationsData) => {
-    const userIds = conversationsData
-      .filter(conv => conv.type === 'DIRECT')
-      .flatMap(conv => conv.participants)
-      .filter(participant => participant.userId !== user?.id)
-      .map(participant => participant.userId);
-    
-    const uniqueUserIds = [...new Set(userIds)];
-    
-    if (uniqueUserIds.length > 0) {
-      try {
-        const profileMap = await userService.getProfiles(uniqueUserIds);
-        const profilesMap = new Map();
-        profileMap.forEach((profile, userId) => {
-          if (profile) {
-            profilesMap.set(userId, profile);
-          }
-        });
-        setProfiles(profilesMap);
-      } catch (err) {
-        console.error('Failed to fetch profiles:', err);
-      }
-    }
-  };
-
-  useEffect(() => {
-    const updateProfiles = async () => {
-      const userIds = conversations
-        .filter(conv => conv.type === 'DIRECT')
-        .flatMap(conv => conv.participants)
-        .filter(participant => participant.userId !== user?.id)
-        .map(participant => participant.userId);
-      
-      const uniqueUserIds = [...new Set(userIds)];
-      
-      if (uniqueUserIds.length > 0) {
-        const profileMap = await userService.getProfiles(uniqueUserIds);
-        const profilesMap = new Map();
-        profileMap.forEach((profile, userId) => {
-          if (profile) {
-            profilesMap.set(userId, profile);
-          }
-        });
-        setProfiles(profilesMap);
-      }
-    };
-    
-    if (conversations.length > 0 && user) {
-      updateProfiles();
-    }
-  }, [conversations, user]);
 
   const handleChatClick = (conversationId) => {
     navigate(`/chat/${conversationId}`);
@@ -239,11 +209,10 @@ const Sidebar = () => {
       setCreatingGroup(true);
       const participantIds = Array.from(selectedUsers);
       participantIds.push(user.id);
-      console.log(participantIds);
       const newConversation = await messageService.createGroupChat(groupName, participantIds);
       handleCloseCreateGroup();
       navigate(`/chat/${newConversation.id}`);
-      await loadConversations(); // Refresh conversation list
+      await loadConversations();
     } catch (err) {
       console.error('Failed to create group:', err);
       alert('Failed to create group. Please try again.');
@@ -255,17 +224,18 @@ const Sidebar = () => {
   const getConversationDisplay = (conv) => {
     if (conv.type === 'DIRECT') {
       const otherParticipant = conv.participants.find(p => p.userId !== user?.id);
-      if (!otherParticipant) return { name: 'Unknown', avatar: null, id: null, online: false };
+      if (!otherParticipant) return { name: 'Unknown', avatar: null, online: false, type: 'DIRECT' };
       
       const otherId = otherParticipant.userId;
-      const profile = profiles.get(otherId);
-      const displayName = profile?.displayName;
-      const avatarUrl = profile?.avatarUrl;
-      const online = profile?.online || false;
+      // Get profile directly from userService cache
+      const profile = userService.profileCache.get(otherId);
       
-      const name = displayName || 'Unknown User';
-      
-      return { name, avatar: avatarUrl, id: otherId, online, type: 'DIRECT' };
+      return { 
+        name: profile?.displayName || 'Unknown User', 
+        avatar: profile?.avatarUrl || null, 
+        online: profile?.online || false, 
+        type: 'DIRECT' 
+      };
     } else {
       const participantCount = conv.participants?.length || 0;
       const displayName = conv.name || `Group (${participantCount})`;
@@ -273,7 +243,6 @@ const Sidebar = () => {
       return { 
         name: displayName, 
         avatar: null, 
-        id: conv.id, 
         online: false, 
         type: 'GROUP',
         participantCount
@@ -392,9 +361,9 @@ const Sidebar = () => {
       )}
 
       {!loading && conversations.length > 0 && (
-        <List sx={{ flex: 1, overflow: 'auto', pt: 0 }}>
+        <List sx={{ flex: 1, overflow: 'auto', pt: 0 }} key={refreshKey}>
           {conversations.map((conv) => {
-            const { name, avatar, id: otherId, online, type } = getConversationDisplay(conv);
+            const { name, avatar, online, type } = getConversationDisplay(conv);
             const isSelected = conv.id === chatId;
             const lastMessageTime = getLastMessageTime(conv);
             const lastMessagePreview = getLastMessagePreview(conv);
@@ -705,7 +674,7 @@ const Sidebar = () => {
           ) : contacts.length > 0 ? (
             contacts.map((contact) => {
               const contactId = contact.userId;
-              const profile = profiles.get(contactId);
+              const profile = userService.profileCache.get(contactId);
               return (
                 <ListItem key={contactId} disablePadding dense>
                   <ListItemButton onClick={() => handleToggleUser(contactId)}>

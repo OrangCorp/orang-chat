@@ -11,6 +11,8 @@ class ChatService {
     this.connected = false;
     this.subscriptions = new Map();
     this.connectionPromise = null;
+    this.lastHeartbeatSent = 0;
+    this.heartbeatThrottleMs = 2*60*1000; // 2 minutes
     ChatService.instance = this;
   }
 
@@ -19,7 +21,7 @@ class ChatService {
       return this.connectionPromise;
     }
 
-    const token = localStorage.getItem('accessToken');
+    let token = localStorage.getItem('accessToken');
     if (!token) {
       return Promise.reject('No access token');
     }
@@ -32,8 +34,8 @@ class ChatService {
         },
         debug: (msg) => console.log('Chat STOMP:', msg),
         reconnectDelay: 5000,
-        heartbeatIncoming: 4000,
-        heartbeatOutgoing: 4000,
+        heartbeatIncoming: 0,
+        heartbeatOutgoing: 0,
         onConnect: () => {
           console.log('Chat service connected');
           this.connected = true;
@@ -43,12 +45,14 @@ class ChatService {
           console.error('Chat STOMP error:', frame);
           this.connected = false;
           this.connectionPromise = null;
+          token = localStorage.getItem('accessToken');
           reject(frame);
         },
         onWebSocketError: (event) => {
           console.error('Chat WebSocket error:', event);
           this.connected = false;
           this.connectionPromise = null;
+          token = localStorage.getItem('accessToken');
           reject(event);
         },
         onDisconnect: () => {
@@ -73,7 +77,34 @@ class ChatService {
     }
   }
 
-  // Send a chat message
+  // Send heartbeat to update presence
+  sendHeartbeat(force = false) {
+    if (!this.connected) {
+      console.warn('Cannot send heartbeat - not connected');
+      return;
+    }
+
+    const now = Date.now();
+    
+    // Throttle heartbeats to once every 10 minutes unless forced
+    if (!force && (now - this.lastHeartbeatSent < this.heartbeatThrottleMs)) {
+      //console.log('Heartbeat throttled - last sent', Math.round((now - this.lastHeartbeatSent) / 1000), 'seconds ago');
+      return;
+    }
+
+    //console.log('📡 Sending presence heartbeat', now - this.lastHeartbeatSent, this.heartbeatThrottleMs);
+    
+    this.stompClient.publish({
+      destination: '/app/presence.heartbeat',
+      body: JSON.stringify({
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    this.lastHeartbeatSent = now;
+  }
+
+  // Send a chat message (handles both DIRECT and GROUP types)
   sendMessage(messagePayload) {
     if (!this.connected) {
       console.error('Chat service not connected');
@@ -105,30 +136,30 @@ class ChatService {
       formattedMessage.conversationId = conversationId;
     }
 
-    console.log('📤 Sending formatted message:', formattedMessage);
+    console.log('📤 Sending message:', formattedMessage);
 
     this.stompClient.publish({
       destination: '/app/chat.send',
       body: JSON.stringify(formattedMessage)
     });
+
+    // Send heartbeat on message activity (forced)
+    this.sendHeartbeat();
   }
 
   // Send typing indicator
-  sendTyping(senderId, recipientId) {
+  sendTyping(typingMessage) {
     if (!this.connected) return;
     
-    const typingMessage = {
-      senderId: senderId,
-      recipientId: recipientId,
-      content:'typing...',
-      type: 'TYPING',
-      timestamp: new Date().toISOString()
-    };
+    console.log('📤 Sending typing indicator');
     
     this.stompClient.publish({
       destination: '/app/chat.send',
       body: JSON.stringify(typingMessage)
     });
+
+    // Send heartbeat on typing activity (forced)
+    this.sendHeartbeat();
   }
 
   // Subscribe to user's private message queue
@@ -149,23 +180,13 @@ class ChatService {
 
   // Alias for backward compatibility
   subscribeToPrivateMessages(callback) {
-    this.connect().then(() => {
-      // Private messages come to user-specific queue
-      const destination = `/user/queue/messages`;
-      
-      const subscription = this.stompClient.subscribe(destination, (message) => {
-        const data = JSON.parse(message.body);
-        callback(data);
-      });
-
-      this.subscriptions.set(destination, subscription);
-    }).catch(err => console.error('Failed to subscribe to private queue:', err));
+    this.subscribeToUserQueue(callback);
   }
 
+  // Subscribe to group topic
   subscribeToGroup(groupId, callback) {
     this.connect().then(() => {
-      // Based on GroupEventListener, it likely sends to a topic like this:
-      const destination = `/topic/group.${groupId}`;  // Note the DOT, not slash
+      const destination = `/topic/group.${groupId}`;
       
       if (this.subscriptions.has(destination)) {
         this.subscriptions.get(destination).unsubscribe();
@@ -173,12 +194,14 @@ class ChatService {
 
       const subscription = this.stompClient.subscribe(destination, (message) => {
         const data = JSON.parse(message.body);
+        console.log('📨 Received group message:', data);
         callback(data);
       });
 
       this.subscriptions.set(destination, subscription);
     }).catch(err => console.error('Failed to subscribe to group:', err));
   }
+
   // Unsubscribe from a destination
   unsubscribe(destination) {
     if (this.subscriptions.has(destination)) {

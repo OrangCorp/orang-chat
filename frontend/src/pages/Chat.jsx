@@ -129,7 +129,7 @@ const Chat = () => {
       typingTimersRef.current.clear();
     };
   }, []);
-
+  
   // WebSocket setup
   useEffect(() => {
     if (!conversation || !user || !chatId) return;
@@ -258,16 +258,20 @@ const Chat = () => {
     if (!chatService.isConnected()) return;
     if (typingCooldownRef.current) return;
 
-    let targetId;
+    const typingMessage = {
+      senderId: user.id,
+      type: 'TYPING',
+      timestamp: new Date().toISOString()
+    };
+
     if (conversation.type === 'DIRECT') {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
-      targetId = otherParticipant?.userId;
+      typingMessage.recipientId = otherParticipant?.userId;
     } else {
-      targetId = conversation.id;
+      typingMessage.conversationId = conversation.id;
     }
 
-    // Send typing indicator with appropriate chat type
-    chatService.sendTyping(user.id, targetId, true, conversation.type);
+    chatService.sendTyping(typingMessage);
     typingCooldownRef.current = true;
 
     // Reset cooldown after 4 seconds
@@ -299,12 +303,10 @@ const Chat = () => {
 
     if (conversation.type === 'DIRECT') {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
-      messagePayload.recipientId = otherParticipant?.userId; // Note the spelling: recipienTId
+      messagePayload.recipientId = otherParticipant?.userId;
     } else {
-      messagePayload.conversationId = conversation.id; // Groups use conversationId
+      messagePayload.conversationId = conversation.id;
     }
-    
-    console.log('Sending message payload:', messagePayload);
     
     const wasAtBottom = checkIfAtBottom();
     const tempMessage = {
@@ -437,7 +439,24 @@ const Chat = () => {
   };
   
   const getAvatar = (userId) => (userId === user.id ? null : participants[userId]?.avatarUrl);
-  const isUserOnline = (userId) => (userId === user.id ? true : participants[userId]?.online || false);
+  
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return 'Never';
+    
+    const lastSeenDate = new Date(lastSeen);
+    const now = new Date();
+    const diffMs = now - lastSeenDate;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    
+    return lastSeenDate.toLocaleDateString();
+  };
   
   const getMessageTime = (msg) => {
     const d = msg.createdAt || msg.timestamp;
@@ -599,32 +618,71 @@ const Chat = () => {
           </>
         ) : (
           <>
-            <IconButton onClick={() => handleProfileClick(otherId || conversation.id)} sx={{ p: 0 }}>
-              <Avatar src={conversation.type === 'DIRECT' ? otherProfile?.avatarUrl : null} sx={{ width: 48, height: 48 }}>
-                {conversation.type === 'GROUP' ? <GroupIcon /> : (otherProfile?.displayName?.charAt(0)?.toUpperCase() || <PersonIcon />)}
+            <IconButton 
+              onClick={() => handleProfileClick(
+                conversation.type === 'DIRECT' ? otherId : conversation.id
+              )} 
+              sx={{ p: 0 }}
+            >
+              <Avatar 
+                src={conversation.type === 'DIRECT' ? otherProfile?.avatarUrl : null} 
+                sx={{ width: 48, height: 48 }}
+              >
+                {conversation.type === 'GROUP' 
+                  ? <GroupIcon /> 
+                  : (otherProfile?.displayName?.charAt(0)?.toUpperCase() || <PersonIcon />)
+                }
               </Avatar>
             </IconButton>
+            
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" component="span" onClick={() => handleProfileClick(otherId || conversation.id)} sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-                {conversation.type === 'GROUP' ? conversation.name || 'Group Chat' : otherProfile?.displayName || 'Unknown User'}
+              <Typography 
+                variant="h6" 
+                component="span" 
+                onClick={() => handleProfileClick(
+                  conversation.type === 'DIRECT' ? otherId : conversation.id
+                )} 
+                sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+              >
+                {conversation.type === 'GROUP' 
+                  ? conversation.name || 'Group Chat' 
+                  : otherProfile?.displayName || 'Unknown User'
+                }
               </Typography>
-              {conversation.type === 'DIRECT' && (
+              
+              {conversation.type === 'DIRECT' ? (
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography variant="caption" color={isUserOnline(otherId) ? 'success.main' : 'text.disabled'}>
-                    {isUserOnline(otherId) ? '● Online' : '○ Offline'}
-                  </Typography>
-                  {otherProfile?.lastSeen && !isUserOnline(otherId) && (
-                    <Typography variant="caption" color="text.secondary">Last seen: {new Date(otherProfile.lastSeen).toLocaleString()}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box 
+                      sx={{ 
+                        width: 8, 
+                        height: 8, 
+                        borderRadius: '50%', 
+                        bgcolor: otherProfile?.online ? 'success.main' : 'text.disabled',
+                        animation: otherProfile?.online ? 'pulse 1.5s infinite' : 'none',
+                        '@keyframes pulse': {
+                          '0%': { opacity: 1 },
+                          '50%': { opacity: 0.5 },
+                          '100%': { opacity: 1 }
+                        }
+                      }} 
+                    />
+                    <Typography variant="caption" color={otherProfile?.online ? 'success.main' : 'text.disabled'}>
+                      {otherProfile?.online ? 'Online' : 'Offline'}
+                    </Typography>
+                  </Box>
+                  {!otherProfile?.online && otherProfile?.lastSeen && (
+                    <Typography variant="caption" color="text.secondary">
+                      Last seen: {formatLastSeen(otherProfile.lastSeen)}
+                    </Typography>
                   )}
                 </Stack>
-              )}
-              {conversation.type === 'GROUP' && (
+              ) : (
                 <Typography variant="caption" color="text.secondary">
                   &nbsp;&nbsp;{conversation.participants?.length || 0} members
                 </Typography>
               )}
             </Box>
-            <Chip label={connected ? 'Connected' : 'Disconnected'} color={connected ? 'success' : 'error'} size="small" variant="outlined" />
             
             <TextField
               size="small"
