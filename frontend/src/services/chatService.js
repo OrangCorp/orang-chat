@@ -98,13 +98,13 @@ class ChatService {
   }
 
   // Send typing indicator
-  sendTyping(senderId, recipientId, isTyping) {
+  sendTyping(senderId, recipientId) {
     if (!this.connected) return;
     
     const typingMessage = {
       senderId: senderId,
       recipientId: recipientId,
-      content: isTyping ? 'typing...' : '',
+      content:'typing...',
       type: 'TYPING',
       timestamp: new Date().toISOString()
     };

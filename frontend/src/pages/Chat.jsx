@@ -2,13 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Paper, Typography, TextField, IconButton, Avatar, CircularProgress,
-  Button, Chip, Stack, Fab, InputAdornment, Divider, List, ListItem, ListItemText,
+  Button, Chip, Stack, InputAdornment, List, ListItem, ListItemText,
   ListItemAvatar,
 } from '@mui/material';
 import {
   Send as SendIcon, ArrowBack as ArrowBackIcon, Group as GroupIcon,
-  Person as PersonIcon, KeyboardArrowDown as KeyboardArrowDownIcon,
-  Search as SearchIcon, Close as CloseIcon, ArrowUpward, ArrowDownward,
+  Person as PersonIcon, Search as SearchIcon, Close as CloseIcon,
+  ArrowUpward, ArrowDownward,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import messageService from '../services/messageService';
@@ -22,9 +22,9 @@ const Chat = () => {
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
   const subscriptionSetupRef = useRef(false);
-  const typingIndicatorTimeoutsRef = useRef(new Map());
+  const typingTimersRef = useRef(new Map());        // Received typing timeouts
+  const typingCooldownRef = useRef(false);          // Throttle flag for sending
 
   // Core state
   const [conversation, setConversation] = useState(null);
@@ -43,14 +43,13 @@ const Chat = () => {
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   // Search state
-  const [searchMode, setSearchMode] = useState('off'); // 'off' | 'results' | 'context'
+  const [searchMode, setSearchMode] = useState('off');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [contextData, setContextData] = useState(null); // { messages, targetMessageId, targetIndex, hasOlderMessages, hasNewerMessages }
+  const [contextData, setContextData] = useState(null);
   const [contextLoading, setContextLoading] = useState(false);
 
-  // Helper: check scroll position
   const checkIfAtBottom = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return true;
@@ -62,7 +61,6 @@ const Chat = () => {
     setIsAtBottom(checkIfAtBottom());
   }, [checkIfAtBottom]);
 
-  // Scroll listener
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -83,7 +81,15 @@ const Chat = () => {
     }
   }, [checkIfAtBottom, updateIsAtBottom]);
 
-  // --- Load conversation & messages ---
+  // Reset typing state when chat changes
+  useEffect(() => {
+    typingCooldownRef.current = false;
+    typingTimersRef.current.forEach(clearTimeout);
+    typingTimersRef.current.clear();
+    setTypingUsers(new Set());
+  }, [chatId]);
+
+  // Load conversation & messages
   useEffect(() => {
     if (!chatId || !user) return;
     const loadData = async () => {
@@ -123,16 +129,14 @@ const Chat = () => {
     loadData();
   }, [chatId, user, scrollToBottom]);
 
-  // Cleanup typing timeouts
   useEffect(() => {
     return () => {
-      typingIndicatorTimeoutsRef.current.forEach(clearTimeout);
-      typingIndicatorTimeoutsRef.current.clear();
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimersRef.current.forEach(clearTimeout);
+      typingTimersRef.current.clear();
     };
   }, []);
 
-  // --- WebSocket (unchanged) ---
+  // WebSocket setup
   useEffect(() => {
     if (!conversation || !user || !chatId) return;
     if (subscriptionSetupRef.current) return;
@@ -142,59 +146,88 @@ const Chat = () => {
       try {
         await chatService.connect();
         setConnected(true);
+        
         const handleMessage = async (message) => {
           if (message.type === 'TYPING') {
-            // ... (typing handling unchanged)
+            const { senderId } = message;
+
+            // Clear existing timer for this user
+            if (typingTimersRef.current.has(senderId)) {
+              clearTimeout(typingTimersRef.current.get(senderId));
+              typingTimersRef.current.delete(senderId);
+            }
+
+            // Add user to typing set
+            setTypingUsers(prev => {
+              const next = new Set(prev);
+              next.add(senderId);
+              return next;
+            });
+
+            // Auto-remove after 5 seconds
+            const timer = setTimeout(() => {
+              setTypingUsers(prev => {
+                const next = new Set(prev);
+                next.delete(senderId);
+                return next;
+              });
+              typingTimersRef.current.delete(senderId);
+            }, 5000);
+
+            typingTimersRef.current.set(senderId, timer);
             return;
           }
+
           if ((message.type === 'DIRECT' || message.type === 'GROUP') && message.senderId) {
-            if (typingIndicatorTimeoutsRef.current.has(message.senderId)) {
-              clearTimeout(typingIndicatorTimeoutsRef.current.get(message.senderId));
-              typingIndicatorTimeoutsRef.current.delete(message.senderId);
+            // Remove typing indicator when a message is sent
+            if (typingTimersRef.current.has(message.senderId)) {
+              clearTimeout(typingTimersRef.current.get(message.senderId));
+              typingTimersRef.current.delete(message.senderId);
               setTypingUsers(prev => {
                 const next = new Set(prev);
                 next.delete(message.senderId);
                 return next;
               });
             }
-            if (message.senderId !== user.id) await userService.getProfile(message.senderId).catch(() => null);
+            if (message.senderId !== user.id) {
+              await userService.getProfile(message.senderId).catch(() => null);
+            }
           }
+          
           const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
           const wasAtBottom = checkIfAtBottom();
           setMessages(prev => [...prev, messageWithId]);
           if (wasAtBottom) setTimeout(() => scrollToBottom(true), 50);
         };
-        if (conversation.type === 'DIRECT') chatService.subscribeToPrivateMessages(handleMessage);
-        else chatService.subscribeToGroup(conversation.id, handleMessage);
-      } catch (err) { console.error('WebSocket failed:', err); }
+        
+        if (conversation.type === 'DIRECT') {
+          chatService.subscribeToPrivateMessages(handleMessage);
+        } else {
+          chatService.subscribeToGroup(conversation.id, handleMessage);
+        }
+      } catch (err) { 
+        console.error('WebSocket failed:', err); 
+      }
     };
     setupWebSocket();
+    
     return () => {
       subscriptionSetupRef.current = false;
       if (conversation) {
-        if (conversation.type === 'DIRECT') chatService.unsubscribe(`/user/queue/messages`);
-        else chatService.unsubscribe(`/topic/group/${conversation.id}`);
+        if (conversation.type === 'DIRECT') {
+          chatService.unsubscribe(`/user/queue/messages`);
+        } else {
+          chatService.unsubscribe(`/topic/group/${conversation.id}`);
+        }
       }
     };
   }, [conversation, user, chatId, scrollToBottom, checkIfAtBottom]);
 
-  // --- Typing indicator send ---
-  const sendTyping = useCallback((userId, recipientId, isTyping) => {
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (isTyping) {
-      chatService.sendTyping(userId, recipientId, true);
-      typingTimeoutRef.current = setTimeout(() => {
-        chatService.sendTyping(userId, recipientId, false);
-      }, 3000);
-    } else {
-      chatService.sendTyping(userId, recipientId, false);
-    }
-  }, []);
+  // Send typing event (simple throttle)
+  const sendTyping = useCallback(() => {
+    if (!chatService.isConnected?.()) return;
+    if (typingCooldownRef.current) return;
 
-  const handleTyping = (e) => {
-    const value = e.target.value;
-    setInput(value);
-    if (!conversation) return;
     let recipientId;
     if (conversation.type === 'DIRECT') {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
@@ -202,11 +235,25 @@ const Chat = () => {
     } else {
       recipientId = conversation.id;
     }
-    if (value.length > 0) sendTyping(user.id, recipientId, true);
-    else sendTyping(user.id, recipientId, false);
+
+    // Send the typing message (no boolean flag)
+    chatService.sendTyping(user.id, recipientId);
+    typingCooldownRef.current = true;
+
+    // Reset cooldown after 4 seconds
+    setTimeout(() => {
+      typingCooldownRef.current = false;
+    }, 4000);
+  }, [conversation, user]);
+
+  const handleTyping = (e) => {
+    const value = e.target.value;
+    setInput(value);
+    if (!conversation || value.length === 0) return;
+    sendTyping();
   };
 
-  // --- Send message ---
+  // Send message
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() || sending || !conversation) return;
@@ -225,8 +272,6 @@ const Chat = () => {
       messageType = 'GROUP';
     }
     
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    chatService.sendTyping(user.id, recipientId, false);
     const wasAtBottom = checkIfAtBottom();
     const tempMessage = {
       id: `temp-${Date.now()}`,
@@ -242,7 +287,6 @@ const Chat = () => {
     setSending(false);
   };
 
-  // Load more (normal chat)
   const loadMore = async () => {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
@@ -268,13 +312,13 @@ const Chat = () => {
     } catch (err) { console.error(err); } finally { setLoadingMore(false); }
   };
 
-  // --- Search handlers ---
+  // Search handlers (unchanged)
   const handleSearchClick = async () => {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
     try {
       const results = await messageService.searchMessages(chatId, searchQuery.trim(), 0, 50);
-      setSearchResults(results.content || results); // adjust based on actual response structure
+      setSearchResults(results.content || results);
       setSearchMode('results');
     } catch (err) {
       console.error('Search failed:', err);
@@ -290,7 +334,6 @@ const Chat = () => {
       const around = await messageService.getMessagesAround(chatId, messageId, 30);
       setContextData(around);
       setSearchMode('context');
-      // Ensure participant profiles for context messages
       const uniqueIds = [...new Set(around.messages.map(m => m.senderId))];
       const missingProfiles = uniqueIds.filter(id => !participants[id] && id !== user.id);
       if (missingProfiles.length) {
@@ -315,9 +358,7 @@ const Chat = () => {
     if (!edgeMessage) return;
     setContextLoading(true);
     try {
-      // Use the same endpoint with edge message ID to get a new window
       const around = await messageService.getMessagesAround(chatId, edgeMessage.id, 30);
-      // Merge, avoiding duplicates
       const existingIds = new Set(contextData.messages.map(m => m.id));
       const newMessages = around.messages.filter(m => !existingIds.has(m.id));
       let merged;
@@ -329,7 +370,7 @@ const Chat = () => {
       setContextData({
         ...around,
         messages: merged,
-        targetMessageId: contextData.targetMessageId, // keep original target
+        targetMessageId: contextData.targetMessageId,
       });
     } catch (err) {
       console.error('Failed to load more context:', err);
@@ -345,7 +386,6 @@ const Chat = () => {
     setContextData(null);
   };
 
-  // --- Profile click etc. ---
   const handleProfileClick = (userId) => {
     if (userId === user.id) navigate('/profile');
     else navigate(`/profile/${userId}`);
@@ -382,7 +422,6 @@ const Chat = () => {
   const otherId = otherParticipant?.userId;
   const otherProfile = otherId ? participants[otherId] : null;
 
-  // Determine what to show in the message area
   const renderMessageArea = () => {
     if (searchMode === 'results') {
       return (
@@ -475,7 +514,6 @@ const Chat = () => {
       );
     }
 
-    // Normal chat view
     return (
       <>
         {hasMore && (
@@ -504,11 +542,6 @@ const Chat = () => {
             ))}
           </Box>
         )}
-        {typingUsers.size > 0 && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'left', mt: 1, fontStyle: 'italic', pl: 2 }}>
-            {Array.from(typingUsers).map(id => getDisplayName(id)).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
-          </Typography>
-        )}
       </>
     );
   };
@@ -516,78 +549,144 @@ const Chat = () => {
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-        <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
-          
-          {searchMode !== 'off' ? (
-            // Search/Context header - when actively searching or viewing context
-            <>
-              <IconButton onClick={exitSearchMode}><CloseIcon /></IconButton>
-              <Typography variant="h6" sx={{ flex: 1 }}>
-                {searchMode === 'results' ? 'Search Results' : 'Message Context'}
+      <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
+        
+        {searchMode !== 'off' ? (
+          <>
+            <IconButton onClick={exitSearchMode}><CloseIcon /></IconButton>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              {searchMode === 'results' ? 'Search Results' : 'Message Context'}
+            </Typography>
+          </>
+        ) : (
+          <>
+            <IconButton onClick={() => handleProfileClick(otherId || conversation.id)} sx={{ p: 0 }}>
+              <Avatar src={conversation.type === 'DIRECT' ? otherProfile?.avatarUrl : null} sx={{ width: 48, height: 48 }}>
+                {conversation.type === 'GROUP' ? <GroupIcon /> : (otherProfile?.displayName?.charAt(0)?.toUpperCase() || <PersonIcon />)}
+              </Avatar>
+            </IconButton>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" component="span" onClick={() => handleProfileClick(otherId || conversation.id)} sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                {conversation.type === 'GROUP' ? conversation.name || 'Group Chat' : otherProfile?.displayName || 'Unknown User'}
               </Typography>
-            </>
-          ) : (
-            // Normal header with search bar
-            <>
-              <IconButton onClick={() => handleProfileClick(otherId || conversation.id)} sx={{ p: 0 }}>
-                <Avatar src={conversation.type === 'DIRECT' ? otherProfile?.avatarUrl : null} sx={{ width: 48, height: 48 }}>
-                  {conversation.type === 'GROUP' ? <GroupIcon /> : (otherProfile?.displayName?.charAt(0)?.toUpperCase() || <PersonIcon />)}
-                </Avatar>
-              </IconButton>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="h6" component="span" onClick={() => handleProfileClick(otherId || conversation.id)} sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-                  {conversation.type === 'GROUP' ? conversation.name || 'Group Chat' : otherProfile?.displayName || 'Unknown User'}
-                </Typography>
-                {conversation.type === 'DIRECT' && (
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="caption" color={isUserOnline(otherId) ? 'success.main' : 'text.disabled'}>
-                      {isUserOnline(otherId) ? '● Online' : '○ Offline'}
-                    </Typography>
-                    {otherProfile?.lastSeen && !isUserOnline(otherId) && (
-                      <Typography variant="caption" color="text.secondary">Last seen: {new Date(otherProfile.lastSeen).toLocaleString()}</Typography>
-                    )}
-                  </Stack>
-                )}
-              </Box>
-              <Chip label={connected ? 'Connected' : 'Disconnected'} color={connected ? 'success' : 'error'} size="small" variant="outlined" />
-              
-              {/* Search bar - always visible in normal mode */}
-              <TextField
-                size="small"
-                placeholder="Search messages..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearchClick()}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton edge="end" onClick={handleSearchClick} disabled={searchLoading}>
-                        {searchLoading ? <CircularProgress size={20} /> : <SearchIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ width: 220 }}
-              />
-            </>
-          )}
-        </Paper>
+              {conversation.type === 'DIRECT' && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Typography variant="caption" color={isUserOnline(otherId) ? 'success.main' : 'text.disabled'}>
+                    {isUserOnline(otherId) ? '● Online' : '○ Offline'}
+                  </Typography>
+                  {otherProfile?.lastSeen && !isUserOnline(otherId) && (
+                    <Typography variant="caption" color="text.secondary">Last seen: {new Date(otherProfile.lastSeen).toLocaleString()}</Typography>
+                  )}
+                </Stack>
+              )}
+            </Box>
+            <Chip label={connected ? 'Connected' : 'Disconnected'} color={connected ? 'success' : 'error'} size="small" variant="outlined" />
+            
+            <TextField
+              size="small"
+              placeholder="Search messages..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearchClick()}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton edge="end" onClick={handleSearchClick} disabled={searchLoading}>
+                      {searchLoading ? <CircularProgress size={20} /> : <SearchIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: 220 }}
+            />
+          </>
+        )}
+      </Paper>
 
-      {/* Messages container */}
-      <Box ref={messagesContainerRef} sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: '#f5f5f5', display: 'flex', flexDirection: 'column' }}>
+      {/* Messages container - takes remaining space */}
+      <Box 
+        ref={messagesContainerRef} 
+        sx={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          p: 2, 
+          bgcolor: '#f5f5f5', 
+          display: 'flex', 
+          flexDirection: 'column' 
+        }}
+      >
         {renderMessageArea()}
         <div ref={messagesEndRef} />
       </Box>
 
-      {/* Input (hidden in search/context modes) */}
+      {/* Typing indicator - fixed height, always visible in normal mode */}
+      {searchMode === 'off' && (
+        <Box 
+          sx={{ 
+            minHeight: '40px',
+            px: 2, 
+            py: typingUsers.size > 0 ? 1 : 0,
+            bgcolor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            transition: 'padding 0.2s ease'
+          }}
+        >
+          {typingUsers.size > 0 && (
+            <>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {Array.from(typingUsers).slice(0, 3).map(userId => (
+                  <Avatar 
+                    key={userId}
+                    src={getAvatar(userId)} 
+                    sx={{ width: 20, height: 20 }}
+                  >
+                    {getDisplayName(userId).charAt(0)}
+                  </Avatar>
+                ))}
+              </Box>
+              <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                {Array.from(typingUsers).map(id => getDisplayName(id)).join(', ')} 
+                {typingUsers.size === 1 ? ' is' : ' are'} typing
+              </Typography>
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* Message input */}
       {searchMode === 'off' && (
         <Paper elevation={3} sx={{ p: 2 }}>
           <form onSubmit={handleSend}>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField fullWidth size="small" placeholder="Type a message..." value={input} onChange={handleTyping} disabled={sending} multiline maxRows={4}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }} />
-              <IconButton type="submit" color="primary" disabled={!input.trim() || sending} sx={{ alignSelf: 'flex-end' }}><SendIcon /></IconButton>
+              <TextField 
+                fullWidth 
+                size="small" 
+                placeholder="Type a message..." 
+                value={input} 
+                onChange={handleTyping} 
+                disabled={sending} 
+                multiline 
+                maxRows={4}
+                onKeyDown={(e) => { 
+                  if (e.key === 'Enter' && !e.shiftKey) { 
+                    e.preventDefault(); 
+                    handleSend(e); 
+                  } 
+                }} 
+              />
+              <IconButton 
+                type="submit" 
+                color="primary" 
+                disabled={!input.trim() || sending} 
+                sx={{ alignSelf: 'flex-end' }}
+              >
+                <SendIcon />
+              </IconButton>
             </Box>
           </form>
         </Paper>
