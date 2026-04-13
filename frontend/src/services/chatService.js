@@ -12,7 +12,7 @@ class ChatService {
     this.subscriptions = new Map();
     this.connectionPromise = null;
     this.lastHeartbeatSent = 0;
-    this.heartbeatThrottleMs = 2*60*1000; // 2 minutes
+    this.heartbeatThrottleMs = 1*60*1000; // 1 minute
     ChatService.instance = this;
   }
 
