@@ -41,6 +41,10 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-auth:5432/auth_db
       - SPRING_DATA_REDIS_HOST=redis
+      - MAIL_USERNAME=e7da6243f2722b
+      - MAIL_PASSWORD=9234b6c12ce1c5
+      - MAIL_FROM=noreply@orangchat.com
+      - SPRING_PROFILES_ACTIVE=dev
     depends_on:
       postgres-auth:
         condition: service_healthy
