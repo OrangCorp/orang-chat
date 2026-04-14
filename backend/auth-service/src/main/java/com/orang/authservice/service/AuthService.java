@@ -73,11 +73,18 @@ public class AuthService {
                 code
         );
 
+        return buildPendingVerificationResponse(savedUser);
+    }
+
+    private AuthResponse buildPendingVerificationResponse(User user) {
         return AuthResponse.builder()
-                .userId(savedUser.getId())
-                .email(savedUser.getEmail())
-                .displayName(savedUser.getDisplayName())
+                .userId(user.getId())
+                .email(user.getEmail())
+                .displayName(user.getDisplayName())
                 .emailVerified(false)
+                .accessToken("")
+                .refreshToken("")
+                .expiresIn(0)
                 .build();
     }
 
