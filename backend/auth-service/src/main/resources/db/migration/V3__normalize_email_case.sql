@@ -27,7 +27,7 @@ WHERE id IN (
 UPDATE users SET email = LOWER(email);
 
 -- Drop the old case-sensitive unique constraint
-ALTER TABLE users DROP CONSTRAINT uq_users_email;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS uq_users_email;
 
 -- Create a case-insensitive unique index using a functional expression
 CREATE UNIQUE INDEX uq_users_email_lower ON users (LOWER(email));
