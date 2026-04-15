@@ -114,4 +114,19 @@ public class MessageEventPublisher {
                 attachmentIds != null ? attachmentIds.size() : 0,
                 participantIds != null ? participantIds.size() : 0);
     }
+
+    public void publishMentionEvent(UUID messageId, UUID conversationId, UUID senderId,
+                                    UUID mentionedUserId, String contentPreview) {
+        MentionEvent event = MentionEvent.builder()
+                .messageId(messageId)
+                .conversationId(conversationId)
+                .triggeredBy(senderId)
+                .timestamp(LocalDateTime.now())
+                .mentionedUserId(mentionedUserId)
+                .contentPreview(contentPreview)
+                .build();
+
+        rabbitTemplate.convertAndSend(EXCHANGE, "message.mention", event);
+        log.info("Published MentionEvent for user {} in message {}", mentionedUserId, messageId);
+    }
 }

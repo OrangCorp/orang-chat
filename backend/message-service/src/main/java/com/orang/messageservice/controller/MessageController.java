@@ -6,12 +6,16 @@ import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.dto.MessageSearchResponse;
 import com.orang.messageservice.dto.MessagesAroundResponse;
 import com.orang.messageservice.dto.PageRequestDto;
+import com.orang.messageservice.mapper.MessageMapper;
+import com.orang.messageservice.repository.MessageRepository;
 import com.orang.messageservice.service.MessageSearchService;
 import com.orang.messageservice.service.MessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.orang.messageservice.entity.Message;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +33,8 @@ public class MessageController {
 
     private final MessageService messageService;
     private final MessageSearchService messageSearchService;
+    private final MessageRepository messageRepository;
+    private final MessageMapper messageMapper;
 
     @GetMapping("/{conversationId}")
     public ResponseEntity<Page<MessageResponse>> getChatHistory(
@@ -85,7 +91,8 @@ public class MessageController {
                 request.getConversationId(),
                 userUUID,
                 request.getContent(),
-                request.getAttachmentIds()
+                request.getAttachmentIds(),
+                request.getReplyToMessageId()
         );
         return ResponseEntity.ok(response);
     }
@@ -113,5 +120,21 @@ public class MessageController {
 
         messageService.deleteMessage(messageId, userUUID);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/mentions")
+    public ResponseEntity<Page<MessageResponse>> getMyMentions(
+            @RequestParam(required = false) UUID conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal String myUserId) {
+
+        UUID userUUID = UUID.fromString(myUserId);
+        Pageable pageable = PageRequest.of(page, Math.min(size, 50));
+
+        Page<Message> messages = messageRepository.findMentionedMessages(
+                userUUID, conversationId, pageable);
+
+        return ResponseEntity.ok(messages.map(messageMapper::toMessageResponse));
     }
 }
