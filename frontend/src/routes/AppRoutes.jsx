@@ -22,29 +22,16 @@ const AppRoutes = () => {
         <Route path="/signup" element={<Signup />} />
       </Route>
 
-      {/* Protected Routes */}
-      <Route element={<MainLayout />}>
-        <Route path="/" element={
-          <PrivateRoute>
-            <Home />
-          </PrivateRoute>
-        } />
-        <Route path="/chat/:chatId?" element={
-          <PrivateRoute>
-            <Chat />
-          </PrivateRoute>
-        } />
-        {/* Profile routes - /profile/me for own profile, /profile/:userId for others */}
-        <Route path="/profile/me" element={
-          <PrivateRoute>
-            <Profile />
-          </PrivateRoute>
-        } />
-        <Route path="/profile/:userId" element={
-          <PrivateRoute>
-            <Profile />
-          </PrivateRoute>
-        } />
+      {/* Protected Routes - Wrap the ENTIRE layout */}
+      <Route element={
+        <PrivateRoute>
+          <MainLayout />
+        </PrivateRoute>
+      }>
+        <Route path="/" element={<Home />} />
+        <Route path="/chat/:chatId?" element={<Chat />} />
+        <Route path="/profile/me" element={<Profile />} />
+        <Route path="/profile/:userId" element={<Profile />} />
       </Route>
 
       {/* 404 Route */}

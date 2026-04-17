@@ -35,7 +35,6 @@ import MessageBubble from '../components/chat/MessageBubble';
 // Role display helper
 const getRoleLabel = (role) => {
   switch (role) {
-    case 'OWNER': return 'Owner';
     case 'ADMIN': return 'Admin';
     default: return 'Member';
   }
@@ -43,7 +42,6 @@ const getRoleLabel = (role) => {
 
 const getRoleColor = (role) => {
   switch (role) {
-    case 'OWNER': return 'error';
     case 'ADMIN': return 'warning';
     default: return 'default';
   }
@@ -180,15 +178,19 @@ const Chat = () => {
     };
   }, []);
 
-  // WebSocket setup (unchanged)
+  // WebSocket setup
   useEffect(() => {
     if (!conversation || !user || !chatId) return;
     if (subscriptionSetupRef.current) return;
     subscriptionSetupRef.current = true;
 
-    const setupWebSocket = async () => {
+    const setupSubscriptions = async () => {
       try {
-        await chatService.connect();
+        // Ensure chat service is connected
+        if (!chatService.isConnected()) {
+          console.log('Chat service not connected, connecting...');
+          await chatService.connect();
+        }
         
         const handleMessage = async (message) => {
           if (message.type === 'TYPING') {
@@ -230,7 +232,6 @@ const Chat = () => {
           }
           
           const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
-          const wasAtBottom = checkIfAtBottom();
           
           setMessages(prev => {
             if (message.senderId === user.id && message.type === 'GROUP') {
@@ -256,19 +257,29 @@ const Chat = () => {
             return [...prev, messageWithId];
           });
           
-          if (wasAtBottom) setTimeout(() => scrollToBottom(true), 50);
+          // Check if should scroll to bottom
+          const container = messagesContainerRef.current;
+          if (container) {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
+            if (isAtBottom) {
+              setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+            }
+          }
         };
         
+        // Subscribe based on conversation type
         if (conversation.type === 'DIRECT') {
           chatService.subscribeToPrivateMessages(handleMessage);
         } else if (conversation.type === 'GROUP') {
           chatService.subscribeToGroup(conversation.id, handleMessage);
         }
       } catch (err) { 
-        console.error('WebSocket failed:', err); 
+        console.error('WebSocket subscription failed:', err); 
       }
     };
-    setupWebSocket();
+    
+    setupSubscriptions();
     
     return () => {
       subscriptionSetupRef.current = false;
@@ -280,7 +291,7 @@ const Chat = () => {
         }
       }
     };
-  }, [conversation, user, chatId, scrollToBottom, checkIfAtBottom]);
+  }, [conversation, user, chatId]); // ONLY depend on these three!
 
   // Send typing event
   const sendTyping = useCallback(() => {
@@ -462,11 +473,7 @@ const Chat = () => {
     return participant?.role || 'MEMBER';
   };
 
-  const isOwner = () => getCurrentUserRole() === 'OWNER';
-  const isAdminOrOwner = () => {
-    const role = getCurrentUserRole();
-    return role === 'OWNER' || role === 'ADMIN';
-  };
+  const isAdmin = () => getCurrentUserRole() === 'ADMIN';
 
   const handleMemberAction = async (action, targetUserId) => {
     setProcessingAction(true);
@@ -610,9 +617,9 @@ const Chat = () => {
     
     // Sort: Owner first, then Admins, then Members, alphabetically
     const sortedParticipants = [...participantsList].sort((a, b) => {
-      const roleOrder = { 'OWNER': 0, 'ADMIN': 1, 'MEMBER': 2 };
-      const orderA = roleOrder[a.role] ?? 3;
-      const orderB = roleOrder[b.role] ?? 3;
+      const roleOrder = { 'ADMIN': 0, 'MEMBER': 1 };
+      const orderA = roleOrder[a.role] ?? 2;
+      const orderB = roleOrder[b.role] ?? 2;
       if (orderA !== orderB) return orderA - orderB;
       const nameA = participants[a.userId]?.displayName || a.userId;
       const nameB = participants[b.userId]?.displayName || b.userId;
@@ -625,7 +632,7 @@ const Chat = () => {
           <Typography variant="h6">
             Members ({participantsList.length})
           </Typography>
-          {isAdminOrOwner() && (
+          {isAdmin() && (
             <Button
               variant="outlined"
               startIcon={<PersonAddIcon />}
@@ -643,8 +650,7 @@ const Chat = () => {
             const displayName = profile?.displayName || participant.userId.slice(0, 8);
             const isCurrentUser = participant.userId === user.id;
             const role = participant.role;
-            const canManage = isAdminOrOwner() && !isCurrentUser && role !== 'OWNER';
-            const canPromoteDemote = isOwner() && !isCurrentUser && role !== 'OWNER';
+            const canManage = isAdmin() && !isCurrentUser; // Admins can manage others but not themselves
             
             return (
               <ListItem
@@ -701,8 +707,7 @@ const Chat = () => {
           })}
         </List>
 
-        {/* Leave Group Button (for non-owners) */}
-        {!isOwner() && (
+        {/* Leave Group Button (available to all members) */}
           <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
             <Button
               variant="outlined"
@@ -714,37 +719,36 @@ const Chat = () => {
               Leave Group
             </Button>
           </Box>
-        )}
 
-        {/* Owner Actions */}
-        {isOwner() && (
-          <Box sx={{ mt: 3 }}>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="subtitle2" gutterBottom>Owner Actions</Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              <Button
-                variant="outlined"
-                startIcon={<EditIcon />}
-                onClick={() => {
-                  setNewGroupName(conversation.name || '');
-                  setRenameDialogOpen(true);
-                }}
-                disabled={processingAction}
-              >
-                Rename Group
-              </Button>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={() => setDeleteConfirmOpen(true)}
-                disabled={processingAction}
-              >
-                Delete Group
-              </Button>
-            </Stack>
-          </Box>
-        )}
+          {/* Admin Actions */}
+          {isAdmin() && (
+            <Box sx={{ mt: 3 }}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" gutterBottom>Admin Actions</Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Button
+                  variant="outlined"
+                  startIcon={<EditIcon />}
+                  onClick={() => {
+                    setNewGroupName(conversation.name || '');
+                    setRenameDialogOpen(true);
+                  }}
+                  disabled={processingAction}
+                >
+                  Rename Group
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  disabled={processingAction}
+                >
+                  Delete Group
+                </Button>
+              </Stack>
+            </Box>
+          )}
 
         {/* Member Action Menu */}
         <Menu
@@ -752,24 +756,18 @@ const Chat = () => {
           open={Boolean(memberActionMenuAnchor)}
           onClose={() => setMemberActionMenuAnchor(null)}
         >
-          {isAdminOrOwner() && (
-            <MenuItem onClick={() => handleMemberAction('kick', selectedMemberId)}>
-              <LeaveIcon sx={{ mr: 1 }} fontSize="small" />
-              Remove from group
-            </MenuItem>
-          )}
-          {isOwner() && (
-            <>
-              <MenuItem onClick={() => handleMemberAction('promote', selectedMemberId)}>
-                <KeyboardArrowUpIcon sx={{ mr: 1 }} fontSize="small" />
-                Promote to Admin
-              </MenuItem>
-              <MenuItem onClick={() => handleMemberAction('demote', selectedMemberId)}>
-                <KeyboardArrowDownIcon sx={{ mr: 1 }} fontSize="small" />
-                Demote to Member
-              </MenuItem>
-            </>
-          )}
+          <MenuItem onClick={() => handleMemberAction('kick', selectedMemberId)}>
+            <LeaveIcon sx={{ mr: 1 }} fontSize="small" />
+            Remove from group
+          </MenuItem>
+          <MenuItem onClick={() => handleMemberAction('promote', selectedMemberId)}>
+            <KeyboardArrowUpIcon sx={{ mr: 1 }} fontSize="small" />
+            Promote to Admin
+          </MenuItem>
+          <MenuItem onClick={() => handleMemberAction('demote', selectedMemberId)}>
+            <KeyboardArrowDownIcon sx={{ mr: 1 }} fontSize="small" />
+            Demote to Member
+          </MenuItem>
         </Menu>
 
         {/* Add Members Dialog */}

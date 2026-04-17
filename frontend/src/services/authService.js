@@ -1,4 +1,4 @@
-// AuthService.js - Fixed initialization order
+// AuthService.js - With initialization tracking
 import { Client } from '@stomp/stompjs';
 
 class AuthService {
@@ -7,22 +7,18 @@ class AuthService {
       return AuthService.instance;
     }
 
+    this.isAuthenticated = false;
+    this.isInitialized = false;  // NEW: Track if initial auth check is complete
+    this.initializationPromise = null;  // NEW: Promise for initialization
+
     this.accessToken = null;
     this.refreshToken = null;
     this.userInfo = null;
     
     // Token refresh configuration
     this.refreshTimer = null;
-    this.refreshThresholdMs = 60000; // Refresh 1 minute before expiry
+    this.refreshThresholdMs = 60000;
     this.tokenExpiryTime = null;
-    
-    // STOMP client configuration
-    this.stompClient = null;
-    this.heartbeatInterval = null;
-    this.heartbeatDelayMs = 30000; // Send heartbeat every 30 seconds
-    this.isActive = true;
-    this.activityListeners = [];
-    this.isConnecting = false;
     
     // API endpoints
     this.apiBaseUrl = '/api';
@@ -33,12 +29,34 @@ class AuthService {
   // ==================== Initialization ====================
   
   async initialize() {
-    // Only load tokens from storage, DON'T auto-connect
-    this.loadTokensFromStorage();
+    // Return existing promise if already initializing
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
     
-
-    if (this.refreshToken && this.accessToken) {
-      this.scheduleTokenRefresh();
+    this.initializationPromise = this._doInitialize();
+    return this.initializationPromise;
+  }
+  
+  async _doInitialize() {
+    try {
+      console.log('AuthService: Starting initialization...');
+      this.loadTokensFromStorage();
+      
+      // Wait for any pending token refresh to complete
+      if (this.refreshPromise) {
+        console.log('AuthService: Waiting for token refresh to complete...');
+        await this.refreshPromise;
+      }
+      
+      this.isInitialized = true;
+      console.log('AuthService: Initialization complete, isAuthenticated:', this.isAuthenticated);
+    } catch (error) {
+      console.error('AuthService: Initialization failed:', error);
+      this.isInitialized = true; // Still mark as initialized even on failure
+      this.isAuthenticated = false;
+    } finally {
+      this.initializationPromise = null;
     }
   }
 
@@ -51,21 +69,32 @@ class AuthService {
       
       if (storedAccessToken && storedRefreshToken) {
         const tokenExpiryTime = storedExpiry ? parseInt(storedExpiry) : null;
-        
-        // If token is expired or will expire in the next 30 seconds, clear it
-        if (tokenExpiryTime && Date.now() >= tokenExpiryTime - 10000) {
-          console.log('Stored token is expired or about to expire, clearing...');
-          this.clearAuth();
-          return;
-        }
+        const isExpired = tokenExpiryTime && Date.now() >= tokenExpiryTime - 30000;
         
         this.accessToken = storedAccessToken;
         this.refreshToken = storedRefreshToken;
         this.userInfo = storedUserInfo ? JSON.parse(storedUserInfo) : null;
         this.tokenExpiryTime = tokenExpiryTime;
+        this.isAuthenticated = true;
         
-        console.log('Tokens loaded from storage, expires in', 
-          Math.round((this.tokenExpiryTime - Date.now()) / 1000), 'seconds');
+        if (isExpired) {
+          console.log('Stored access token is expired, attempting to refresh...');
+          this.refreshAccessToken(true)
+            .then(() => {
+              console.log('Successfully refreshed token on load');
+            })
+            .catch((error) => {
+              console.error('Failed to refresh token on load, clearing auth:', error);
+              this.isAuthenticated = false;
+              this.clearAuth();
+            });
+        } else {
+          console.log('Tokens loaded from storage, expires in', 
+            Math.round((this.tokenExpiryTime - Date.now()) / 1000), 'seconds');
+          this.scheduleTokenRefresh();
+        }
+      } else {
+        this.isAuthenticated = false;
       }
     }
   }
@@ -89,7 +118,6 @@ class AuthService {
 
       const authResponse = await response.json();
       this.handleAuthResponse(authResponse);
-      // Don't auto-connect WebSocket here - let the app decide when to connect
       return authResponse;
     } catch (error) {
       console.error('Login error:', error);
@@ -134,13 +162,12 @@ class AuthService {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      this.isAuthenticated = false;
       this.clearAuth();
     }
   }
 
   handleAuthResponse(authResponse) {
-    // Store tokens
-    //console.log("refresh things: ", this.accessToken, authResponse.accessToken, this.refreshToken, authResponse.refreshToken);
     this.accessToken = authResponse.accessToken;
     this.refreshToken = authResponse.refreshToken;
     this.userInfo = {
@@ -148,11 +175,9 @@ class AuthService {
       email: authResponse.email,
       displayName: authResponse.displayName,
     };
-    
-    // Calculate expiry time (convert expiresIn from seconds to milliseconds)
+
     this.tokenExpiryTime = Date.now() + (authResponse.expiresIn * 1000);
     
-    // Store in localStorage
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('accessToken', this.accessToken);
       localStorage.setItem('refreshToken', this.refreshToken);
@@ -160,17 +185,33 @@ class AuthService {
       localStorage.setItem('tokenExpiryTime', this.tokenExpiryTime.toString());
       console.log('Tokens stored in localStorage');
     }
-    
-    // Schedule token refresh
+
+    this.isAuthenticated = true;
     this.scheduleTokenRefresh();
   }
 
-  async refreshAccessToken() {
-    //console.log("refresh things: ", this.accessToken, this.refreshToken);
+  refreshPromise = null;
+  
+  async refreshAccessToken(silentFail = false) {
     if (!this.refreshToken) {
       throw new Error('No refresh token available');
     }
+    
+    // Prevent multiple simultaneous refresh attempts
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
 
+    this.refreshPromise = this._doRefreshAccessToken(silentFail);
+    
+    try {
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+  
+  async _doRefreshAccessToken(silentFail) {
     try {
       console.log('Refreshing access token...');
       const response = await fetch(`${this.apiBaseUrl}/auth/refresh`, {
@@ -191,7 +232,12 @@ class AuthService {
       return authResponse;
     } catch (error) {
       console.error('Token refresh error:', error);
-      this.clearAuth();
+      
+      if (!silentFail) {
+        this.isAuthenticated = false;
+        this.clearAuth();
+      }
+      
       throw error;
     }
   }
@@ -208,18 +254,11 @@ class AuthService {
       console.log(`Scheduling token refresh in ${Math.round(refreshTime / 1000)} seconds`);
       
       this.refreshTimer = setTimeout(() => {
-        this.refreshAccessToken().catch(error => {
+        this.refreshAccessToken(false).catch(error => {
           console.error('Scheduled token refresh failed:', error);
         });
       }, refreshTime);
     }
-  }
-
-
-  // ==================== Public API Methods with Token Management ====================
-
-  isAuthenticated() {
-    return !!this.accessToken && !!this.refreshToken;
   }
 
   getAccessToken() {
@@ -260,8 +299,6 @@ class AuthService {
   }
 
   destroy() {
-    if (typeof document !== 'undefined') {
-    }
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
@@ -271,9 +308,8 @@ class AuthService {
 // Create and export singleton instance
 const authService = new AuthService();
 
-// Initialize only in browser environment, but DON'T auto-connect WebSocket
+// Initialize in browser environment
 if (typeof window !== 'undefined') {
-  // Only load tokens, don't connect WebSocket
   authService.initialize().catch(console.error);
 }
 

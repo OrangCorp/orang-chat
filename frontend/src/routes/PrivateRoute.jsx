@@ -1,19 +1,32 @@
+import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
+import authService from '../services/authService';
 
 const PrivateRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const [isReady, setIsReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Wait for auth service to initialize
+      await authService.initialize();
+      setIsAuthenticated(authService.isAuthenticated);
+      setIsReady(true);
+    };
+    
+    checkAuth();
+  }, []);
+
+  if (!isReady) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
       </Box>
     );
   }
 
-  return user ? children : <Navigate to="/login" />;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
 export default PrivateRoute;
