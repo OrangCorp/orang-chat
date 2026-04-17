@@ -1,15 +1,12 @@
-// AuthService.js - With initialization tracking
-import { Client } from '@stomp/stompjs';
-
+// AuthService.js - Simplified with just two boolean flags
 class AuthService {
   constructor() {
     if (AuthService.instance) {
       return AuthService.instance;
     }
 
-    this.isAuthenticated = false;
-    this.isInitialized = false;  // NEW: Track if initial auth check is complete
-    this.initializationPromise = null;  // NEW: Promise for initialization
+    this.attemptedAuth = false;  // Have we tried to authenticate?
+    this.isAuthenticated = false; // Are we actually authenticated?
 
     this.accessToken = null;
     this.refreshToken = null;
@@ -29,35 +26,10 @@ class AuthService {
   // ==================== Initialization ====================
   
   async initialize() {
-    // Return existing promise if already initializing
-    if (this.initializationPromise) {
-      return this.initializationPromise;
-    }
-    
-    this.initializationPromise = this._doInitialize();
-    return this.initializationPromise;
-  }
-  
-  async _doInitialize() {
-    try {
-      console.log('AuthService: Starting initialization...');
-      this.loadTokensFromStorage();
-      
-      // Wait for any pending token refresh to complete
-      if (this.refreshPromise) {
-        console.log('AuthService: Waiting for token refresh to complete...');
-        await this.refreshPromise;
-      }
-      
-      this.isInitialized = true;
-      console.log('AuthService: Initialization complete, isAuthenticated:', this.isAuthenticated);
-    } catch (error) {
-      console.error('AuthService: Initialization failed:', error);
-      this.isInitialized = true; // Still mark as initialized even on failure
-      this.isAuthenticated = false;
-    } finally {
-      this.initializationPromise = null;
-    }
+    console.log('AuthService: Starting initialization...');
+    this.loadTokensFromStorage();
+    this.attemptedAuth = true;
+    console.log('AuthService: Initialization complete, isAuthenticated:', this.isAuthenticated);
   }
 
   loadTokensFromStorage() {
@@ -79,7 +51,7 @@ class AuthService {
         
         if (isExpired) {
           console.log('Stored access token is expired, attempting to refresh...');
-          this.refreshAccessToken(true)
+          this.refreshAccessToken()
             .then(() => {
               console.log('Successfully refreshed token on load');
             })
@@ -102,6 +74,7 @@ class AuthService {
   // ==================== Authentication Methods ====================
 
   async login(email, password) {
+    this.attemptedAuth = true;
     try {
       const response = await fetch(`${this.apiBaseUrl}/auth/login`, {
         method: 'POST',
@@ -121,11 +94,13 @@ class AuthService {
       return authResponse;
     } catch (error) {
       console.error('Login error:', error);
+      this.isAuthenticated = false;
       throw error;
     }
   }
 
   async register(email, password, displayName) {
+    this.attemptedAuth = true;
     try {
       const response = await fetch(`${this.apiBaseUrl}/auth/register`, {
         method: 'POST',
@@ -145,6 +120,7 @@ class AuthService {
       return authResponse;
     } catch (error) {
       console.error('Registration error:', error);
+      this.isAuthenticated = false;
       throw error;
     }
   }
@@ -190,28 +166,12 @@ class AuthService {
     this.scheduleTokenRefresh();
   }
 
-  refreshPromise = null;
-  
-  async refreshAccessToken(silentFail = false) {
+  async refreshAccessToken() {
     if (!this.refreshToken) {
+      this.isAuthenticated = false;
       throw new Error('No refresh token available');
     }
-    
-    // Prevent multiple simultaneous refresh attempts
-    if (this.refreshPromise) {
-      return this.refreshPromise;
-    }
 
-    this.refreshPromise = this._doRefreshAccessToken(silentFail);
-    
-    try {
-      return await this.refreshPromise;
-    } finally {
-      this.refreshPromise = null;
-    }
-  }
-  
-  async _doRefreshAccessToken(silentFail) {
     try {
       console.log('Refreshing access token...');
       const response = await fetch(`${this.apiBaseUrl}/auth/refresh`, {
@@ -232,12 +192,8 @@ class AuthService {
       return authResponse;
     } catch (error) {
       console.error('Token refresh error:', error);
-      
-      if (!silentFail) {
-        this.isAuthenticated = false;
-        this.clearAuth();
-      }
-      
+      this.isAuthenticated = false;
+      this.clearAuth();
       throw error;
     }
   }
@@ -254,7 +210,7 @@ class AuthService {
       console.log(`Scheduling token refresh in ${Math.round(refreshTime / 1000)} seconds`);
       
       this.refreshTimer = setTimeout(() => {
-        this.refreshAccessToken(false).catch(error => {
+        this.refreshAccessToken().catch(error => {
           console.error('Scheduled token refresh failed:', error);
         });
       }, refreshTime);
@@ -273,16 +229,13 @@ class AuthService {
     return this.userInfo;
   }
 
-  getTokenExpiryTime() {
-    return this.tokenExpiryTime;
-  }
-
   clearAuth() {
     console.log('Clearing authentication data');
     this.accessToken = null;
     this.refreshToken = null;
     this.userInfo = null;
     this.tokenExpiryTime = null;
+    this.isAuthenticated = false;
     
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);

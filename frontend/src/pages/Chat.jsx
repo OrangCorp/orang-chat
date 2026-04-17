@@ -193,41 +193,61 @@ const Chat = () => {
         }
         
         const handleMessage = async (message) => {
-          // For DIRECT messages, verify it belongs to the current conversation
+          // Filter out messages that don't belong to the current conversation
           if (message.type === 'DIRECT') {
-            // Check if this message is for the current conversation
             const otherParticipant = conversation.participants?.find(p => p.userId !== user.id);
             const isRelevantMessage = 
-              message.senderId === otherParticipant?.userId || // From the person we're chatting with
-              message.recipientId === otherParticipant?.userId; // To the person we're chatting with (our own messages)
+              message.senderId === otherParticipant?.userId ||
+              message.recipientId === otherParticipant?.userId;
             
             if (!isRelevantMessage) {
-              // Message is for a different conversation, ignore it
               return;
             }
           }
           
-          // For GROUP messages, verify it belongs to the current group
           if (message.type === 'GROUP') {
             if (message.conversationId !== conversation.id) {
-              // Message is for a different group, ignore it
               return;
             }
           }
 
-          // Rest of the handler remains unchanged...
+          // Handle TYPING messages
           if (message.type === 'TYPING') {
             const { senderId } = message;
+            
+            // Don't show typing indicator for our own typing
+            if (senderId === user.id) {
+              return;
+            }
+            
+            // For DIRECT chats, only show typing from the other participant
+            if (conversation.type === 'DIRECT') {
+              const otherParticipant = conversation.participants?.find(p => p.userId !== user.id);
+              if (senderId !== otherParticipant?.userId) {
+                return;
+              }
+            }
+            
+            // For GROUP chats, any participant can type (already filtered by conversationId above)
+            
+            console.log('Typing indicator received from:', senderId);
+            
+            // Clear existing timer for this user
             if (typingTimersRef.current.has(senderId)) {
               clearTimeout(typingTimersRef.current.get(senderId));
               typingTimersRef.current.delete(senderId);
             }
+            
+            // Add user to typing set
             setTypingUsers(prev => {
               const next = new Set(prev);
               next.add(senderId);
               return next;
             });
+            
+            // Set timer to auto-remove after 5 seconds
             const timer = setTimeout(() => {
+              console.log('Typing timeout for:', senderId);
               setTypingUsers(prev => {
                 const next = new Set(prev);
                 next.delete(senderId);
@@ -235,11 +255,14 @@ const Chat = () => {
               });
               typingTimersRef.current.delete(senderId);
             }, 5000);
+            
             typingTimersRef.current.set(senderId, timer);
             return;
           }
 
+          // Handle regular messages
           if ((message.type === 'DIRECT' || message.type === 'GROUP') && message.senderId) {
+            // Remove typing indicator when a message is sent by that user
             if (typingTimersRef.current.has(message.senderId)) {
               clearTimeout(typingTimersRef.current.get(message.senderId));
               typingTimersRef.current.delete(message.senderId);
@@ -249,6 +272,7 @@ const Chat = () => {
                 return next;
               });
             }
+            
             if (message.senderId !== user.id) {
               await userService.getProfile(message.senderId).catch(() => null);
             }
@@ -331,6 +355,8 @@ const Chat = () => {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
       typingMessage.recipientId = otherParticipant?.userId;
     } else {
+      // For GROUP chats, set recipientId to the group ID
+      typingMessage.recipientId = conversation.id;
       typingMessage.conversationId = conversation.id;
     }
 

@@ -151,7 +151,9 @@ class ChatService {
   sendTyping(typingMessage) {
     if (!this.connected) return;
     
+    typingMessage.content = 'typing...';
     console.log('📤 Sending typing indicator', typingMessage);
+
     
     this.stompClient.publish({
       destination: '/app/chat.send',
