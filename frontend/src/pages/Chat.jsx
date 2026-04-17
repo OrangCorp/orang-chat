@@ -193,6 +193,29 @@ const Chat = () => {
         }
         
         const handleMessage = async (message) => {
+          // For DIRECT messages, verify it belongs to the current conversation
+          if (message.type === 'DIRECT') {
+            // Check if this message is for the current conversation
+            const otherParticipant = conversation.participants?.find(p => p.userId !== user.id);
+            const isRelevantMessage = 
+              message.senderId === otherParticipant?.userId || // From the person we're chatting with
+              message.recipientId === otherParticipant?.userId; // To the person we're chatting with (our own messages)
+            
+            if (!isRelevantMessage) {
+              // Message is for a different conversation, ignore it
+              return;
+            }
+          }
+          
+          // For GROUP messages, verify it belongs to the current group
+          if (message.type === 'GROUP') {
+            if (message.conversationId !== conversation.id) {
+              // Message is for a different group, ignore it
+              return;
+            }
+          }
+
+          // Rest of the handler remains unchanged...
           if (message.type === 'TYPING') {
             const { senderId } = message;
             if (typingTimersRef.current.has(senderId)) {
