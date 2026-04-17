@@ -45,7 +45,7 @@ public class AuthService {
     private String passwordResetBaseUrl;
 
     @Transactional
-    public AuthResponse register(RegisterRequest registerRequest){
+    public RegistrationResponse register(RegisterRequest registerRequest){
         if (userRepository.existsByEmail(registerRequest.getEmail().toLowerCase())) {
             throw new BadRequestException("Email already exists");
         }
@@ -76,15 +76,12 @@ public class AuthService {
         return buildPendingVerificationResponse(savedUser);
     }
 
-    private AuthResponse buildPendingVerificationResponse(User user) {
-        return AuthResponse.builder()
+    private RegistrationResponse buildPendingVerificationResponse(User user) {
+        return RegistrationResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
                 .displayName(user.getDisplayName())
                 .emailVerified(false)
-                .accessToken("")
-                .refreshToken("")
-                .expiresIn(0)
                 .build();
     }
 
