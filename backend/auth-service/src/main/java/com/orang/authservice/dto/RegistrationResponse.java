@@ -11,14 +11,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class AuthResponse {
+public class RegistrationResponse {
 
     private UUID userId;
     private String email;
     private String displayName;
-    private String accessToken;
-    private String refreshToken;
-    private String tokenType;
-    private long expiresIn;
     private boolean emailVerified;
 }

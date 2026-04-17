@@ -4,6 +4,7 @@ import com.orang.notificationservice.config.RabbitMQConfig;
 import com.orang.notificationservice.dto.NotificationPayload;
 import com.orang.notificationservice.service.WebPushService;
 import com.orang.shared.event.GroupMemberEvent;
+import com.orang.shared.event.MentionEvent;
 import com.orang.shared.event.MessageReactionEvent;
 import com.orang.shared.event.MessageSentEvent;
 import lombok.RequiredArgsConstructor;
@@ -215,5 +216,45 @@ public class NotificationEventListener {
             case "ORANG" -> "🍊";
             default -> "👍";
         };
+    }
+
+    @RabbitListener(queues = RabbitMQConfig.MENTION_NOTIFICATION_QUEUE)
+    public void handleMention(MentionEvent event) {
+        log.info("Received MentionEvent: messageId={}, mentionedUser={}, sender={}",
+                event.getMessageId(),
+                event.getMentionedUserId(),
+                event.getTriggeredBy());
+
+        // Don't notify if user mentioned themselves
+        if (event.getMentionedUserId().equals(event.getTriggeredBy())) {
+            log.debug("Skipping notification - user mentioned themselves");
+            return;
+        }
+
+        try {
+            NotificationPayload payload = NotificationPayload.builder()
+                    .title("You were mentioned")
+                    .body(truncateContent(event.getContentPreview()))
+                    .icon("/icons/app-icon-192.png")
+                    .tag("mention-" + event.getConversationId())
+                    .requireInteraction(true)
+                    .data(NotificationPayload.NotificationData.builder()
+                            .type("mention")
+                            .conversationId(event.getConversationId())
+                            .messageId(event.getMessageId())
+                            .url("/conversations/" + event.getConversationId()
+                                    + "?highlight=" + event.getMessageId())
+                            .build())
+                    .build();
+
+            // Send directly — NO mute check. Mentions always notify.
+            webPushService.sendToUser(event.getMentionedUserId(), payload);
+
+            log.info("Sent mention notification to user {} for message {}",
+                    event.getMentionedUserId(), event.getMessageId());
+
+        } catch (Exception e) {
+            log.error("Failed to process MentionEvent: {}", e.getMessage(), e);
+        }
     }
 }

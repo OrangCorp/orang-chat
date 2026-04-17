@@ -3,8 +3,10 @@ package com.orang.messageservice.service;
 import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.entity.Conversation;
 import com.orang.messageservice.entity.Message;
+import com.orang.messageservice.entity.MessageMention;
 import com.orang.messageservice.mapper.MessageMapper;
 import com.orang.messageservice.repository.ConversationRepository;
+import com.orang.messageservice.repository.MessageMentionRepository;
 import com.orang.messageservice.repository.MessageRepository;
 import com.orang.shared.exception.ForbiddenException;
 import com.orang.shared.exception.ResourceNotFoundException;
@@ -31,6 +33,8 @@ public class MessageService {
     private final MessageMapper messageMapper;
     private final MessageEventPublisher messageEventPublisher;
     private final AttachmentService attachmentService;
+    private final MentionParserService mentionParserService;
+    private final MessageMentionRepository messageMentionRepository;
 
     @Transactional(readOnly = true)
     public Page<MessageResponse> getMessagesForConversation(
@@ -53,7 +57,9 @@ public class MessageService {
     public MessageResponse saveMessage(UUID conversationId,
                                        UUID senderId,
                                        String content,
-                                       List<UUID> attachmentIds) {
+                                       List<UUID> attachmentIds,
+                                       UUID replyToMessageId) {  // ── NEW
+
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Conversation not found with id: " + conversationId));
@@ -63,21 +69,41 @@ public class MessageService {
                     "User " + senderId + " is not a participant in conversation " + conversationId);
         }
 
+        // ── NEW: Validate reply reference ────────────────────────
+        // Message must exist AND belong to this conversation.
+        // If invalid, we drop the reply reference silently.
+        // The message still saves — we never reject over a bad reply.
+        UUID validatedReplyToId = null;
+        if (replyToMessageId != null) {
+            boolean replyExists = messageRepository.existsByIdAndConversationId(
+                    replyToMessageId, conversationId);
+            if (replyExists) {
+                validatedReplyToId = replyToMessageId;
+            } else {
+                log.warn("Reply references invalid message {} in conversation {}, ignoring",
+                        replyToMessageId, conversationId);
+            }
+        }
+        // ─────────────────────────────────────────────────────────
+
         Message message = Message.builder()
                 .conversationId(conversationId)
                 .senderId(senderId)
                 .content(content)
+                .replyToMessageId(validatedReplyToId)  // ── NEW
                 .build();
 
         Message saved = messageRepository.save(message);
 
         if (attachmentIds != null && !attachmentIds.isEmpty()) {
             attachmentService.linkAttachmentsToMessage(attachmentIds, saved.getId(), senderId);
-            // Refresh to load linked attachments
             saved = messageRepository.findById(saved.getId()).orElseThrow();
         }
 
+        // ── NEW: Extract, validate, and save mentions ────────────
         Set<UUID> participantIds = new HashSet<>(conversation.getParticipantIds());
+        processMentions(saved, participantIds);
+        // ─────────────────────────────────────────────────────────
 
         messageEventPublisher.publishMessageSent(
                 saved.getId(),
@@ -88,8 +114,10 @@ public class MessageService {
                 participantIds
         );
 
-        log.info("Message {} created by user {} with {} attachments",
-                saved.getId(), senderId, attachmentIds != null ? attachmentIds.size() : 0);
+        log.info("Message {} created by user {} with {} attachments, replyTo={}",
+                saved.getId(), senderId,
+                attachmentIds != null ? attachmentIds.size() : 0,
+                validatedReplyToId);
 
         return messageMapper.toMessageResponse(saved);
     }
@@ -144,5 +172,43 @@ public class MessageService {
                 saved.getDeletedBy(),
                 saved.getDeletedAt()
         );
+    }
+
+    private void processMentions(Message message, Set<UUID> participantIds) {
+        Set<UUID> extracted = mentionParserService.extractMentions(message.getContent());
+        if (extracted.isEmpty()) {
+            return;
+        }
+
+        Set<UUID> valid = mentionParserService.validateMentions(extracted, participantIds);
+        if (valid.isEmpty()) {
+            return;
+        }
+
+        List<MessageMention> mentions = valid.stream()
+                .map(userId -> MessageMention.builder()
+                        .messageId(message.getId())
+                        .conversationId(message.getConversationId())
+                        .mentionedUserId(userId)
+                        .build())
+                .toList();
+
+        messageMentionRepository.saveAll(mentions);
+
+        String preview = message.getContent() != null && message.getContent().length() > 100
+                ? message.getContent().substring(0, 100) + "..."
+                : message.getContent();
+
+        valid.forEach(userId ->
+                messageEventPublisher.publishMentionEvent(
+                        message.getId(),
+                        message.getConversationId(),
+                        message.getSenderId(),
+                        userId,
+                        preview
+                )
+        );
+
+        log.info("Saved {} mention(s) for message {}", mentions.size(), message.getId());
     }
 }

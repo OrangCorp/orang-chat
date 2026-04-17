@@ -38,6 +38,10 @@ public class User {
     @Column(nullable = false, updatable = false)
     private String displayName;
 
+    @Column(name = "email_verified", nullable = false)
+    @Builder.Default
+    private boolean emailVerified = false;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
