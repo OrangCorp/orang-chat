@@ -115,12 +115,56 @@ class AuthService {
         throw new Error(error.message || 'Registration failed');
       }
 
+      const registrationResponse = await response.json();
+      // Don't set isAuthenticated yet - need email verification
+      return registrationResponse;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    }
+  }
+
+  async verifyEmail(email, code) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/verify-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, code }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Verification failed');
+      }
+
       const authResponse = await response.json();
       this.handleAuthResponse(authResponse);
       return authResponse;
     } catch (error) {
-      console.error('Registration error:', error);
-      this.isAuthenticated = false;
+      console.error('Email verification error:', error);
+      throw error;
+    }
+  }
+
+  async resendVerification(email) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to resend verification code');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Resend verification error:', error);
       throw error;
     }
   }

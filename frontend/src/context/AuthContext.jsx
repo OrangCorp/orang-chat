@@ -127,9 +127,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signup = async (email, password, displayName) => {
-    const result = await authService.register(email, password, displayName);
-    syncAuthState();
-    return result;
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const registrationResponse = await authService.register(email, password, displayName);
+      // Don't set user yet - need email verification
+      setLoading(false);
+      return registrationResponse;
+    } catch (err) {
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (err.message.includes('Email already registered')) {
+        errorMessage = 'Email already registered';
+      } else if (err.message.includes('Validation')) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      setLoading(false);
+      throw err;
+    }
   };
 
   const contextValue = {

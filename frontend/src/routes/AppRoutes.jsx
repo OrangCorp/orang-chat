@@ -8,6 +8,7 @@ import Signup from '../pages/Signup';
 import Chat from '../pages/Chat';
 import Profile from '../pages/Profile';
 import NotFound from '../pages/NotFound';
+import EmailVerification from '../pages/EmailVerification';
 
 // Layouts
 import MainLayout from '../layouts/MainLayout';
@@ -20,6 +21,7 @@ const AppRoutes = () => {
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/verify-email" element={<EmailVerification />} />
       </Route>
 
       {/* Protected Routes - Wrap the ENTIRE layout */}
