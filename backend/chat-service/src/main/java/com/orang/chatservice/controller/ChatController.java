@@ -41,7 +41,7 @@ public class ChatController {
 
         message.setTimestamp(LocalDateTime.now());
 
-        if (MessageType.GROUP.equals(message.getType())) {
+        if (shouldRouteToGroupTopic(message)) {
             messagingTemplate.convertAndSend(
                     "/topic/group." + message.getConversationId(),
                     message
@@ -67,6 +67,11 @@ public class ChatController {
         }
     }
 
+    private boolean shouldRouteToGroupTopic(ChatMessagePayload message) {
+        return message.getConversationId() != null
+                && (MessageType.GROUP.equals(message.getType()) || MessageType.TYPING.equals(message.getType()));
+    }
+
     private boolean isValidPayload(ChatMessagePayload message) {
         if (message == null) {
             log.warn("Dropping websocket message: payload is null");
@@ -88,7 +93,14 @@ public class ChatController {
             return false;
         }
 
-        if (!MessageType.GROUP.equals(message.getType()) && message.getRecipientId() == null) {
+        if (MessageType.TYPING.equals(message.getType())
+                && message.getConversationId() == null
+                && message.getRecipientId() == null) {
+            log.warn("Dropping websocket TYPING message: either conversationId or recipientId is required");
+            return false;
+        }
+
+        if (MessageType.DIRECT.equals(message.getType()) && message.getRecipientId() == null) {
             log.warn("Dropping websocket {} message: recipientId is required", message.getType());
             return false;
         }
