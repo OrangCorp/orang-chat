@@ -3,13 +3,21 @@ package com.orang.messageservice.mapper;
 import com.orang.messageservice.dto.MessageResponse;
 import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.entity.Message;
+import com.orang.messageservice.repository.MessageMentionRepository;
+import com.orang.messageservice.repository.MessageRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 @Component
+@RequiredArgsConstructor
 public class MessageMapper {
+
+    private final MessageRepository messageRepository;
+    private final MessageMentionRepository messageMentionRepository;
 
     public MessageResponse toMessageResponse(Message message) {
         MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
@@ -31,7 +39,40 @@ public class MessageMapper {
             builder.attachments(toAttachmentInfoList(message.getAttachments()));
         }
 
+        if (message.getReplyToMessageId() != null) {
+            messageRepository.findById(message.getReplyToMessageId())
+                    .ifPresent(original -> {
+                        builder.replyTo(MessageResponse.ReplyPreview.builder()
+                                .messageId(original.getId())
+                                .senderId(original.getSenderId())
+                                .contentPreview(buildPreview(original))
+                                .deleted(original.isDeleted())
+                                .build());
+                    });
+        }
+
+        List<UUID> mentionedIds = messageMentionRepository
+                .findMentionedUserIdsByMessageId(message.getId());
+        builder.mentionedUserIds(mentionedIds);
+
         return builder.build();
+    }
+
+    private String buildPreview(Message original) {
+        if (original.isDeleted()) {
+            return "[deleted]";
+        }
+
+        String content = original.getContent();
+        if (content == null || content.isBlank()) {
+            return "[Attachment]";
+        }
+
+        if (content.length() <= 100) {
+            return content;
+        }
+
+        return content.substring(0, 100) + "...";
     }
 
     private List<MessageResponse.AttachmentInfo> toAttachmentInfoList(List<Attachment> attachments) {

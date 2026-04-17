@@ -53,6 +53,9 @@ public class Message {
     @Column(name = "deleted_by")
     private UUID deletedBy;
 
+    @Column(name = "reply_to_message_id")
+    private UUID replyToMessageId;
+
     public boolean isEdited() {
         return editedAt != null;
     }
@@ -72,5 +75,9 @@ public class Message {
 
     public void addAttachment(Attachment attachment) {
         attachments.add(attachment);
+    }
+
+    public boolean isReply() {
+        return replyToMessageId != null;
     }
 }

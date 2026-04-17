@@ -23,4 +23,6 @@ public class CreateMessageRequest {
     private String content;
 
     private List<UUID> attachmentIds;
+
+    private UUID replyToMessageId;
 }

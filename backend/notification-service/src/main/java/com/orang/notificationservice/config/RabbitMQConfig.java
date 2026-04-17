@@ -14,6 +14,9 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class RabbitMQConfig {
 
+    public static final String MENTION_NOTIFICATION_QUEUE = "notification.mention";
+    public static final String MENTION_ROUTING_KEY = "message.mention";
+
     // Exchanges (must match what publishers use)
     public static final String CHAT_EXCHANGE = "chat.exchange";
     public static final String GROUP_EXCHANGE = "group.exchange";
@@ -82,6 +85,11 @@ public class RabbitMQConfig {
         return QueueBuilder.durable(MEMBER_ADDED_NOTIFICATION_QUEUE).build();
     }
 
+    @Bean
+    public Queue mentionNotificationQueue() {
+        return QueueBuilder.durable(MENTION_NOTIFICATION_QUEUE).build();
+    }
+
     // =========================================================================
     // Bindings
     // =========================================================================
@@ -108,5 +116,13 @@ public class RabbitMQConfig {
                 .bind(memberAddedNotificationQueue())
                 .to(groupExchange())
                 .with(MEMBER_ADDED_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding mentionNotificationBinding() {
+        return BindingBuilder
+                .bind(mentionNotificationQueue())
+                .to(chatExchange())
+                .with(MENTION_ROUTING_KEY);
     }
 }

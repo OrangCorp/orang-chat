@@ -58,7 +58,8 @@ public class ChatMessageListener {
                     conversationId,
                     event.getSenderId(),
                     event.getContent(),
-                    event.getAttachmentIds()
+                    event.getAttachmentIds(),
+                    event.getReplyToMessageId()
             );
 
             log.info("Message saved successfully to conversation {}", conversationId);

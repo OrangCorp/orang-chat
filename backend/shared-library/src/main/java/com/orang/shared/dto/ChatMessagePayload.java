@@ -21,6 +21,8 @@ public class ChatMessagePayload {
     private MessageType type;
     private List<UUID> attachmentIds;
 
+    private UUID replyToMessageId;
+
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();
 }

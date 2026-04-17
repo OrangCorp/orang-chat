@@ -24,6 +24,9 @@ public class MessageResponse {
 
     private List<AttachmentInfo> attachments;
 
+    private ReplyPreview replyTo;
+    private List<UUID> mentionedUserIds;
+
     @Data
     @Builder
     public static class AttachmentInfo {
@@ -36,5 +39,14 @@ public class MessageResponse {
 
         private boolean thumbnailAvailable;
         private String thumbnailUrl;
+    }
+
+    @Data
+    @Builder
+    public static class ReplyPreview {
+        private UUID messageId;
+        private UUID senderId;
+        private String contentPreview;
+        private boolean deleted;
     }
 }

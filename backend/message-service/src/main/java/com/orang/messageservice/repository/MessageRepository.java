@@ -118,4 +118,35 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
         AND m.deletedAt IS NULL
         """)
     long countActiveMessagesByConversationId(@Param("conversationId") UUID conversationId);
+
+    // Validate reply reference: message must exist in the same conversation.
+    // Prevents replies from referencing messages in other conversations.
+    @Query("""
+        SELECT COUNT(m) > 0 FROM Message m
+        WHERE m.id = :messageId
+        AND m.conversationId = :conversationId
+        """)
+    boolean existsByIdAndConversationId(
+            @Param("messageId") UUID messageId,
+            @Param("conversationId") UUID conversationId
+    );
+
+    // Fetch mentioned messages for the mentions query API.
+    // :conversationId IS NULL trick: when null, condition is always true
+    // so we get global results. When provided, we filter to one conversation.
+    @Query("""
+        SELECT m FROM Message m
+        WHERE m.id IN (
+            SELECT mm.messageId FROM MessageMention mm
+            WHERE mm.mentionedUserId = :userId
+            AND (:conversationId IS NULL OR mm.conversationId = :conversationId)
+        )
+        AND m.deletedAt IS NULL
+        ORDER BY m.createdAt DESC
+        """)
+    Page<Message> findMentionedMessages(
+            @Param("userId") UUID userId,
+            @Param("conversationId") UUID conversationId,
+            Pageable pageable
+    );
 }
