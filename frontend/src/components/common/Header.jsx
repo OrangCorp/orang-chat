@@ -1,52 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+// Header.jsx (updated with browser notifications for contact requests)
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AppBar,
-  Toolbar,
-  Box,
-  Button,
-  TextField,
-  InputAdornment,
-  Popper,
-  Paper,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemAvatar,
-  ListItemText,
-  Avatar,
-  CircularProgress,
-  ClickAwayListener,
-  IconButton,
-  Menu,
-  MenuItem,
-  Typography,
-  Divider,
-  Badge,
-  Tooltip
+  AppBar, Toolbar, Box, Button, TextField, InputAdornment, Popper, Paper,
+  List, ListItem, ListItemButton, ListItemAvatar, ListItemText, Avatar,
+  CircularProgress, ClickAwayListener, IconButton, Menu, MenuItem,
+  Typography, Divider, Badge, Tooltip
 } from '@mui/material';
-import { 
-  Search as SearchIcon, 
-  Chat as ChatIcon,
-  Person as PersonIcon,
-  Settings as SettingsIcon,
-  Logout as LogoutIcon,
+import {
+  Search as SearchIcon, Chat as ChatIcon, Person as PersonIcon,
+  Settings as SettingsIcon, Logout as LogoutIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   Notifications as NotificationsIcon,
-  Check as CheckIcon,
-  Close as CloseIcon
+  Check as CheckIcon, Close as CloseIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import messageService from '../../services/messageService';
 import logoImg from '../../assets/logo.png';
-import { emitConversationCreated } from '../../utils/conversationEvents';
 
 const Header = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
-  // Search state
+  // ... search state (unchanged)
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -54,21 +31,52 @@ const Header = () => {
   const searchAnchorRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  // Profile menu
+  // Profile menu (unchanged)
   const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
-  // Notifications
+  // Notifications state
   const [notificationsAnchor, setNotificationsAnchor] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // Ref to keep track of seen request IDs across polling
+  const seenRequestIds = useRef(new Set());
 
-  // Load current user profile
+  useEffect(() => {
+    const handleRequestResolved = (event) => {
+      const { contactId, userId } = event.detail;
+      
+      // Remove the notification from state
+      setNotifications(prev => {
+        const filtered = prev.filter(n => n.id !== contactId && n.userId !== userId);
+        
+        // Update unread count
+        const newUnreadCount = filtered.length;
+        setUnreadCount(newUnreadCount);
+        
+        // Remove from seen set
+        seenRequestIds.current.delete(contactId);
+        
+        return filtered;
+      });
+      
+      console.log('Contact request resolved from profile:', contactId);
+    };
+    
+    window.addEventListener('contact-request-resolved', handleRequestResolved);
+    
+    return () => {
+      window.removeEventListener('contact-request-resolved', handleRequestResolved);
+    };
+  }, []);
+
+
+  // Load current user profile (unchanged)
   useEffect(() => {
     if (!user?.id) return;
-
     const loadUserProfile = async () => {
       try {
         setProfileLoading(true);
@@ -85,17 +93,44 @@ const Header = () => {
         setProfileLoading(false);
       }
     };
-
     loadUserProfile();
   }, [user]);
 
-  // Load notifications (incoming contact requests)
-  const loadNotifications = async () => {
-    if (!user?.id) return;
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
+  // Show browser notification for new contact request
+  const showContactRequestNotification = (request) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const displayName = request.displayName || 'Someone';
+      const title = `New contact request`;
+      const options = {
+        body: `${displayName} wants to connect with you`,
+        icon: request.avatarUrl || '/logo192.png',
+        badge: '/badge.png',
+        tag: `contact-request-${request.id}`,
+        requireInteraction: true,
+        data: { url: window.location.origin }
+      };
+      
+      const notification = new Notification(title, options);
+      notification.onclick = () => {
+        window.focus();
+      };
+    }
+  };
+
+  // Load notifications (incoming contact requests)
+  const loadNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    console.log('loading notifications...');
     try {
       setNotificationsLoading(true);
-      const incomingRequests = await userService.getIncomingRequests();
+      const incomingRequests = await userService.getIncomingRequests(true);
 
       const formatted = incomingRequests.map(req => ({
         id: req.id,
@@ -115,24 +150,41 @@ const Header = () => {
     } finally {
       setNotificationsLoading(false);
     }
-  };
-
-  // Refresh notifications every 30s
-  useEffect(() => {
-    if (!user?.id) return;
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
   }, [user?.id]);
 
-  // Logout
+  useEffect(() => {
+    const handleRequestResolved = () => {
+      // Refresh notifications immediately
+      loadNotifications();
+    };
+    
+    window.addEventListener('contact-request-resolved', handleRequestResolved);
+    
+    return () => {
+      window.removeEventListener('contact-request-resolved', handleRequestResolved);
+    };
+  }, [loadNotifications]);
+
+  // Initial load and periodic refresh (every 30s)
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    loadNotifications();
+    console.log('scheduling load notifications');
+    
+    const interval = setInterval(loadNotifications, 30000);
+    
+    return () => clearInterval(interval);
+  }, [loadNotifications]);
+
+  // Logout (unchanged)
   const handleLogout = () => {
     userService.clearCache();
     logout();
     navigate('/login');
   };
 
-  // Profile menu handlers
+  // Profile menu handlers (unchanged)
   const handleProfileMenuOpen = (e) => setProfileMenuAnchor(e.currentTarget);
   const handleProfileMenuClose = () => setProfileMenuAnchor(null);
   const handleProfileClick = () => {
@@ -147,10 +199,8 @@ const Header = () => {
   // Notifications menu
   const handleNotificationsOpen = (e) => {
     setNotificationsAnchor(e.currentTarget);
-    if (unreadCount > 0) {
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    }
+    // Mark all as "read" visually (we don't persist read status for contact requests)
+    setUnreadCount(0);
   };
   const handleNotificationsClose = () => setNotificationsAnchor(null);
 
@@ -158,7 +208,18 @@ const Header = () => {
     try {
       await userService.acceptContactRequest(notification.id);
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      seenRequestIds.current.delete(notification.id);
       setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      // Notify that contact status changed (for profile page)
+      window.dispatchEvent(new CustomEvent('contact-status-changed', { 
+        detail: { userId: notification.userId, status: 'ACCEPTED' } 
+      }));
+      
+      // Also dispatch resolved event for consistency
+      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+        detail: { contactId: notification.id, userId: notification.userId } 
+      }));
     } catch (error) {
       console.error('Failed to accept request:', error);
     }
@@ -168,22 +229,31 @@ const Header = () => {
     try {
       await userService.rejectContactRequest(notification.id);
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      seenRequestIds.current.delete(notification.id);
       setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      // Notify that contact status changed (for profile page)
+      window.dispatchEvent(new CustomEvent('contact-status-changed', { 
+        detail: { userId: notification.userId, status: null } 
+      }));
+      
+      // Also dispatch resolved event for consistency
+      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+        detail: { contactId: notification.id, userId: notification.userId } 
+      }));
     } catch (error) {
       console.error('Failed to decline request:', error);
     }
   };
 
-  // Search
+  // Search handlers (unchanged)
   useEffect(() => {
     if (searchQuery.trim().length < 2) {
       setSearchResults([]);
       setSearchOpen(false);
       return;
     }
-
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         setSearching(true);
@@ -197,7 +267,6 @@ const Header = () => {
         setSearching(false);
       }
     }, 300);
-
     return () => clearTimeout(searchTimeoutRef.current);
   }, [searchQuery, user?.id]);
 
@@ -213,7 +282,6 @@ const Header = () => {
     setSearchQuery('');
     try {
       const conversation = await messageService.getOrCreateDirectChat(targetUser.userId);
-      emitConversationCreated(conversation);
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       console.error('Failed to start chat:', error);
@@ -243,7 +311,6 @@ const Header = () => {
               endAdornment: searching && <InputAdornment position="end"><CircularProgress size={20} color="inherit" /></InputAdornment>
             }}
           />
-
           {searchOpen && (
             <ClickAwayListener onClickAway={() => setSearchOpen(false)}>
               <Popper open={searchOpen} anchorEl={searchAnchorRef.current} placement="bottom-start" sx={{ width: searchAnchorRef.current?.clientWidth, zIndex: 1300 }}>

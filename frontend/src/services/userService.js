@@ -258,26 +258,14 @@ class UserService {
     return contacts;
   }
 
-  async sendContactRequest(targetUserId) {
-    const response = await fetch(`${API_BASE_URL}/contacts/request/${targetUserId}`, {
-      method: 'POST',
-      headers: getHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to send contact request');
-    const contact = await response.json();
-    this.contactCache.delete('contacts');
-    this.contactCache.delete('incoming');
-    this.contactCache.delete('outgoing');
-    return contact;
-  }
-
   async acceptContactRequest(contactId) {
     const response = await fetch(`${API_BASE_URL}/contacts/${contactId}/accept`, {
       method: 'POST',
       headers: getHeaders()
     });
     if (!response.ok) throw new Error('Failed to accept contact request');
-    this.contactCache.clear();
+    this.contactCache.delete('contacts');
+    this.contactCache.delete('incoming'); // Add this
     return true;
   }
 
@@ -289,6 +277,19 @@ class UserService {
     if (!response.ok) throw new Error('Failed to reject contact request');
     this.contactCache.delete('incoming');
     return true;
+  }
+
+  async sendContactRequest(targetUserId) {
+    const response = await fetch(`${API_BASE_URL}/contacts/request/${targetUserId}`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to send contact request');
+    const contact = await response.json();
+    this.contactCache.delete('contacts');
+    this.contactCache.delete('incoming');
+    this.contactCache.delete('outgoing');
+    return contact;
   }
 
   async cancelContactRequest(contactId) {

@@ -21,6 +21,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from '@mui/material';
 import {
   Chat as ChatIcon,
@@ -32,7 +35,11 @@ import {
   Circle as CircleIcon,
   Save as SaveIcon,
   Close as CloseIcon,
-  Pending as PendingIcon
+  Pending as PendingIcon,
+  Block as BlockIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import userService from '../services/userService';
@@ -50,7 +57,10 @@ const Profile = () => {
   const [actionInProgress, setActionInProgress] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
-  const [contactStatus, setContactStatus] = useState(null); // 'PENDING', 'ACCEPTED', null
+  const [contactStatus, setContactStatus] = useState(null); // 'PENDING', 'ACCEPTED', 'BLOCKED', null
+  const [contactId, setContactId] = useState(null);
+  const [isBlockedByOther, setIsBlockedByOther] = useState(false);
+  const [isIncomingRequest, setIsIncomingRequest] = useState(false);
   const [checkingContact, setCheckingContact] = useState(true);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -58,6 +68,11 @@ const Profile = () => {
   const [editBio, setEditBio] = useState('');
   const [editErrors, setEditErrors] = useState({ displayName: '', bio: '' });
   const [saving, setSaving] = useState(false);
+
+  // Menu state
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   const isOwnProfile = !userId || userId === 'me' || userId === currentUser?.id;
   const profileUserId = isOwnProfile ? currentUser?.id : userId;
@@ -78,6 +93,68 @@ const Profile = () => {
     }
   };
 
+  useEffect(() => {
+    if (!profileUserId) return;
+
+    const handleOnlineStatusUpdated = () => {
+      // Check if the updated user is the one we're viewing
+      // Force a refresh of the profile data from cache
+      const cachedProfile = userService.profileCache.get(profileUserId);
+      if (cachedProfile) {
+        setProfile(cachedProfile);
+        console.log('Profile online status updated from cache');
+      }
+    };
+
+    window.addEventListener('online-status-updated', handleOnlineStatusUpdated);
+
+    return () => {
+      window.removeEventListener('online-status-updated', handleOnlineStatusUpdated);
+    };
+  }, [profileUserId]);
+
+  useEffect(() => {
+    if (!profileUserId || isOwnProfile) return;
+
+    const handleContactStatusChanged = (event) => {
+      const { userId, status } = event.detail;
+      if (userId === profileUserId) {
+        console.log('Contact status changed for profile user:', status);
+        checkContactStatus();
+        setSnackbar({
+          open: true,
+          message: `Contact status updated`,
+          severity: 'info'
+        });
+      }
+    };
+
+    window.addEventListener('contact-status-changed', handleContactStatusChanged);
+
+    return () => {
+      window.removeEventListener('contact-status-changed', handleContactStatusChanged);
+    };
+  }, [profileUserId, isOwnProfile]);
+
+  useEffect(() => {
+    if (!profileUserId || isOwnProfile) return;
+
+    const handleContactRequestReceived = (event) => {
+      const { requesterId } = event.detail;
+      // If the request is from the user we're currently viewing, refresh status
+      if (requesterId === profileUserId) {
+        console.log('Contact request received from profile user, refreshing...');
+        checkContactStatus();
+      }
+    };
+
+    window.addEventListener('contact-request-received', handleContactRequestReceived);
+
+    return () => {
+      window.removeEventListener('contact-request-received', handleContactRequestReceived);
+    };
+  }, [profileUserId, isOwnProfile]);
+
   // Check contact status
   const checkContactStatus = async () => {
     if (!profileUserId || isOwnProfile || !currentUser?.id) {
@@ -87,14 +164,58 @@ const Profile = () => {
 
     try {
       setCheckingContact(true);
-      const contacts = await userService.getContacts(currentUser.id);
+      
+      // Get pending requests separately to determine direction
+      const [contacts, blockedUsers, incomingRequests, outgoingRequests] = await Promise.all([
+        userService.getContacts(currentUser.id),
+        userService.getBlockedUsers().catch(() => []),
+        userService.getIncomingRequests().catch(() => []),
+        userService.getOutgoingRequests().catch(() => [])
+      ]);
+      
+      // Check regular contacts (ACCEPTED)
       const contact = contacts.find(c => 
         c.requesterId === profileUserId || c.recipientId === profileUserId
       );
-      setContactStatus(contact ? contact.status : null);
+      
+      // Check if blocked
+      const blocked = blockedUsers.find(b => 
+        b.requesterId === profileUserId || b.recipientId === profileUserId
+      );
+      
+      // Check pending requests
+      const incomingRequest = incomingRequests.find(r => r.requesterId === profileUserId);
+      const outgoingRequest = outgoingRequests.find(r => r.recipientId === profileUserId);
+      
+      if (blocked) {
+        if (blocked.blockedBy === currentUser.id) {
+          setContactStatus('BLOCKED_BY_ME');
+        } else {
+          setContactStatus('BLOCKED_BY_OTHER');
+          setIsBlockedByOther(true);
+        }
+        setContactId(blocked.id);
+      } else if (incomingRequest) {
+        setContactStatus('PENDING');
+        setIsIncomingRequest(true);
+        setContactId(incomingRequest.id);
+      } else if (outgoingRequest) {
+        setContactStatus('PENDING');
+        setIsIncomingRequest(false);
+        setContactId(outgoingRequest.id);
+      } else if (contact) {
+        setContactStatus(contact.status);
+        setContactId(contact.id);
+      } else {
+        setContactStatus(null);
+        setContactId(null);
+        setIsBlockedByOther(false);
+        setIsIncomingRequest(false);
+      }
     } catch (err) {
       console.error('Failed to check contact status:', err);
       setContactStatus(null);
+      setIsBlockedByOther(false);
     } finally {
       setCheckingContact(false);
     }
@@ -153,17 +274,12 @@ const Profile = () => {
   };
 
   const handleRemoveContact = async () => {
-    if (!profileUserId || isOwnProfile) return;
+    if (!profileUserId || isOwnProfile || !contactId) return;
     try {
       setActionInProgress(true);
-      const contacts = await userService.getContacts(currentUser.id);
-      const contact = contacts.find(c => 
-        c.requesterId === profileUserId || c.recipientId === profileUserId
-      );
-      if (!contact) throw new Error('Contact not found');
-
-      await userService.removeContact(contact.id);
+      await userService.removeContact(contactId);
       setContactStatus(null);
+      setContactId(null);
       setSnackbar({
         open: true,
         message: `${profile?.displayName} removed from contacts`,
@@ -174,6 +290,143 @@ const Profile = () => {
       setSnackbar({
         open: true,
         message: err.message || 'Failed to remove contact.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
+      setConfirmDialogOpen(false);
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!profileUserId || isOwnProfile) return;
+    try {
+      setActionInProgress(true);
+      await userService.blockUser(profileUserId);
+      setContactStatus('BLOCKED_BY_ME');
+      setSnackbar({
+        open: true,
+        message: `${profile?.displayName} has been blocked`,
+        severity: 'success'
+      });
+      // Refresh contact status to get the contact ID
+      await checkContactStatus();
+    } catch (err) {
+      console.error('Failed to block user:', err);
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to block user.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
+      setConfirmDialogOpen(false);
+      setMenuAnchor(null);
+    }
+  };
+
+  const handleUnblockUser = async () => {
+    if (!profileUserId || isOwnProfile) return;
+    try {
+      setActionInProgress(true);
+      await userService.unblockUser(profileUserId);
+      setContactStatus(null);
+      setIsBlockedByOther(false);
+      setSnackbar({
+        open: true,
+        message: `${profile?.displayName} has been unblocked`,
+        severity: 'success'
+      });
+      await checkContactStatus();
+    } catch (err) {
+      console.error('Failed to unblock user:', err);
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to unblock user.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
+      setConfirmDialogOpen(false);
+      setMenuAnchor(null);
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!contactId) return;
+    try {
+      setActionInProgress(true);
+      await userService.acceptContactRequest(contactId);
+      setContactStatus('ACCEPTED');
+      setSnackbar({
+        open: true,
+        message: `You are now contacts with ${profile?.displayName}`,
+        severity: 'success'
+      });
+      
+      // Notify header that this request was accepted
+      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+        detail: { contactId, userId: profileUserId } 
+      }));
+    } catch (err) {
+      console.error('Failed to accept request:', err);
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to accept request.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const handleRejectRequest = async () => {
+    if (!contactId) return;
+    try {
+      setActionInProgress(true);
+      await userService.rejectContactRequest(contactId);
+      setContactStatus(null);
+      setContactId(null);
+      setSnackbar({
+        open: true,
+        message: `Request from ${profile?.displayName} rejected`,
+        severity: 'info'
+      });
+      
+      // Notify header that this request was rejected
+      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+        detail: { contactId, userId: profileUserId } 
+      }));
+    } catch (err) {
+      console.error('Failed to reject request:', err);
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to reject request.',
+        severity: 'error'
+      });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+
+  const handleCancelRequest = async () => {
+    if (!contactId) return;
+    try {
+      setActionInProgress(true);
+      await userService.cancelContactRequest(contactId);
+      setContactStatus(null);
+      setContactId(null);
+      setSnackbar({
+        open: true,
+        message: `Invitation to ${profile?.displayName} cancelled`,
+        severity: 'info'
+      });
+    } catch (err) {
+      console.error('Failed to cancel request:', err);
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to cancel request.',
         severity: 'error'
       });
     } finally {
@@ -281,6 +534,15 @@ const Profile = () => {
 
   const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
+  const handleMenuOpen = (e) => setMenuAnchor(e.currentTarget);
+  const handleMenuClose = () => setMenuAnchor(null);
+
+  const openConfirmDialog = (action) => {
+    setConfirmAction(action);
+    setConfirmDialogOpen(true);
+    handleMenuClose();
+  };
+
   const renderContactButton = () => {
     if (isOwnProfile) return null;
 
@@ -293,46 +555,167 @@ const Profile = () => {
       );
     }
 
-    if (contactStatus === 'ACCEPTED') {
-      return (
-        <Button
-          variant="contained"
-          color="error"
-          startIcon={<PersonRemoveIcon />}
-          onClick={handleRemoveContact}
-          disabled={actionInProgress}
-          fullWidth
-        >
-          {actionInProgress ? 'Removing...' : 'Remove Contact'}
-        </Button>
-      );
-    }
-
-    if (contactStatus === 'PENDING') {
+    // Blocked by other user - cannot interact
+    if (isBlockedByOther || contactStatus === 'BLOCKED_BY_OTHER') {
       return (
         <Button
           variant="contained"
           disabled
-          startIcon={<PendingIcon />}
           fullWidth
-          sx={{ bgcolor: 'warning.main', '&.Mui-disabled': { bgcolor: 'warning.main', opacity: 0.7 } }}
+          sx={{ bgcolor: 'grey.500' }}
         >
-          Invitation Pending
+          Cannot interact with this user
         </Button>
       );
     }
 
+    // Blocked by me
+    if (contactStatus === 'BLOCKED_BY_ME') {
+      return (
+        <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => openConfirmDialog('unblock')}
+            disabled={actionInProgress}
+            fullWidth
+          >
+            Unblock User
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleMenuOpen}
+            disabled={actionInProgress}
+            sx={{ minWidth: '48px' }}
+          >
+            <MoreVertIcon />
+          </Button>
+        </Stack>
+      );
+    }
+
+    // Incoming request - show Accept/Reject
+    if (contactStatus === 'PENDING' && isIncomingRequest) {
+      return (
+        <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<CheckCircleIcon />}
+            onClick={handleAcceptRequest}
+            disabled={actionInProgress}
+            fullWidth
+          >
+            Accept
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<CancelIcon />}
+            onClick={handleRejectRequest}
+            disabled={actionInProgress}
+            fullWidth
+          >
+            Reject
+          </Button>
+        </Stack>
+      );
+    }
+
+    // Outgoing request - show Cancel button
+    if (contactStatus === 'PENDING' && !isIncomingRequest) {
+      return (
+        <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+          <Button
+            variant="contained"
+            disabled
+            startIcon={<PendingIcon />}
+            fullWidth
+            sx={{ bgcolor: 'warning.main', '&.Mui-disabled': { bgcolor: 'warning.main', opacity: 0.7 } }}
+          >
+            Invitation Sent
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={handleCancelRequest}
+            disabled={actionInProgress}
+            sx={{ minWidth: '48px' }}
+          >
+            Cancel
+          </Button>
+        </Stack>
+      );
+    }
+
+    // Accepted contact - show Chat and Contact buttons side by side
+    if (contactStatus === 'ACCEPTED') {
+      return (
+        <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<ChatIcon />}
+            onClick={handleStartChat}
+            disabled={actionInProgress}
+            fullWidth
+          >
+            Chat
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<PersonRemoveIcon />}
+            onClick={() => openConfirmDialog('remove')}
+            disabled={actionInProgress}
+            fullWidth
+          >
+            Remove
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleMenuOpen}
+            disabled={actionInProgress}
+            sx={{ minWidth: '48px' }}
+          >
+            <MoreVertIcon />
+          </Button>
+        </Stack>
+      );
+    }
+
+    // No contact relationship - show Chat and Invite buttons side by side
     return (
-      <Button
-        variant="contained"
-        color="secondary"
-        startIcon={<PersonAddIcon />}
-        onClick={handleInviteToContacts}
-        disabled={actionInProgress}
-        fullWidth
-      >
-        {actionInProgress ? 'Sending...' : 'Invite to Contacts'}
-      </Button>
+      <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<ChatIcon />}
+          onClick={handleStartChat}
+          disabled={actionInProgress}
+          fullWidth
+        >
+          Chat
+        </Button>
+        <Button
+          variant="outlined"
+          color="secondary"
+          startIcon={<PersonAddIcon />}
+          onClick={handleInviteToContacts}
+          disabled={actionInProgress}
+          fullWidth
+        >
+          Invite
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={handleMenuOpen}
+          disabled={actionInProgress}
+          sx={{ minWidth: '48px' }}
+        >
+          <MoreVertIcon />
+        </Button>
+      </Stack>
     );
   };
 
@@ -395,22 +778,68 @@ const Profile = () => {
 
           <Divider sx={{ my: 2 }} />
 
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+          <Box sx={{ mt: 2 }}>
             {!isOwnProfile ? (
-              <>
-                <Button variant="contained" color="primary" startIcon={<ChatIcon />} onClick={handleStartChat} disabled={actionInProgress} fullWidth sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                  {actionInProgress ? 'Starting...' : 'Chat'}
-                </Button>
-                {renderContactButton()}
-              </>
+              renderContactButton()
             ) : (
               <Button variant="contained" color="primary" startIcon={<EditIcon />} onClick={handleOpenEditDialog} fullWidth sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
                 Edit Profile
               </Button>
             )}
-          </Stack>
+          </Box>
         </CardContent>
       </Card>
+
+      {/* Action Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        {contactStatus === 'ACCEPTED' && (
+          <MenuItem onClick={() => openConfirmDialog('remove')}>
+            <ListItemIcon><PersonRemoveIcon fontSize="small" /></ListItemIcon>
+            Remove Contact
+          </MenuItem>
+        )}
+        {contactStatus !== 'BLOCKED_BY_ME' && !isBlockedByOther && (
+          <MenuItem onClick={() => openConfirmDialog('block')}>
+            <ListItemIcon><BlockIcon fontSize="small" /></ListItemIcon>
+            Block User
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
+        <DialogTitle>
+          {confirmAction === 'block' && 'Block User?'}
+          {confirmAction === 'unblock' && 'Unblock User?'}
+          {confirmAction === 'remove' && 'Remove Contact?'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            {confirmAction === 'block' && `Are you sure you want to block ${profile?.displayName}? They will not be able to contact you.`}
+            {confirmAction === 'unblock' && `Are you sure you want to unblock ${profile?.displayName}? They will be able to contact you again.`}
+            {confirmAction === 'remove' && `Are you sure you want to remove ${profile?.displayName} from your contacts?`}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            color={confirmAction === 'block' ? 'error' : 'primary'}
+            onClick={() => {
+              if (confirmAction === 'block') handleBlockUser();
+              else if (confirmAction === 'unblock') handleUnblockUser();
+              else if (confirmAction === 'remove') handleRemoveContact();
+            }}
+            disabled={actionInProgress}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onClose={() => !saving && setEditDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3, boxShadow: '0 24px 48px rgba(0,0,0,0.2)' } }}>
