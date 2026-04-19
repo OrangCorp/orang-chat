@@ -37,6 +37,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import userService from '../services/userService';
 import messageService from '../services/messageService';
+import { emitConversationCreated } from '../utils/conversationEvents';
 
 const Profile = () => {
   const { userId } = useParams();
@@ -114,6 +115,7 @@ const Profile = () => {
     try {
       setActionInProgress(true);
       const conversation = await messageService.getOrCreateDirectChat(profileUserId);
+      emitConversationCreated(conversation);
       navigate(`/chat/${conversation.id}`);
     } catch (err) {
       console.error('Failed to start chat:', err);

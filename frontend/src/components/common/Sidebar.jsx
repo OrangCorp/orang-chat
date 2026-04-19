@@ -45,6 +45,8 @@ import {
 import messageService from '../../services/messageService';
 import userService from '../../services/userService';
 import { useAuth } from '../../context/AuthContext';
+import { emitConversationCreated } from '../../utils/conversationEvents';
+import { CONVERSATION_CREATED, CONVERSATION_UPDATED } from '../../utils/conversationEvents';
 
 const drawerWidth = 280;
 const miniDrawerWidth = 72;
@@ -84,6 +86,27 @@ const Sidebar = () => {
       }
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    // Listen for conversation events
+    const handleConversationCreated = () => {
+      console.log('Conversation created, refreshing sidebar...');
+      loadConversations();
+    };
+    
+    const handleConversationUpdated = () => {
+      console.log('Conversation updated, refreshing sidebar...');
+      loadConversations();
+    };
+    
+    window.addEventListener(CONVERSATION_CREATED, handleConversationCreated);
+    window.addEventListener(CONVERSATION_UPDATED, handleConversationUpdated);
+    
+    return () => {
+      window.removeEventListener(CONVERSATION_CREATED, handleConversationCreated);
+      window.removeEventListener(CONVERSATION_UPDATED, handleConversationUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isMobile) {
@@ -210,6 +233,9 @@ const Sidebar = () => {
       const participantIds = Array.from(selectedUsers);
       participantIds.push(user.id);
       const newConversation = await messageService.createGroupChat(groupName, participantIds);
+
+      emitConversationCreated(newConversation);
+
       handleCloseCreateGroup();
       navigate(`/chat/${newConversation.id}`);
       await loadConversations();

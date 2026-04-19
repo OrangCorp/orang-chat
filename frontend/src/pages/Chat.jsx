@@ -33,6 +33,8 @@ import userService from '../services/userService';
 import chatService from '../services/chatService';
 import notificationService from '../services/notificationService';
 import MessageBubble from '../components/chat/MessageBubble';
+import { emitConversationUpdated } from '../utils/conversationEvents';
+
 
 // Role display helper
 const getRoleLabel = (role) => {
@@ -596,6 +598,7 @@ const Chat = () => {
     setProcessingAction(true);
     try {
       await messageService.leaveConversation(conversation.id);
+      emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
       console.error('Failed to leave group:', err);
@@ -625,6 +628,7 @@ const Chat = () => {
     setProcessingAction(true);
     try {
       await messageService.deleteConversation(conversation.id);
+      emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
       console.error('Failed to delete group:', err);

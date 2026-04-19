@@ -40,6 +40,7 @@ import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import messageService from '../../services/messageService';
 import logoImg from '../../assets/logo.png';
+import { emitConversationCreated } from '../../utils/conversationEvents';
 
 const Header = () => {
   const { logout, user } = useAuth();
@@ -212,6 +213,7 @@ const Header = () => {
     setSearchQuery('');
     try {
       const conversation = await messageService.getOrCreateDirectChat(targetUser.userId);
+      emitConversationCreated(conversation);
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       console.error('Failed to start chat:', error);
