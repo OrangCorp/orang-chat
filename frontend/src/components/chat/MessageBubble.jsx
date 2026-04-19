@@ -15,7 +15,6 @@ const MessageBubble = ({ message, isOwn, senderName, senderAvatar, time, onAvata
           sx={{
             bgcolor: highlight ? 'warning.light' : (isOwn ? 'primary.light' : 'secondary.light'),
             p: 1.5,
-            bgcolor: 'grey.100',
             color: 'text.secondary',
             borderRadius: '16px',
             maxWidth: '80%'

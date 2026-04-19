@@ -9,6 +9,8 @@ import Chat from '../pages/Chat';
 import Profile from '../pages/Profile';
 import NotFound from '../pages/NotFound';
 import EmailVerification from '../pages/EmailVerification';
+import Settings from '../pages/Settings';
+import ResetPassword from '../pages/ResetPassword';
 
 // Layouts
 import MainLayout from '../layouts/MainLayout';
@@ -22,6 +24,7 @@ const AppRoutes = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/verify-email" element={<EmailVerification />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
 
       {/* Protected Routes - Wrap the ENTIRE layout */}
@@ -34,6 +37,7 @@ const AppRoutes = () => {
         <Route path="/chat/:chatId?" element={<Chat />} />
         <Route path="/profile/me" element={<Profile />} />
         <Route path="/profile/:userId" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
 
       {/* 404 Route */}

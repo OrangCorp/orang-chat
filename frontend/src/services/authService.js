@@ -300,6 +300,63 @@ class AuthService {
       clearTimeout(this.refreshTimer);
     }
   }
+
+  //password management
+  async forgotPassword(email) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send reset email');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
+    }
+  }
+
+  async validateResetToken(token) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/reset-password/validate?token=${encodeURIComponent(token)}`, {
+        method: 'GET',
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Validate token error:', error);
+      return false;
+    }
+  }
+
+  async resetPassword(token, newPassword) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token, newPassword }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to reset password');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Reset password error:', error);
+      throw error;
+    }
+  }
 }
 
 // Create and export singleton instance
