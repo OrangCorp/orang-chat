@@ -24,12 +24,14 @@ import {
   Security as OwnerIcon,
   PersonAdd as PersonAddIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
+  NotificationsOff as NotificationsOffIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import messageService from '../services/messageService';
 import userService from '../services/userService';
 import chatService from '../services/chatService';
+import notificationService from '../services/notificationService';
 import MessageBubble from '../components/chat/MessageBubble';
 
 // Role display helper
@@ -93,6 +95,43 @@ const Chat = () => {
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
+
+  const [muted, setMuted] = useState(false);
+  const [muteLoading, setMuteLoading] = useState(false);
+
+  useEffect(() => {
+    if (conversation?.id) {
+      loadMuteStatus();
+    }
+  }, [conversation]);
+
+  const loadMuteStatus = async () => {
+    if (!conversation?.id) return;
+    try {
+      const prefs = await notificationService.getNotificationPreferences(conversation.id);
+      setMuted(prefs.muted);
+    } catch (err) {
+      // If 404 or no preferences yet, default to false (not muted)
+      console.debug('No notification preferences found, defaulting to unmuted');
+      setMuted(false);
+    }
+  };
+
+  const toggleMute = async () => {
+    setMuteLoading(true);
+    try {
+      if (muted) {
+        await notificationService.unmuteConversation(conversation.id);
+      } else {
+        await notificationService.muteConversation(conversation.id, null);
+      }
+      setMuted(!muted);
+    } catch (err) {
+      console.error('Failed to toggle mute', err);
+    } finally {
+      setMuteLoading(false);
+    }
+  };
 
   // Helper: check scroll position
   const checkIfAtBottom = useCallback(() => {
@@ -1222,10 +1261,17 @@ const Chat = () => {
                 </Stack>
               ) : (
                 <Typography variant="caption" color="text.secondary">
-                  &nbsp;&nbsp;{conversation.participants?.length || 0} members
+                  {conversation.participants?.length || 0} members
                 </Typography>
               )}
             </Box>
+
+            {/* Mute Button */}
+            <Tooltip title={muted ? 'Unmute notifications' : 'Mute notifications'}>
+              <IconButton onClick={toggleMute} disabled={muteLoading}>
+                <NotificationsOffIcon color={muted ? 'error' : 'inherit'} />
+              </IconButton>
+            </Tooltip>
 
             {/* Group Management Button */}
             {conversation.type === 'GROUP' && (
