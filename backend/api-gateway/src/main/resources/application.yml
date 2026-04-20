@@ -60,6 +60,25 @@ spring:
                     key-resolver: "#{@userKeyResolver}"
 
             # -----------------------------------------
+            # Notification Service Routes
+            # -----------------------------------------
+            - id: notification-service-docs
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/v3/api-docs/api/notifications
+
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/push/**, /api/conversations/*/notifications/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    key-resolver: "#{@userKeyResolver}"
+
+            # -----------------------------------------
             # Message Service Routes
             # -----------------------------------------
             - id: message-service-docs
@@ -85,25 +104,6 @@ spring:
               uri: ${CHAT_SERVICE_URL:ws://localhost:8083}
               predicates:
                 - Path=/ws/**
-
-            # -----------------------------------------
-            # Notification Service Routes
-            # -----------------------------------------
-            - id: notification-service-docs
-              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
-              predicates:
-                - Path=/v3/api-docs/api/notifications
-
-            - id: notification-service
-              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
-              predicates:
-                - Path=/api/push/**, /api/conversations/*/notifications/**
-              filters:
-                - name: RequestRateLimiter
-                  args:
-                    redis-rate-limiter.replenishRate: 10
-                    redis-rate-limiter.burstCapacity: 20
-                    key-resolver: "#{@userKeyResolver}"
           globalcors:
             add-to-simple-url-handler-mapping: true
             cors-configurations:
