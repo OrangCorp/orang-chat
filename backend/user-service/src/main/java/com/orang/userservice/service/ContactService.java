@@ -1,5 +1,7 @@
 package com.orang.userservice.service;
 
+import com.orang.shared.constants.RabbitMQConstants;
+import com.orang.shared.event.ContactRequestSentEvent;
 import com.orang.shared.exception.BadRequestException;
 import com.orang.shared.exception.ConflictException;
 import com.orang.shared.exception.ForbiddenException;
@@ -10,9 +12,12 @@ import com.orang.userservice.entity.ContactStatus;
 import com.orang.userservice.entity.Profile;
 import com.orang.userservice.repository.ContactRepository;
 import com.orang.userservice.repository.ProfileRepository;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +31,7 @@ public class ContactService {
     private final ProfileRepository profileRepository;
     private final ContactRepository contactRepository;
     private final PresenceService presenceService;
+    private final RabbitTemplate rabbitTemplate;
 
     @Transactional
     public Contact sendRequest(UUID requesterId, UUID recipientId) {
@@ -51,7 +57,9 @@ public class ContactService {
                 .status(ContactStatus.PENDING)
                 .build();
 
-        return contactRepository.save(contact);
+        Contact savedContact = contactRepository.save(contact);
+        publishContactRequestSentEventAfterCommit(savedContact);
+        return savedContact;
     }
 
     @Transactional
@@ -114,7 +122,7 @@ public class ContactService {
             throw new BadRequestException("Contact request is not accepted");
         }
 
-        if (!contact.isRequester(userId)) {
+        if (!contact.involvesUser(userId)) {
             throw new ForbiddenException("You are not a part of this contact");
         }
 
@@ -185,5 +193,32 @@ public class ContactService {
 
     public List<Contact> getBlockedUsers(UUID userId) {
         return contactRepository.findByBlockedByAndStatus(userId, ContactStatus.BLOCKED);
+    }
+
+    private void publishContactRequestSentEventAfterCommit(Contact contact) {
+        ContactRequestSentEvent event = ContactRequestSentEvent.builder()
+                .contactId(contact.getId())
+                .requesterId(contact.getRequesterId())
+                .recipientId(contact.getRecipientId())
+                .build();
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rabbitTemplate.convertAndSend(
+                            RabbitMQConstants.CONTACT_EXCHANGE,
+                            RabbitMQConstants.CONTACT_REQUEST_SENT_KEY,
+                            event
+                    );
+                }
+            });
+        } else {
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConstants.CONTACT_EXCHANGE,
+                    RabbitMQConstants.CONTACT_REQUEST_SENT_KEY,
+                    event
+            );
+        }
     }
 }
