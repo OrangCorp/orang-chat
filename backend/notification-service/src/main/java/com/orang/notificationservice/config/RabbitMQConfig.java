@@ -1,5 +1,6 @@
 package com.orang.notificationservice.config;
 
+import com.orang.shared.constants.RabbitMQConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
@@ -15,7 +16,6 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     public static final String MENTION_NOTIFICATION_QUEUE = "notification.mention";
-    public static final String MENTION_ROUTING_KEY = "message.mention";
 
     // Exchanges (must match what publishers use)
     public static final String CHAT_EXCHANGE = "chat.exchange";
@@ -30,6 +30,7 @@ public class RabbitMQConfig {
     public static final String MESSAGE_SENT_ROUTING_KEY = "message.sent";
     public static final String REACTION_ROUTING_KEY = "message.reaction";
     public static final String MEMBER_ADDED_ROUTING_KEY = "group.member.added";
+    public static final String MENTION_ROUTING_KEY = "message.mention";
 
     @Bean
     public MessageConverter jsonMessageConverter() {
@@ -90,6 +91,11 @@ public class RabbitMQConfig {
         return QueueBuilder.durable(MENTION_NOTIFICATION_QUEUE).build();
     }
 
+    @Bean
+    public Queue contactRequestNotificationQueue() {
+        return QueueBuilder.durable(RabbitMQConstants.CONTACT_REQUEST_NOTIFICATION_QUEUE).build();
+    }
+
     // =========================================================================
     // Bindings
     // =========================================================================
@@ -124,5 +130,18 @@ public class RabbitMQConfig {
                 .bind(mentionNotificationQueue())
                 .to(chatExchange())
                 .with(MENTION_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding contactRequestNotificationBinding() {
+        return BindingBuilder
+                .bind(contactRequestNotificationQueue())
+                .to(contactExchange())
+                .with(RabbitMQConstants.CONTACT_REQUEST_SENT_KEY);
+    }
+
+    @Bean
+    public TopicExchange contactExchange() {
+        return new TopicExchange(RabbitMQConstants.CONTACT_EXCHANGE, true, false);
     }
 }

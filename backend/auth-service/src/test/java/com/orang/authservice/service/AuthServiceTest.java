@@ -4,6 +4,7 @@ import com.orang.authservice.dto.AuthResponse;
 import com.orang.authservice.dto.LoginRequest;
 import com.orang.authservice.dto.RefreshRequest;
 import com.orang.authservice.dto.RegisterRequest;
+import com.orang.authservice.dto.RegistrationResponse;
 import com.orang.authservice.dto.VerifyEmailRequest;
 import com.orang.authservice.entity.User;
 import com.orang.authservice.repository.UserRepository;
@@ -205,14 +206,12 @@ class AuthServiceTest {
                         when(emailTokenService.generateVerificationCode("new@example.com")).thenReturn("123456");
 
                         // Act
-                        AuthResponse response = authService.register(registerRequest);
+                                                RegistrationResponse response = authService.register(registerRequest);
 
                         // Assert
                         assertThat(response).isNotNull();
                         assertThat(response.getEmail()).isEqualTo("new@example.com");
-                        assertThat(response.isEmailVerified()).isFalse();
-                        assertThat(response.getAccessToken()).isEmpty();
-                        assertThat(response.getRefreshToken()).isEmpty();
+                                                assertThat(response.isEmailVerified()).isFalse();
                             verify(rabbitTemplate).convertAndSend(
                                     eq("user.exchange"),
                                     eq("user.registered"),

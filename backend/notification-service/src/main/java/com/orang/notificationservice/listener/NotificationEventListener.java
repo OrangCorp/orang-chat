@@ -3,6 +3,8 @@ package com.orang.notificationservice.listener;
 import com.orang.notificationservice.config.RabbitMQConfig;
 import com.orang.notificationservice.dto.NotificationPayload;
 import com.orang.notificationservice.service.WebPushService;
+import com.orang.shared.constants.RabbitMQConstants;
+import com.orang.shared.event.ContactRequestSentEvent;
 import com.orang.shared.event.GroupMemberEvent;
 import com.orang.shared.event.MentionEvent;
 import com.orang.shared.event.MessageReactionEvent;
@@ -21,6 +23,45 @@ import org.springframework.stereotype.Component;
 public class NotificationEventListener {
 
     private final WebPushService webPushService;
+
+    // =========================================================================
+    // Contact Request Notifications
+    // =========================================================================
+
+    @RabbitListener(queues = RabbitMQConstants.CONTACT_REQUEST_NOTIFICATION_QUEUE)
+    public void handleContactRequestSent(ContactRequestSentEvent event) {
+        log.info("Received ContactRequestSentEvent: contactId={}, requesterId={}, recipientId={}",
+                event.getContactId(),
+                event.getRequesterId(),
+                event.getRecipientId());
+
+        if (event.getRecipientId() == null) {
+            log.warn("ContactRequestSentEvent has no recipientId - skipping notification");
+            return;
+        }
+
+        try {
+            NotificationPayload payload = NotificationPayload.builder()
+                    .title("New Contact Request")
+                    .body("You have a new contact request")
+                    .icon("/icons/app-icon-192.png")
+                    .tag("contact-request-" + event.getContactId())
+                    .requireInteraction(true)
+                    .data(NotificationPayload.NotificationData.builder()
+                            .type("contact_request")
+                            .url("/contacts/pending/incoming")
+                            .build())
+                    .build();
+
+            webPushService.sendToUser(event.getRecipientId(), payload);
+
+            log.info("Sent contact request notification to user {} for contact {}",
+                    event.getRecipientId(), event.getContactId());
+
+        } catch (Exception e) {
+            log.error("Failed to process ContactRequestSentEvent: {}", e.getMessage(), e);
+        }
+    }
 
     // =========================================================================
     // Message Notifications
