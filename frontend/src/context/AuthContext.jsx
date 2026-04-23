@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import authService from '../services/authService';
 import chatService from '../services/chatService';
+import notificationService from '../services/notificationService';
 
 const AuthContext = createContext();
 
@@ -85,6 +86,10 @@ export const AuthProvider = ({ children }) => {
         chatService.sendHeartbeat(true);
         lastHeartbeatRef.current = Date.now();
       }).catch(console.error);
+
+      notificationService.initialize()
+      .then(() => console.log('✅ Push notifications initialized'))
+      .catch(err => console.error('❌ Push init failed:', err));
       
       // Set up activity listeners
       const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];

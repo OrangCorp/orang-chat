@@ -96,6 +96,29 @@ class NotificationService {
     return permission === 'granted';
   }
 
+  // notificationService.js - Add this method
+  handleNotificationPayload(payload) {
+    // Called when push notification is received
+    // This handles the payload format from the backend
+    return {
+      type: payload.type || 'default',
+      title: payload.title || 'New Notification',
+      body: payload.body || '',
+      icon: payload.icon || '/logo192.png',
+      badge: payload.badge || '/badge.png',
+      tag: payload.tag || 'default',
+      requireInteraction: payload.requireInteraction || false,
+      data: {
+        url: payload.url || '/',
+        conversationId: payload.conversationId,
+        messageId: payload.messageId,
+        type: payload.type,
+        contactId: payload.contactId,
+        requesterId: payload.requesterId
+      }
+    };
+  }
+
   async getCurrentSubscription() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       return null;
@@ -104,34 +127,62 @@ class NotificationService {
     return registration.pushManager.getSubscription();
   }
 
+  // notificationService.js - Fix the subscribeToPush method
   async subscribeToPush() {
-    const vapidKey = await this.getVapidPublicKey();
-    const registration = await navigator.serviceWorker.ready;
-    
-    let subscription = await registration.pushManager.getSubscription();
-    if (subscription) {
-      // Already subscribed, maybe update backend?
+    try {
+      // 1. Get VAPID public key
+      const vapidKey = await this.getVapidPublicKey();
+      console.log('🔑 Got VAPID key');
+      
+      // 2. Get service worker registration
+      const registration = await navigator.serviceWorker.ready;
+      console.log('👷 Service worker ready');
+      
+      // 3. Create browser push subscription
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
+      });
+      console.log('📱 Browser subscription created:', subscription.endpoint);
+      
+      // 4. Save to backend - this is the part that's failing!
+      const token = localStorage.getItem('accessToken');
+      console.log('🔐 Using token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+      
+      const response = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+            auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+          },
+          expirationTime: subscription.expirationTime
+        })
+      });
+      
+      console.log('📡 Subscribe response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Failed to save subscription:', response.status, errorText);
+        throw new Error(`Failed to save subscription: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Subscription saved to backend:', result);
       return subscription;
-    }
-
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
-    });
-
-    // Save to backend
-    await this.subscribe(subscription);
-    return subscription;
-  }
-
-  async unsubscribeFromPush() {
-    const subscription = await this.getCurrentSubscription();
-    if (subscription) {
-      await subscription.unsubscribe();
-      await this.unsubscribe(subscription.endpoint);
+    } catch (error) {
+      console.error('❌ Push subscription failed:', error);
+      throw error;
     }
   }
 
+  // Helper to convert VAPID key
   urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
@@ -143,6 +194,49 @@ class NotificationService {
       outputArray[i] = rawData.charCodeAt(i);
     }
     return outputArray;
+  }
+
+  async unsubscribeFromPush() {
+    const subscription = await this.getCurrentSubscription();
+    if (subscription) {
+      await subscription.unsubscribe();
+      await this.unsubscribe(subscription.endpoint);
+    }
+  }
+
+
+  async initialize() {
+    // Only initialize if we haven't already
+    if (this._initialized) return;
+    this._initialized = true;
+    
+    console.log('🔔 Initializing push notifications...');
+    
+    // Check if browser supports push
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.log('Push notifications not supported in this browser');
+      return;
+    }
+    
+    // Check if already subscribed
+    const existingSubscription = await this.getCurrentSubscription();
+    if (existingSubscription) {
+      console.log('Already subscribed to push notifications');
+      return;
+    }
+    
+    // Request permission and subscribe
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await this.subscribeToPush();
+        console.log('✅ Push notifications initialized successfully');
+      } else {
+        console.log('Notification permission denied');
+      }
+    } catch (error) {
+      console.error('Failed to initialize push notifications:', error);
+    }
   }
 }
 

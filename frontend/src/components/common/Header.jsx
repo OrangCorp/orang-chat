@@ -1,4 +1,4 @@
-// Header.jsx (updated with browser notifications for contact requests)
+// Header.jsx - Push notifications for contact requests
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -23,7 +23,7 @@ const Header = () => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
-  // ... search state (unchanged)
+  // Search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -31,7 +31,7 @@ const Header = () => {
   const searchAnchorRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  // Profile menu (unchanged)
+  // Profile menu
   const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -41,40 +41,8 @@ const Header = () => {
   const [notifications, setNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  
-  // Ref to keep track of seen request IDs across polling
-  const seenRequestIds = useRef(new Set());
 
-  useEffect(() => {
-    const handleRequestResolved = (event) => {
-      const { contactId, userId } = event.detail;
-      
-      // Remove the notification from state
-      setNotifications(prev => {
-        const filtered = prev.filter(n => n.id !== contactId && n.userId !== userId);
-        
-        // Update unread count
-        const newUnreadCount = filtered.length;
-        setUnreadCount(newUnreadCount);
-        
-        // Remove from seen set
-        seenRequestIds.current.delete(contactId);
-        
-        return filtered;
-      });
-      
-      console.log('Contact request resolved from profile:', contactId);
-    };
-    
-    window.addEventListener('contact-request-resolved', handleRequestResolved);
-    
-    return () => {
-      window.removeEventListener('contact-request-resolved', handleRequestResolved);
-    };
-  }, []);
-
-
-  // Load current user profile (unchanged)
+  // Load current user profile
   useEffect(() => {
     if (!user?.id) return;
     const loadUserProfile = async () => {
@@ -96,55 +64,64 @@ const Header = () => {
     loadUserProfile();
   }, [user]);
 
-  // Request notification permission on mount
+  // Register service worker and listen for push messages
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+    if ('serviceWorker' in navigator) {
+      // Listen for messages from service worker
+      const handleSWMessage = (event) => {
+        console.log('📨 Message from SW:', event.data);
+        if (event.data?.type === 'CONTACT_REQUEST_RECEIVED') {
+          console.log('👤 Contact request received via push notification');
+          // Refresh notifications from backend
+          loadNotifications();
+        }
+      };
+      
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+      
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      };
     }
   }, []);
 
-  // Show browser notification for new contact request
-  const showContactRequestNotification = (request) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const displayName = request.displayName || 'Someone';
-      const title = `New contact request`;
-      const options = {
-        body: `${displayName} wants to connect with you`,
-        icon: request.avatarUrl || '/logo192.png',
-        badge: '/badge.png',
-        tag: `contact-request-${request.id}`,
-        requireInteraction: true,
-        data: { url: window.location.origin }
-      };
-      
-      const notification = new Notification(title, options);
-      notification.onclick = () => {
-        window.focus();
-      };
-    }
-  };
 
-  // Load notifications (incoming contact requests)
+
+  // Load notifications (incoming contact requests) - called on mount and via push events
   const loadNotifications = useCallback(async () => {
     if (!user?.id) return;
-    console.log('loading notifications...');
     try {
       setNotificationsLoading(true);
       const incomingRequests = await userService.getIncomingRequests(true);
 
-      const formatted = incomingRequests.map(req => ({
-        id: req.id,
-        userId: req.requesterId,
-        displayName: req.requesterDisplayName,
-        avatarUrl: req.requesterAvatarUrl,
-        status: req.status,
-        createdAt: req.createdAt,
-        read: false,
-        direction: 'incoming'
-      }));
+      // Fetch profiles for all requesters
+      const requesterIds = incomingRequests.map(req => req.requesterId);
+      const uniqueRequesterIds = [...new Set(requesterIds)];
+      
+      let profileMap = new Map();
+      if (uniqueRequesterIds.length > 0) {
+        try {
+          profileMap = await userService.getProfiles(uniqueRequesterIds);
+        } catch (err) {
+          console.error('Failed to fetch requester profiles:', err);
+        }
+      }
+
+      const formatted = incomingRequests.map(req => {
+        const profile = profileMap.get(req.requesterId);
+        return {
+          id: req.id,
+          userId: req.requesterId,
+          displayName: profile?.displayName || 'Unknown User',
+          avatarUrl: profile?.avatarUrl || null,
+          status: req.status,
+          createdAt: req.createdAt,
+          direction: 'incoming'
+        };
+      });
 
       setNotifications(formatted);
-      setUnreadCount(formatted.filter(n => !n.read).length);
+      setUnreadCount(formatted.length);
     } catch (error) {
       console.error('Failed to load notifications:', error);
     } finally {
@@ -152,9 +129,25 @@ const Header = () => {
     }
   }, [user?.id]);
 
+
+
+
+  useEffect(() => {
+    const handleRefreshNotifications = () => {
+      console.log('🔄 Refreshing notifications from SW event');
+      loadNotifications();
+    };
+
+    window.addEventListener('refresh-notifications', handleRefreshNotifications);
+    
+    return () => {
+      window.removeEventListener('refresh-notifications', handleRefreshNotifications);
+    };
+  }, [loadNotifications]);
+
+  // Listen for contact request resolved events (from profile page)
   useEffect(() => {
     const handleRequestResolved = () => {
-      // Refresh notifications immediately
       loadNotifications();
     };
     
@@ -165,26 +158,14 @@ const Header = () => {
     };
   }, [loadNotifications]);
 
-  // Initial load and periodic refresh (every 30s)
-  useEffect(() => {
-    if (!user?.id) return;
-    
-    loadNotifications();
-    console.log('scheduling load notifications');
-    
-    const interval = setInterval(loadNotifications, 30000);
-    
-    return () => clearInterval(interval);
-  }, [loadNotifications]);
-
-  // Logout (unchanged)
+  // Logout
   const handleLogout = () => {
     userService.clearCache();
     logout();
     navigate('/login');
   };
 
-  // Profile menu handlers (unchanged)
+  // Profile menu handlers
   const handleProfileMenuOpen = (e) => setProfileMenuAnchor(e.currentTarget);
   const handleProfileMenuClose = () => setProfileMenuAnchor(null);
   const handleProfileClick = () => {
@@ -199,7 +180,6 @@ const Header = () => {
   // Notifications menu
   const handleNotificationsOpen = (e) => {
     setNotificationsAnchor(e.currentTarget);
-    // Mark all as "read" visually (we don't persist read status for contact requests)
     setUnreadCount(0);
   };
   const handleNotificationsClose = () => setNotificationsAnchor(null);
@@ -208,15 +188,12 @@ const Header = () => {
     try {
       await userService.acceptContactRequest(notification.id);
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
-      seenRequestIds.current.delete(notification.id);
       setUnreadCount(prev => Math.max(0, prev - 1));
       
-      // Notify that contact status changed (for profile page)
       window.dispatchEvent(new CustomEvent('contact-status-changed', { 
         detail: { userId: notification.userId, status: 'ACCEPTED' } 
       }));
       
-      // Also dispatch resolved event for consistency
       window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
         detail: { contactId: notification.id, userId: notification.userId } 
       }));
@@ -229,15 +206,12 @@ const Header = () => {
     try {
       await userService.rejectContactRequest(notification.id);
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
-      seenRequestIds.current.delete(notification.id);
       setUnreadCount(prev => Math.max(0, prev - 1));
       
-      // Notify that contact status changed (for profile page)
       window.dispatchEvent(new CustomEvent('contact-status-changed', { 
         detail: { userId: notification.userId, status: null } 
       }));
       
-      // Also dispatch resolved event for consistency
       window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
         detail: { contactId: notification.id, userId: notification.userId } 
       }));
@@ -246,7 +220,7 @@ const Header = () => {
     }
   };
 
-  // Search handlers (unchanged)
+  // Search handlers
   useEffect(() => {
     if (searchQuery.trim().length < 2) {
       setSearchResults([]);
