@@ -20,21 +20,20 @@ import {
   Logout as LeaveIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
-  AdminPanelSettings as AdminIcon,
-  Security as OwnerIcon,
   PersonAdd as PersonAddIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   NotificationsOff as NotificationsOffIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
+  AttachFile as AttachmentIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import messageService from '../services/messageService';
 import userService from '../services/userService';
 import chatService from '../services/chatService';
 import notificationService from '../services/notificationService';
+import attachmentService from '../services/attachmentService';
 import MessageBubble from '../components/chat/MessageBubble';
 import { emitConversationUpdated } from '../utils/conversationEvents';
-
 
 // Role display helper
 const getRoleLabel = (role) => {
@@ -60,6 +59,7 @@ const Chat = () => {
   const subscriptionSetupRef = useRef(false);
   const typingTimersRef = useRef(new Map());
   const typingCooldownRef = useRef(false);
+  const fileInputRef = useRef(null);
 
   // Core state
   const [conversation, setConversation] = useState(null);
@@ -84,7 +84,7 @@ const Chat = () => {
   const [contextLoading, setContextLoading] = useState(false);
 
   // Group management state
-  const [viewMode, setViewMode] = useState('chat'); // 'chat' or 'members'
+  const [viewMode, setViewMode] = useState('chat');
   const [memberActionMenuAnchor, setMemberActionMenuAnchor] = useState(null);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [addMembersDialogOpen, setAddMembersDialogOpen] = useState(false);
@@ -98,8 +98,13 @@ const Chat = () => {
   const [contactsLoading, setContactsLoading] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
 
+  // Mute state
   const [muted, setMuted] = useState(false);
   const [muteLoading, setMuteLoading] = useState(false);
+
+  // Attachment state
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   useEffect(() => {
     if (conversation?.id) {
@@ -113,7 +118,6 @@ const Chat = () => {
       const prefs = await notificationService.getNotificationPreferences(conversation.id);
       setMuted(prefs.muted);
     } catch (err) {
-      // If 404 or no preferences yet, default to false (not muted)
       console.debug('No notification preferences found, defaulting to unmuted');
       setMuted(false);
     }
@@ -173,7 +177,8 @@ const Chat = () => {
     typingTimersRef.current.forEach(clearTimeout);
     typingTimersRef.current.clear();
     setTypingUsers(new Set());
-    setViewMode('chat'); // Reset to chat view when changing chats
+    setViewMode('chat');
+    setSelectedFiles([]);
   }, [chatId]);
 
   // Load conversation & messages
@@ -227,7 +232,6 @@ const Chat = () => {
 
     const setupSubscriptions = async () => {
       try {
-        // Ensure chat service is connected
         if (!chatService.isConnected()) {
           console.log('Chat service not connected, connecting...');
           await chatService.connect();
@@ -256,39 +260,25 @@ const Chat = () => {
           if (message.type === 'TYPING') {
             const { senderId } = message;
             
-            // Don't show typing indicator for our own typing
-            if (senderId === user.id) {
-              return;
-            }
+            if (senderId === user.id) return;
             
-            // For DIRECT chats, only show typing from the other participant
             if (conversation.type === 'DIRECT') {
               const otherParticipant = conversation.participants?.find(p => p.userId !== user.id);
-              if (senderId !== otherParticipant?.userId) {
-                return;
-              }
+              if (senderId !== otherParticipant?.userId) return;
             }
             
-            // For GROUP chats, any participant can type (already filtered by conversationId above)
-            
-            console.log('Typing indicator received from:', senderId);
-            
-            // Clear existing timer for this user
             if (typingTimersRef.current.has(senderId)) {
               clearTimeout(typingTimersRef.current.get(senderId));
               typingTimersRef.current.delete(senderId);
             }
             
-            // Add user to typing set
             setTypingUsers(prev => {
               const next = new Set(prev);
               next.add(senderId);
               return next;
             });
             
-            // Set timer to auto-remove after 5 seconds
             const timer = setTimeout(() => {
-              console.log('Typing timeout for:', senderId);
               setTypingUsers(prev => {
                 const next = new Set(prev);
                 next.delete(senderId);
@@ -303,7 +293,7 @@ const Chat = () => {
 
           // Handle regular messages
           if ((message.type === 'DIRECT' || message.type === 'GROUP') && message.senderId) {
-            // Remove typing indicator when a message is sent by that user
+            // Remove typing indicator when a message is sent
             if (typingTimersRef.current.has(message.senderId)) {
               clearTimeout(typingTimersRef.current.get(message.senderId));
               typingTimersRef.current.delete(message.senderId);
@@ -319,33 +309,23 @@ const Chat = () => {
             }
           }
           
+          // ===== SIMPLIFIED LOGIC HERE =====
+          // For our own messages in GROUP chats - ignore them (temp message already shown)
+          if (message.senderId === user.id && message.type === 'GROUP') {
+            return;
+          }
+          
           const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
           
+          // Check for duplicate real messages by ID
           setMessages(prev => {
-            if (message.senderId === user.id && message.type === 'GROUP') {
-              const duplicateIndex = prev.findIndex(m => 
-                m.id?.startsWith('temp-') && 
-                m.content === message.content &&
-                m.senderId === user.id &&
-                Date.now() - new Date(m.createdAt).getTime() < 5000
-              );
-              if (duplicateIndex !== -1) {
-                const newMessages = [...prev];
-                newMessages[duplicateIndex] = messageWithId;
-                return newMessages;
-              }
-            }
-            const existingRealMessage = prev.findIndex(m => 
-              m.id === message.id || 
-              (m.id && !m.id.startsWith('temp-') && m.content === message.content && m.senderId === message.senderId && Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 1000)
-            );
-            if (existingRealMessage !== -1) {
-              return prev;
-            }
+            const existingRealMessage = prev.findIndex(m => m.id === message.id);
+            if (existingRealMessage !== -1) return prev;
             return [...prev, messageWithId];
           });
+          // ===== END SIMPLIFIED LOGIC =====
           
-          // Check if should scroll to bottom
+          // Scroll to bottom if needed
           const container = messagesContainerRef.current;
           if (container) {
             const { scrollTop, scrollHeight, clientHeight } = container;
@@ -356,7 +336,6 @@ const Chat = () => {
           }
         };
         
-        // Subscribe based on conversation type
         if (conversation.type === 'DIRECT') {
           chatService.subscribeToPrivateMessages(handleMessage);
         } else if (conversation.type === 'GROUP') {
@@ -379,7 +358,7 @@ const Chat = () => {
         }
       }
     };
-  }, [conversation, user, chatId]); // ONLY depend on these three!
+  }, [conversation, user, chatId]);
 
   // Send typing event
   const sendTyping = useCallback(() => {
@@ -396,7 +375,6 @@ const Chat = () => {
       const otherParticipant = conversation.participants.find(p => p.userId !== user.id);
       typingMessage.recipientId = otherParticipant?.userId;
     } else {
-      // For GROUP chats, set recipientId to the group ID
       typingMessage.recipientId = conversation.id;
       typingMessage.conversationId = conversation.id;
     }
@@ -416,18 +394,103 @@ const Chat = () => {
     sendTyping();
   };
 
-  // Send message
+  // File handling
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    setSelectedFiles(prev => [...prev, ...files]);
+    e.target.value = '';
+  };
+
+  const removeSelectedFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Send message - handleSend
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim() || sending || !conversation) return;
+    if ((!input.trim() && selectedFiles.length === 0) || sending || !conversation) return;
     const content = input.trim();
     setInput('');
     setSending(true);
+
+    // Check if we're at bottom BEFORE adding the temp message
+    const wasAtBottom = checkIfAtBottom();
+
+    let uploadedIds = [];
+    const filesToUpload = [...selectedFiles];
     
+    if (filesToUpload.length > 0) {
+      setUploadingFiles(true);
+      setSelectedFiles([]);
+      
+      const tempMessage = {
+        id: `temp-${Date.now()}`,
+        senderId: user.id,
+        content: content || '',
+        type: conversation.type,
+        ...(conversation.type === 'DIRECT' 
+          ? { recipientId: conversation.participants?.find(p => p.userId !== user.id)?.userId }
+          : { conversationId: conversation.id }
+        ),
+        createdAt: new Date().toISOString(),
+        attachments: filesToUpload.map(f => ({
+          id: `uploading-${Math.random()}`,
+          fileName: f.name,
+          uploading: true
+        }))
+      };
+      
+      setMessages(prev => [...prev, tempMessage]);
+      
+      // Scroll after temp message
+      if (wasAtBottom) {
+        setTimeout(() => scrollToBottom(true), 50);
+      }
+      
+      for (const file of filesToUpload) {
+        try {
+          const response = await attachmentService.upload(file, conversation.id);
+          uploadedIds.push(response.id);
+          console.log('uploaded file: ', response);
+        } catch (err) {
+          console.error('File upload failed:', err);
+          alert(`Failed to upload ${file.name}`);
+        }
+      }
+      setUploadingFiles(false);
+    }
+
+    if (uploadedIds.length > 0 || filesToUpload.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    if (filesToUpload.length === 0) {
+      const tempMessage = {
+        id: `temp-${Date.now()}`,
+        senderId: user.id,
+        content: content || '',
+        type: conversation.type,
+        ...(conversation.type === 'DIRECT' 
+          ? { recipientId: conversation.participants?.find(p => p.userId !== user.id)?.userId }
+          : { conversationId: conversation.id }
+        ),
+        createdAt: new Date().toISOString()
+      };
+      
+      setMessages(prev => [...prev, tempMessage]);
+      
+      // Scroll after temp message
+      if (wasAtBottom) {
+        setTimeout(() => scrollToBottom(true), 50);
+      }
+    }
+
     const messagePayload = {
       senderId: user.id,
-      content,
-      type: conversation.type
+      content: content || '',
+      type: conversation.type,
+      attachmentIds: uploadedIds.length > 0 ? uploadedIds : undefined
     };
 
     if (conversation.type === 'DIRECT') {
@@ -436,22 +499,6 @@ const Chat = () => {
     } else {
       messagePayload.conversationId = conversation.id;
     }
-    
-    const wasAtBottom = checkIfAtBottom();
-    const tempMessage = {
-      id: `temp-${Date.now()}`,
-      senderId: user.id,
-      content,
-      type: conversation.type,
-      ...(conversation.type === 'DIRECT' 
-        ? { recipientId: messagePayload.recipientId }
-        : { conversationId: messagePayload.conversationId }
-      ),
-      createdAt: new Date().toISOString()
-    };
-    
-    setMessages(prev => [...prev, tempMessage]);
-    if (wasAtBottom) setTimeout(() => scrollToBottom(true), 50);
     
     chatService.sendMessage(messagePayload);
     setSending(false);
@@ -482,7 +529,7 @@ const Chat = () => {
     } catch (err) { console.error(err); } finally { setLoadingMore(false); }
   };
 
-  // Search handlers (unchanged)
+  // Search handlers
   const handleSearchClick = async () => {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
@@ -581,7 +628,6 @@ const Chat = () => {
         default:
           break;
       }
-      // Refresh conversation data
       await loadConversationData();
     } catch (err) {
       console.error(`Failed to ${action} participant:`, err);
@@ -643,7 +689,6 @@ const Chat = () => {
     setContactsLoading(true);
     try {
       const contactsList = await userService.getContacts();
-      // Filter out users already in the group
       const existingIds = new Set(conversation.participants?.map(p => p.userId) || []);
       const availableContacts = contactsList.filter(c => c.status === 'ACCEPTED' && !existingIds.has(c.userId));
       setContacts(availableContacts);
@@ -704,10 +749,8 @@ const Chat = () => {
 
   // Render member list
   const renderMembersView = () => {
-    const currentUserRole = getCurrentUserRole();
     const participantsList = conversation?.participants || [];
     
-    // Sort: Owner first, then Admins, then Members, alphabetically
     const sortedParticipants = [...participantsList].sort((a, b) => {
       const roleOrder = { 'ADMIN': 0, 'MEMBER': 1 };
       const orderA = roleOrder[a.role] ?? 2;
@@ -742,7 +785,7 @@ const Chat = () => {
             const displayName = profile?.displayName || participant.userId.slice(0, 8);
             const isCurrentUser = participant.userId === user.id;
             const role = participant.role;
-            const canManage = isAdmin() && !isCurrentUser; // Admins can manage others but not themselves
+            const canManage = isAdmin() && !isCurrentUser;
             
             return (
               <ListItem
@@ -799,50 +842,47 @@ const Chat = () => {
           })}
         </List>
 
-        {/* Leave Group Button (available to all members) */}
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
-            <Button
-              variant="outlined"
-              color="error"
-              startIcon={<LeaveIcon />}
-              onClick={handleLeaveGroup}
-              disabled={processingAction}
-            >
-              Leave Group
-            </Button>
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<LeaveIcon />}
+            onClick={handleLeaveGroup}
+            disabled={processingAction}
+          >
+            Leave Group
+          </Button>
+        </Box>
+
+        {isAdmin() && (
+          <Box sx={{ mt: 3 }}>
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle2" gutterBottom>Admin Actions</Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Button
+                variant="outlined"
+                startIcon={<EditIcon />}
+                onClick={() => {
+                  setNewGroupName(conversation.name || '');
+                  setRenameDialogOpen(true);
+                }}
+                disabled={processingAction}
+              >
+                Rename Group
+              </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={processingAction}
+              >
+                Delete Group
+              </Button>
+            </Stack>
           </Box>
+        )}
 
-          {/* Admin Actions */}
-          {isAdmin() && (
-            <Box sx={{ mt: 3 }}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" gutterBottom>Admin Actions</Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Button
-                  variant="outlined"
-                  startIcon={<EditIcon />}
-                  onClick={() => {
-                    setNewGroupName(conversation.name || '');
-                    setRenameDialogOpen(true);
-                  }}
-                  disabled={processingAction}
-                >
-                  Rename Group
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<DeleteIcon />}
-                  onClick={() => setDeleteConfirmOpen(true)}
-                  disabled={processingAction}
-                >
-                  Delete Group
-                </Button>
-              </Stack>
-            </Box>
-          )}
-
-        {/* Member Action Menu */}
         <Menu
           anchorEl={memberActionMenuAnchor}
           open={Boolean(memberActionMenuAnchor)}
@@ -862,13 +902,7 @@ const Chat = () => {
           </MenuItem>
         </Menu>
 
-        {/* Add Members Dialog */}
-        <Dialog
-          open={addMembersDialogOpen}
-          onClose={() => setAddMembersDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
+        <Dialog open={addMembersDialogOpen} onClose={() => setAddMembersDialogOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Add Members</DialogTitle>
           <DialogContent dividers>
             <TextField
@@ -897,11 +931,8 @@ const Chat = () => {
                 memberSearchResults.length > 0 ? (
                   memberSearchResults.map((result) => (
                     <ListItem key={result.userId} disablePadding>
-                      <ListItemButton onClick={() => handleToggleUserToAdd(result.userId)}> {/*line 810*/}
-                        <Checkbox
-                          checked={selectedUsersToAdd.has(result.userId)}
-                          size="small"
-                        />
+                      <ListItemButton onClick={() => handleToggleUserToAdd(result.userId)}>
+                        <Checkbox checked={selectedUsersToAdd.has(result.userId)} size="small" />
                         <Avatar src={result.avatarUrl} sx={{ width: 32, height: 32, mr: 2 }}>
                           {result.displayName?.charAt(0).toUpperCase()}
                         </Avatar>
@@ -929,10 +960,7 @@ const Chat = () => {
                       return (
                         <ListItem key={contact.userId} disablePadding>
                           <ListItemButton onClick={() => handleToggleUserToAdd(contact.userId)}>
-                            <Checkbox
-                              checked={selectedUsersToAdd.has(contact.userId)}
-                              size="small"
-                            />
+                            <Checkbox checked={selectedUsersToAdd.has(contact.userId)} size="small" />
                             <Avatar src={profile?.avatarUrl} sx={{ width: 32, height: 32, mr: 2 }}>
                               {profile?.displayName?.charAt(0).toUpperCase() || '?'}
                             </Avatar>
@@ -962,7 +990,6 @@ const Chat = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Rename Dialog */}
         <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)}>
           <DialogTitle>Rename Group</DialogTitle>
           <DialogContent>
@@ -987,7 +1014,6 @@ const Chat = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
         <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
           <DialogTitle>Delete Group?</DialogTitle>
           <DialogContent>
@@ -1270,14 +1296,12 @@ const Chat = () => {
               )}
             </Box>
 
-            {/* Mute Button */}
             <Tooltip title={muted ? 'Unmute notifications' : 'Mute notifications'}>
               <IconButton onClick={toggleMute} disabled={muteLoading}>
                 <NotificationsOffIcon color={muted ? 'error' : 'inherit'} />
               </IconButton>
             </Tooltip>
 
-            {/* Group Management Button */}
             {conversation.type === 'GROUP' && (
               <Tooltip title={viewMode === 'chat' ? 'View Members' : 'Back to Chat'}>
                 <IconButton 
@@ -1363,8 +1387,35 @@ const Chat = () => {
           </Box>
 
           <Paper elevation={3} sx={{ p: 2 }}>
+            {selectedFiles.length > 0 && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                {selectedFiles.map((file, idx) => (
+                  <Chip
+                    key={idx}
+                    label={file.name}
+                    onDelete={() => removeSelectedFile(idx)}
+                    size="small"
+                    icon={<AttachmentIcon />}
+                  />
+                ))}
+              </Box>
+            )}
             <form onSubmit={handleSend}>
               <Box sx={{ display: 'flex', gap: 1 }}>
+                <IconButton
+                  component="label"
+                  disabled={sending || uploadingFiles}
+                  color="primary"
+                >
+                  <AttachmentIcon />
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    onChange={handleFileSelect}
+                    ref={fileInputRef}
+                  />
+                </IconButton>
                 <TextField 
                   fullWidth 
                   size="small" 
@@ -1384,10 +1435,10 @@ const Chat = () => {
                 <IconButton 
                   type="submit" 
                   color="primary" 
-                  disabled={!input.trim() || sending} 
+                  disabled={(!input.trim() && selectedFiles.length === 0) || sending || uploadingFiles} 
                   sx={{ alignSelf: 'flex-end' }}
                 >
-                  <SendIcon />
+                  {uploadingFiles ? <CircularProgress size={24} /> : <SendIcon />}
                 </IconButton>
               </Box>
             </form>

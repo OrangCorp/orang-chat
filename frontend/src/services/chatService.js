@@ -111,9 +111,8 @@ class ChatService {
       return;
     }
 
-    const { senderId, recipientId, conversationId, content, type } = messagePayload;
+    const { senderId, recipientId, conversationId, content, type, attachmentIds, replyToMessageId } = messagePayload;
 
-    // Build base message
     const formattedMessage = {
       senderId,
       content,
@@ -121,7 +120,6 @@ class ChatService {
       timestamp: new Date().toISOString()
     };
 
-    // Add the appropriate field based on message type
     if (type === 'DIRECT') {
       if (!recipientId) {
         console.error('recipientId is required for DIRECT messages');
@@ -136,15 +134,22 @@ class ChatService {
       formattedMessage.conversationId = conversationId;
     }
 
-    console.log('📤 Sending message:', formattedMessage);
+    // Add attachment IDs if present
+    if (attachmentIds && attachmentIds.length > 0) {
+      formattedMessage.attachmentIds = attachmentIds;
+    }
+
+    // Add reply ID if present
+    if (replyToMessageId) {
+      formattedMessage.replyToMessageId = replyToMessageId;
+    }
 
     this.stompClient.publish({
       destination: '/app/chat.send',
       body: JSON.stringify(formattedMessage)
     });
 
-    // Send heartbeat on message activity (forced)
-    this.sendHeartbeat();
+    this.sendHeartbeat(true);
   }
 
   // Send typing indicator
