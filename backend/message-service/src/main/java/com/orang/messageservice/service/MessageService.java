@@ -90,10 +90,10 @@ public class MessageService {
                 .conversationId(conversationId)
                 .senderId(senderId)
                 .content(content)
-                .replyToMessageId(validatedReplyToId)  // ── NEW
+                .replyToMessageId(validatedReplyToId)
                 .build();
 
-        Message saved = messageRepository.save(message);
+        Message saved = messageRepository.saveAndFlush(message);
 
         if (attachmentIds != null && !attachmentIds.isEmpty()) {
             attachmentService.linkAttachmentsToMessage(attachmentIds, saved.getId(), senderId);
