@@ -204,18 +204,26 @@ const Chat = () => {
         setParticipants(profiles);
       }
 
-      setTimeout(() => scrollToBottom(true), 100);
+      // Use requestAnimationFrame instead of setTimeout
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      });
     } catch (err) {
       console.error(err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [chatId, user, scrollToBottom]);
+  }, [chatId, user]); // ONLY chatId and user - NOT scrollToBottom!
+
+  const loadedChatIdRef = useRef(null);
 
   useEffect(() => {
-    loadConversationData();
-  }, [loadConversationData]);
+    if (chatId !== loadedChatIdRef.current) {
+      loadedChatIdRef.current = chatId;
+      loadConversationData();
+    }
+  }, [chatId, loadConversationData]);
 
   useEffect(() => {
     return () => {
