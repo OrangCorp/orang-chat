@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Paper, Typography, Avatar, IconButton } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import attachmentService from '../../services/attachmentService';
+import {
+  Videocam as VideocamIcon,
+  PictureAsPdf as PictureAsPdfIcon,
+  Description as DescriptionIcon,
+  Article as ArticleIcon,
+  Image as ImageIcon,
+} from '@mui/icons-material';
 
 const MessageBubble = ({ message, isOwn, senderName, senderAvatar, time, onAvatarClick, highlight }) => {
   if (!message) return null;
@@ -63,14 +70,95 @@ const MessageBubble = ({ message, isOwn, senderName, senderAvatar, time, onAvata
 
 // Separate component for attachment to handle async download URL
 const AttachmentItem = ({ attachment }) => {
-  const [downloadUrl, setDownloadUrl] = useState(null);
-  
-  useEffect(() => {
-    if (attachment.id && !attachment.uploading) {
-      // The download URL is just a path, not a promise
-      setDownloadUrl(attachmentService.getDownloadUrl(attachment.id));
+  const [thumbnailSrc, setThumbnailSrc] = useState(null);
+
+  // Determine file type and icon
+  const getFileInfo = (fileName) => {
+    if (!fileName) return { icon: <InsertDriveFileIcon fontSize="small" />, type: 'file' };
+    
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    
+    // ===== THUMBNAIL FLAG =====
+    // Set to true when backend thumbnail generation is fixed
+    const THUMBNAILS_ENABLED = false;
+    // ==========================
+    
+    // Images
+    if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) {
+      if (THUMBNAILS_ENABLED) {
+        return { icon: null, type: 'image' }; // Fetch thumbnail
+      }
+      return { 
+        icon: <ImageIcon fontSize="small" sx={{ color: '#4caf50' }} />, 
+        type: 'image' 
+      };
     }
-  }, [attachment.id, attachment.uploading]);
+    
+    // Videos
+    if (['mp4', 'mov', 'webm', 'mpeg'].includes(ext)) {
+      return { 
+        icon: <VideocamIcon fontSize="small" sx={{ color: '#ff5722' }} />, 
+        type: 'video' 
+      };
+    }
+    
+    // PDF
+    if (ext === 'pdf') {
+      return { 
+        icon: <PictureAsPdfIcon fontSize="small" sx={{ color: '#f44336' }} />, 
+        type: 'pdf' 
+      };
+    }
+    
+    // Documents
+    if (['doc', 'docx', 'odt'].includes(ext)) {
+      return { 
+        icon: <DescriptionIcon fontSize="small" sx={{ color: '#2196f3' }} />, 
+        type: 'document' 
+      };
+    }
+    
+    // Text files
+    if (ext === 'txt') {
+      return { 
+        icon: <ArticleIcon fontSize="small" sx={{ color: '#9e9e9e' }} />, 
+        type: 'text' 
+      };
+    }
+    
+    // Default
+    return { icon: <InsertDriveFileIcon fontSize="small" />, type: 'file' };
+  };
+
+  const fileInfo = getFileInfo(attachment.fileName);
+
+  // Only fetch thumbnail for images
+  /*
+  useEffect(() => {
+    let cancelled = false;
+    
+    if (fileInfo.type === 'image' && attachment.id && !attachment.uploading) {
+      attachmentService.getThumbnailBlobUrl(attachment.id)
+        .then(url => {
+          if (!cancelled) setThumbnailSrc(url);
+        })
+        .catch(() => {
+          if (!cancelled) setThumbnailSrc(null);
+        });
+    }
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.id, fileInfo.type, attachment.uploading]);
+
+  // Cleanup blob URL
+  useEffect(() => {
+    return () => {
+      if (thumbnailSrc) URL.revokeObjectURL(thumbnailSrc);
+    };
+  }, [thumbnailSrc]);
+  */
 
   if (attachment.uploading) {
     return (
@@ -85,34 +173,44 @@ const AttachmentItem = ({ attachment }) => {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-      {attachment.thumbnailAvailable ? (
+      {/* Thumbnail for images, icon for others */}
+      {fileInfo.type === 'image' && thumbnailSrc ? (
         <img 
-          src={attachmentService.getThumbnailUrl(attachment.id)} 
+          src={thumbnailSrc}
           alt={attachment.fileName}
           style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4 }}
         />
       ) : (
-        <InsertDriveFileIcon fontSize="small" />
+        <Box sx={{ 
+          width: 48, 
+          height: 48, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          bgcolor: 'rgba(255,255,255,0.1)',
+          borderRadius: 1
+        }}>
+          {fileInfo.icon}
+        </Box>
       )}
+      
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="caption" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'white' }}>
           {attachment.fileName}
         </Typography>
         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.65rem' }}>
           {attachment.fileSize ? `${(attachment.fileSize / 1024).toFixed(1)} KB` : ''}
+          {fileInfo.type !== 'image' && fileInfo.type !== 'file' ? ` • ${fileInfo.type.toUpperCase()}` : ''}
         </Typography>
       </Box>
-      {downloadUrl && (
-        <IconButton 
-          size="small" 
-          component="a" 
-          href={downloadUrl} 
-          target="_blank"
-          sx={{ color: 'white' }}
-        >
-          <DownloadIcon fontSize="small" />
-        </IconButton>
-      )}
+      
+      <IconButton 
+        size="small" 
+        onClick={() => attachmentService.downloadFile(attachment.id, attachment.fileName)}
+        sx={{ color: 'white' }}
+      >
+        <DownloadIcon fontSize="small" />
+      </IconButton>
     </Box>
   );
 };

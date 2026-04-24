@@ -5,7 +5,6 @@ const getHeaders = () => {
   const token = localStorage.getItem('accessToken');
   return {
     'Authorization': `Bearer ${token}`
-    // Note: don't set Content-Type for multipart
   };
 };
 
@@ -19,7 +18,6 @@ class AttachmentService {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        // Let browser set Content-Type with boundary for FormData
       },
       body: formData
     });
@@ -28,7 +26,7 @@ class AttachmentService {
       const err = await response.text();
       throw new Error(`Upload failed: ${response.status} ${err}`);
     }
-    return response.json(); // AttachmentResponse
+    return response.json();
   }
 
   async getAttachment(attachmentId) {
@@ -39,14 +37,32 @@ class AttachmentService {
     return response.json();
   }
 
-  async getDownloadUrl(attachmentId) {
-    // The download endpoint directly returns the file or presigned URL.
-    // We can just construct the URL; the browser will download.
-    return `${API_BASE_URL}/attachments/${attachmentId}/download`;
+  // Download file with auth and trigger browser download
+  async downloadFile(attachmentId, fileName) {
+    const response = await fetch(`${API_BASE_URL}/attachments/${attachmentId}/download`, {
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Download failed');
+    
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
-  async getThumbnailUrl(attachmentId) {
-    return `${API_BASE_URL}/attachments/${attachmentId}/thumbnail`;
+  // Get thumbnail as a blob URL for <img> tags
+  async getThumbnailBlobUrl(attachmentId) {
+    const response = await fetch(`${API_BASE_URL}/attachments/${attachmentId}/thumbnail`, {
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Thumbnail failed');
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
   }
 
   async deleteAttachment(attachmentId) {

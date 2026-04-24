@@ -322,15 +322,32 @@ const Chat = () => {
           if (message.senderId === user.id && message.type === 'GROUP') {
             return;
           }
-          
-          const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
-          
-          // Check for duplicate real messages by ID
-          setMessages(prev => {
-            const existingRealMessage = prev.findIndex(m => m.id === message.id);
-            if (existingRealMessage !== -1) return prev;
-            return [...prev, messageWithId];
-          });
+
+         if (message.attachmentIds?.length > 0) {
+          try {
+            const attachmentDetails = await Promise.all(
+              message.attachmentIds.map(id => 
+                fetch(`/api/attachments/${id}`, {
+                  headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+                }).then(r => r.json())
+              )
+            );
+            // Assign to message BEFORE spreading
+            message.attachments = attachmentDetails;
+            console.log('📎 Fetched attachment details:', attachmentDetails);
+          } catch (err) {
+            console.error('Failed to fetch attachment details:', err);
+          }
+        }
+
+        const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
+        console.log('✅ Adding message with attachments:', messageWithId.attachments?.length);
+
+        setMessages(prev => {
+          const existingRealMessage = prev.findIndex(m => m.id === message.id);
+          if (existingRealMessage !== -1) return prev;
+          return [...prev, messageWithId];
+        });
           // ===== END SIMPLIFIED LOGIC =====
           
           // Scroll to bottom if needed
@@ -422,18 +439,18 @@ const Chat = () => {
     setInput('');
     setSending(true);
 
-    // Check if we're at bottom BEFORE adding the temp message
-    const wasAtBottom = checkIfAtBottom();
-
     let uploadedIds = [];
     const filesToUpload = [...selectedFiles];
+    
+    // Store the temp message ID so we can update it later
+    const tempId = `temp-${Date.now()}`;
     
     if (filesToUpload.length > 0) {
       setUploadingFiles(true);
       setSelectedFiles([]);
       
       const tempMessage = {
-        id: `temp-${Date.now()}`,
+        id: tempId,
         senderId: user.id,
         content: content || '',
         type: conversation.type,
@@ -452,6 +469,7 @@ const Chat = () => {
       setMessages(prev => [...prev, tempMessage]);
       
       // Scroll after temp message
+      const wasAtBottom = checkIfAtBottom();
       if (wasAtBottom) {
         setTimeout(() => scrollToBottom(true), 50);
       }
@@ -459,23 +477,36 @@ const Chat = () => {
       for (const file of filesToUpload) {
         try {
           const response = await attachmentService.upload(file, conversation.id);
-          uploadedIds.push(response.id);
-          console.log('uploaded file: ', response);
+          uploadedIds.push(response);
         } catch (err) {
           console.error('File upload failed:', err);
           alert(`Failed to upload ${file.name}`);
         }
       }
       setUploadingFiles(false);
+      
+      // Update the temp message with real attachment data
+      setMessages(prev => prev.map(m => {
+        if (m.id === tempId) {
+          return {
+            ...m,
+            attachments: uploadedIds.map(att => ({
+              id: att.id,
+              fileName: att.fileName || filesToUpload[0]?.name || 'File',
+              fileSize: att.fileSize,
+              thumbnailAvailable: att.thumbnailAvailable,
+              uploading: false
+            }))
+          };
+        }
+        return m;
+      }));
     }
 
-    if (uploadedIds.length > 0 || filesToUpload.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
+    // Text-only message
     if (filesToUpload.length === 0) {
       const tempMessage = {
-        id: `temp-${Date.now()}`,
+        id: tempId,
         senderId: user.id,
         content: content || '',
         type: conversation.type,
@@ -488,17 +519,18 @@ const Chat = () => {
       
       setMessages(prev => [...prev, tempMessage]);
       
-      // Scroll after temp message
+      const wasAtBottom = checkIfAtBottom();
       if (wasAtBottom) {
         setTimeout(() => scrollToBottom(true), 50);
       }
     }
 
+    // Send via WebSocket
     const messagePayload = {
       senderId: user.id,
       content: content || '',
       type: conversation.type,
-      attachmentIds: uploadedIds.length > 0 ? uploadedIds : undefined
+      attachmentIds: uploadedIds.length > 0 ? uploadedIds.map(a => a.id) : undefined
     };
 
     if (conversation.type === 'DIRECT') {
