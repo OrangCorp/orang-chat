@@ -348,10 +348,6 @@ public class ConversationService {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
-        if (conversation.getType() != Conversation.ConversationType.GROUP) {
-            throw new BadRequestException("Cannot delete a direct conversation");
-        }
-
         ConversationParticipant requester = conversation.getParticipants().stream()
                 .filter(p -> p.getUserId().equals(requesterId))
                 .findFirst()

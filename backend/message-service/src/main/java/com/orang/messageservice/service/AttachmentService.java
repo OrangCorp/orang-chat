@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -74,7 +76,7 @@ public class AttachmentService {
         log.info("User {} uploaded attachment {} to conversation {}",
                 uploaderId, saved.getId(), conversationId);
 
-        thumbnailService.requestThumbnailGeneration(saved);
+        requestThumbnailGenerationAfterCommit(saved);
         return saved;
     }
 
@@ -208,5 +210,23 @@ public class AttachmentService {
         if (contentType == null || !FileType.isSupported(contentType)) {
             throw new BadRequestException("Unsupported file type: " + contentType);
         }
+    }
+
+    private void requestThumbnailGenerationAfterCommit(Attachment attachment) {
+        if (!thumbnailService.supportsFileType(attachment.getFileType())) {
+            return;
+        }
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    thumbnailService.requestThumbnailGeneration(attachment);
+                }
+            });
+            return;
+        }
+
+        thumbnailService.requestThumbnailGeneration(attachment);
     }
 }
