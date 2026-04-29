@@ -52,6 +52,12 @@ public class ChatController {
                     "/queue/messages",
                     message
             );
+
+            messagingTemplate.convertAndSendToUser(
+                message.getSenderId().toString(),
+                "/queue/messages",
+                message
+            );
         }
 
         if (!MessageType.TYPING.equals(message.getType())) {
