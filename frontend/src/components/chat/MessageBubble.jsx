@@ -80,7 +80,7 @@ const AttachmentItem = ({ attachment }) => {
     
     // ===== THUMBNAIL FLAG =====
     // Set to true when backend thumbnail generation is fixed
-    const THUMBNAILS_ENABLED = false;
+    const THUMBNAILS_ENABLED = true;
     // ==========================
     
     // Images
@@ -133,7 +133,7 @@ const AttachmentItem = ({ attachment }) => {
   const fileInfo = getFileInfo(attachment.fileName);
 
   // Only fetch thumbnail for images
-  /*
+  
   useEffect(() => {
     let cancelled = false;
     
@@ -158,7 +158,7 @@ const AttachmentItem = ({ attachment }) => {
       if (thumbnailSrc) URL.revokeObjectURL(thumbnailSrc);
     };
   }, [thumbnailSrc]);
-  */
+  
 
   if (attachment.uploading) {
     return (

@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+// Register service worker for push notifications
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
@@ -14,31 +15,39 @@ if ('serviceWorker' in navigator) {
         console.error('Service Worker registration failed:', error);
       });
   });
-}
 
-navigator.serviceWorker.addEventListener('message', (event) => {
-  const { type, url } = event.data || {};
-  console.log('📨 SW message:', type);
-  
-  switch (type) {
-    case 'contact_request':
-      window.dispatchEvent(new CustomEvent('refresh-notifications'));
-      break;
-    case 'new_message':
-    case 'reaction':
-    case 'mention':
-    case 'group_added':
-      // These are handled by WebSocket in Chat component
-      break;
-    default:
-      console.log('Unknown notification type:', type);
-  }
-  
-  // If notification was clicked, navigate
-  if (type === 'NOTIFICATION_CLICKED' && url) {
-    window.location.href = url;
-  }
-});
+  // Listen for messages from service worker
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const { type, url } = event.data || {};
+    console.log('📨 SW message:', type);
+
+    switch (type) {
+      case 'contact_request':
+        window.dispatchEvent(new CustomEvent('refresh-notifications'));
+        break;
+      case 'new_message':
+        window.dispatchEvent(new CustomEvent('new_message', { detail: event.data }));
+        break;
+      case 'reaction':
+        window.dispatchEvent(new CustomEvent('reaction', { detail: event.data }));
+        break;
+      case 'mention':
+        window.dispatchEvent(new CustomEvent('mention', { detail: event.data }));
+        break;
+      case 'group_added':
+        // Forward to Header via custom event
+        window.dispatchEvent(new CustomEvent('sw-message', { detail: event.data }));
+        break;
+      case 'NOTIFICATION_CLICKED':
+        if (url) {
+          window.location.href = url;
+        }
+        break;
+      default:
+        console.log('Unknown notification type:', type);
+    }
+  });
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

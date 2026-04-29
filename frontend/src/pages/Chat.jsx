@@ -725,6 +725,17 @@ const Chat = () => {
     }
   };
 
+  const handleDeleteDirectConversation = async () => {
+    if (!window.confirm('Delete this conversation? This will remove it from your list.')) return;
+    try {
+      await messageService.deleteConversation(conversation.id);
+      navigate('/');
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+      alert('Failed to delete conversation');
+    }
+  };
+
   const loadContactsForAdd = async () => {
     setContactsLoading(true);
     try {
@@ -1335,6 +1346,15 @@ const Chat = () => {
                 </Typography>
               )}
             </Box>
+
+            {/* Delete button for DIRECT conversations only */}
+            {conversation.type === 'DIRECT' && (
+              <Tooltip title="Delete conversation">
+                <IconButton onClick={handleDeleteDirectConversation} sx={{ color: 'error.main' }}>
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
+            )}
 
             <Tooltip title={muted ? 'Unmute notifications' : 'Mute notifications'}>
               <IconButton onClick={toggleMute} disabled={muteLoading}>
