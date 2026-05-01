@@ -16,7 +16,13 @@ import java.util.UUID;
 @Repository
 public interface MessageRepository extends JpaRepository<Message, UUID> {
 
-    Page<Message> findByConversationIdOrderByCreatedAtDesc(UUID conversationId, Pageable pageable);
+        @Query(value = """
+                SELECT m FROM Message m
+                WHERE m.conversationId = :conversationId
+                    AND m.deletedAt IS NULL
+                ORDER BY m.createdAt DESC
+                """)
+        Page<Message> findByConversationIdOrderByCreatedAtDesc(@Param("conversationId") UUID conversationId, Pageable pageable);
 
     @Query(value = """
         SELECT 
@@ -34,14 +40,16 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             m.created_at
         FROM messages m
         WHERE m.conversation_id = :conversationId
-          AND m.search_vector @@ websearch_to_tsquery('simple', :query)
+                    AND m.deleted_at IS NULL
+                    AND m.search_vector @@ websearch_to_tsquery('simple', :query)
         ORDER BY rank DESC, m.created_at DESC
         """,
             countQuery = """
             SELECT COUNT(*)
             FROM messages m
             WHERE m.conversation_id = :conversationId
-              AND m.search_vector @@ websearch_to_tsquery('simple', :query)
+                            AND m.deleted_at IS NULL
+                            AND m.search_vector @@ websearch_to_tsquery('simple', :query)
             """,
             nativeQuery = true)
     Page<MessageRepositoryProjection> searchMessages(
@@ -49,42 +57,46 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             @Param("query") String query,
             Pageable pageable);
 
-    @Query(value = """
-        SELECT m FROM Message m
-        WHERE m.conversationId = :conversationId
-          AND m.createdAt < :timestamp
-        ORDER BY m.createdAt DESC
-        """)
+        @Query(value = """
+                SELECT m FROM Message m
+                WHERE m.conversationId = :conversationId
+                    AND m.createdAt < :timestamp
+                    AND m.deletedAt IS NULL
+                ORDER BY m.createdAt DESC
+                """)
     List<Message> findMessagesBeforeTimestamp(
             @Param("conversationId") UUID conversationId,
             @Param("timestamp") LocalDateTime timestamp,
             Pageable pageable);
 
-    @Query(value = """
-        SELECT m FROM Message m
-        WHERE m.conversationId = :conversationId
-          AND m.createdAt > :timestamp
-        ORDER BY m.createdAt ASC
-        """)
+        @Query(value = """
+                SELECT m FROM Message m
+                WHERE m.conversationId = :conversationId
+                    AND m.createdAt > :timestamp
+                    AND m.deletedAt IS NULL
+                ORDER BY m.createdAt ASC
+                """)
     List<Message> findMessagesAfterTimestamp(
             @Param("conversationId") UUID conversationId,
             @Param("timestamp") LocalDateTime timestamp,
             Pageable pageable);
 
-    @Query("""
-        SELECT COUNT(m) > 0 FROM Message m
-        WHERE m.conversationId = :conversationId
-          AND m.createdAt < :timestamp
-        """)
+        @Query("""
+                SELECT COUNT(m) > 0 FROM Message m
+                WHERE m.conversationId = :conversationId
+                    AND m.createdAt < :timestamp
+                    AND m.deletedAt IS NULL
+                """)
     boolean existsOlderMessages(
             @Param("conversationId") UUID conversationId,
             @Param("timestamp") LocalDateTime timestamp);
 
-    @Query("""
-        SELECT COUNT(m) > 0 FROM Message m
-        WHERE m.conversationId = :conversationId
-          AND m.createdAt > :timestamp
-        """)
+        @Query("""
+                SELECT COUNT(m) > 0 FROM Message m
+                WHERE m.conversationId = :conversationId
+                    AND m.createdAt > :timestamp
+                    AND m.deletedAt IS NULL
+                """)
     boolean existsNewerMessages(
             @Param("conversationId") UUID conversationId,
             @Param("timestamp") LocalDateTime timestamp);
@@ -125,6 +137,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
         SELECT COUNT(m) > 0 FROM Message m
         WHERE m.id = :messageId
         AND m.conversationId = :conversationId
+        AND m.deletedAt IS NULL
         """)
     boolean existsByIdAndConversationId(
             @Param("messageId") UUID messageId,
