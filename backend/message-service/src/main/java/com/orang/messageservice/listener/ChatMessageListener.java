@@ -11,6 +11,8 @@ import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -54,19 +56,22 @@ public class ChatMessageListener {
                 conversationId = conversation.getId();
             }
 
-                messageService.saveMessage(
-                    conversationId,
-                    event.getSenderId(),
-                    event.getContent(),
-                    event.getAttachmentIds(),
-                    event.getReplyToMessageId(),
-                    event.getMessageId()
-                );
+            messageService.saveMessage(
+                conversationId,
+                event.getSenderId(),
+                event.getContent(),
+                event.getAttachmentIds(),
+                event.getReplyToMessageId(),
+                event.getMessageId()
+            );
 
             log.info("Message saved successfully to conversation {}", conversationId);
         } catch (AmqpRejectAndDontRequeueException e) {
             log.warn("Rejecting invalid message payload without requeue: {}", e.getMessage());
             throw e;
+        } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException e) {
+            // Message already exists (duplicate retry) - just log and skip
+            log.info("Message {} was already saved, skipping retry: {}", event.getMessageId(), e.getMessage());
         } catch (Exception e) {
             log.error("Error saving message", e);
             throw new RuntimeException("Error saving message", e);

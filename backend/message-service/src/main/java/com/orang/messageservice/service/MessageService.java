@@ -54,12 +54,12 @@ public class MessageService {
     }
 
     @Transactional
-        public MessageResponse saveMessage(UUID conversationId,
-                                           UUID senderId,
-                                           String content,
-                                           List<UUID> attachmentIds,
-                                           UUID replyToMessageId,
-                                           UUID messageId) {  // optional external id
+    public MessageResponse saveMessage(UUID conversationId,
+                                       UUID senderId,
+                                       String content,
+                                       List<UUID> attachmentIds,
+                                       UUID replyToMessageId,
+                                       UUID messageId) {
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -70,10 +70,15 @@ public class MessageService {
                     "User " + senderId + " is not a participant in conversation " + conversationId);
         }
 
-        // ── NEW: Validate reply reference ────────────────────────
-        // Message must exist AND belong to this conversation.
-        // If invalid, we drop the reply reference silently.
-        // The message still saves — we never reject over a bad reply.
+        // If a client-generated messageId was provided and the message already exists,
+        // return the existing message (handles duplicate/retry scenarios)
+        if (messageId != null && messageRepository.existsById(messageId)) {
+            log.info("Message {} already exists, returning existing", messageId);
+            Message existing = messageRepository.findById(messageId).orElseThrow();
+            return messageMapper.toMessageResponse(existing);
+        }
+
+        // Validate reply reference
         UUID validatedReplyToId = null;
         if (replyToMessageId != null) {
             boolean replyExists = messageRepository.existsByIdAndConversationId(
@@ -85,8 +90,8 @@ public class MessageService {
                         replyToMessageId, conversationId);
             }
         }
-        // ─────────────────────────────────────────────────────────
 
+        // Build the message - let the database generate the ID
         Message message = Message.builder()
                 .conversationId(conversationId)
                 .senderId(senderId)
@@ -94,26 +99,17 @@ public class MessageService {
                 .replyToMessageId(validatedReplyToId)
                 .build();
 
-        // If an external messageId was provided (from websocket optimistic send), preserve it.
-                if (messageId != null) {
-                        // Reject duplicate client-provided ids to avoid overwriting existing messages
-                        if (messageRepository.existsById(messageId)) {
-                                throw new IllegalArgumentException("Message id already exists: " + messageId);
-                        }
-                        message.setId(messageId);
-                }
-
-        Message saved = messageRepository.saveAndFlush(message);
+        // Save without setting ID - database generates a new UUID
+        Message saved = messageRepository.save(message);
 
         if (attachmentIds != null && !attachmentIds.isEmpty()) {
             attachmentService.linkAttachmentsToMessage(attachmentIds, saved.getId(), senderId);
             saved = messageRepository.findById(saved.getId()).orElseThrow();
         }
 
-        // ── NEW: Extract, validate, and save mentions ────────────
+        // Process mentions
         Set<UUID> participantIds = new HashSet<>(conversation.getParticipantIds());
         processMentions(saved, participantIds);
-        // ─────────────────────────────────────────────────────────
 
         messageEventPublisher.publishMessageSent(
                 saved.getId(),

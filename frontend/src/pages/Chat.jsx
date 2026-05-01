@@ -310,7 +310,7 @@ const Chat = () => {
             }
           }
 
-          const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
+          const messageWithId = { ...message, id: message.messageId || `ws-${Date.now()}` };
 
           // No more GROUP self‑ignore – backend sends our own messages back now
           setMessages(prev => {
