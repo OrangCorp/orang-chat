@@ -182,6 +182,7 @@ const Chat = () => {
       setConversation(found);
 
       const messagePage = await messageService.getMessages(chatId, 0, 50);
+      console.log(messagePage);
       setMessages(messagePage.content.reverse());
       setHasMore(!messagePage.last);
       setPage(0);
@@ -435,6 +436,35 @@ const Chat = () => {
 
     chatService.sendMessage(messagePayload);
     setSending(false);
+  };
+
+  const handleEditMessage = async (messageId, newContent) => {
+    try {
+      await messageService.editMessage(messageId, newContent);
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: newContent, edited: true } : m));
+    } catch (err) {
+      console.error('Edit failed:', err);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      await messageService.deleteMessage(messageId);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
+  const handleReaction = async (messageId, reactionType) => {
+    try {
+      await messageService.toggleReaction(messageId, reactionType);
+      // Optionally re-fetch reactions (or update locally)
+      const updatedReactions = await messageService.getReactions(messageId);
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: updatedReactions } : m));
+    } catch (err) {
+      console.error('Reaction failed:', err);
+    }
   };
 
   const loadMore = async () => {
@@ -1113,13 +1143,16 @@ const Chat = () => {
           <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: '#f5f5f5' }}>
             {contextData.messages.map((msg) => (
               <MessageBubble
-                key={msg.id}
+                key={msg.id || i}
                 message={msg}
                 isOwn={msg.senderId === user.id}
                 senderName={getDisplayName(msg.senderId)}
                 senderAvatar={getAvatar(msg.senderId)}
                 time={getMessageTime(msg)}
                 onAvatarClick={() => handleProfileClick(msg.senderId)}
+                onEdit={handleEditMessage}
+                onDelete={handleDeleteMessage}
+                onReaction={handleReaction}
                 highlight={msg.id === contextData.targetMessageId}
               />
             ))}
@@ -1152,6 +1185,9 @@ const Chat = () => {
                 senderAvatar={getAvatar(msg.senderId)}
                 time={getMessageTime(msg)}
                 onAvatarClick={() => handleProfileClick(msg.senderId)}
+                onEdit={handleEditMessage}
+                onDelete={handleDeleteMessage}
+                onReaction={handleReaction}
               />
             ))}
           </Box>
@@ -1379,9 +1415,9 @@ const Chat = () => {
                   multiline 
                   maxRows={4}
                   onKeyDown={(e) => { 
-                    if (e.key === 'Enter' && !e.shiftKey) { 
-                      e.preventDefault(); 
-                      handleSend(e); 
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend(e);
                     } 
                   }} 
                 />

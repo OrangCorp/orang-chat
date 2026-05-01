@@ -114,6 +114,7 @@ class ChatService {
     const { senderId, recipientId, conversationId, content, type, attachmentIds, replyToMessageId } = messagePayload;
 
     const formattedMessage = {
+      //messageId: crypto.randomUUID(),
       senderId,
       content,
       type,
