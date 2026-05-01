@@ -1,11 +1,12 @@
-// AuthService.js - Fixed initialization order
-import { Client } from '@stomp/stompjs';
-
+// AuthService.js - Simplified with just two boolean flags
 class AuthService {
   constructor() {
     if (AuthService.instance) {
       return AuthService.instance;
     }
+
+    this.attemptedAuth = false;  // Have we tried to authenticate?
+    this.isAuthenticated = false; // Are we actually authenticated?
 
     this.accessToken = null;
     this.refreshToken = null;
@@ -13,16 +14,8 @@ class AuthService {
     
     // Token refresh configuration
     this.refreshTimer = null;
-    this.refreshThresholdMs = 60000; // Refresh 1 minute before expiry
+    this.refreshThresholdMs = 60000;
     this.tokenExpiryTime = null;
-    
-    // STOMP client configuration
-    this.stompClient = null;
-    this.heartbeatInterval = null;
-    this.heartbeatDelayMs = 30000; // Send heartbeat every 30 seconds
-    this.isActive = true;
-    this.activityListeners = [];
-    this.isConnecting = false;
     
     // API endpoints
     this.apiBaseUrl = '/api';
@@ -33,16 +26,10 @@ class AuthService {
   // ==================== Initialization ====================
   
   async initialize() {
-    // Only load tokens from storage, DON'T auto-connect
+    console.log('AuthService: Starting initialization...');
     this.loadTokensFromStorage();
-    
-    
-    // If we have tokens, schedule refresh but DON'T auto-connect WebSocket yet
-    if (this.refreshToken && this.accessToken) {
-      this.scheduleTokenRefresh();
-      // Note: WebSocket will be connected only when explicitly called
-      // (e.g., after login or when user navigates to chat)
-    }
+    this.attemptedAuth = true;
+    console.log('AuthService: Initialization complete, isAuthenticated:', this.isAuthenticated);
   }
 
   loadTokensFromStorage() {
@@ -53,12 +40,33 @@ class AuthService {
       const storedExpiry = localStorage.getItem('tokenExpiryTime');
       
       if (storedAccessToken && storedRefreshToken) {
+        const tokenExpiryTime = storedExpiry ? parseInt(storedExpiry) : null;
+        const isExpired = tokenExpiryTime && Date.now() >= tokenExpiryTime - 30000;
+        
         this.accessToken = storedAccessToken;
         this.refreshToken = storedRefreshToken;
         this.userInfo = storedUserInfo ? JSON.parse(storedUserInfo) : null;
-        this.tokenExpiryTime = storedExpiry ? parseInt(storedExpiry) : null;
+        this.tokenExpiryTime = tokenExpiryTime;
+        this.isAuthenticated = true;
         
-        console.log('Tokens loaded from storage');
+        if (isExpired) {
+          console.log('Stored access token is expired, attempting to refresh...');
+          this.refreshAccessToken()
+            .then(() => {
+              console.log('Successfully refreshed token on load');
+            })
+            .catch((error) => {
+              console.error('Failed to refresh token on load, clearing auth:', error);
+              this.isAuthenticated = false;
+              this.clearAuth();
+            });
+        } else {
+          console.log('Tokens loaded from storage, expires in', 
+            Math.round((this.tokenExpiryTime - Date.now()) / 1000), 'seconds');
+          this.scheduleTokenRefresh();
+        }
+      } else {
+        this.isAuthenticated = false;
       }
     }
   }
@@ -66,6 +74,7 @@ class AuthService {
   // ==================== Authentication Methods ====================
 
   async login(email, password) {
+    this.attemptedAuth = true;
     try {
       const response = await fetch(`${this.apiBaseUrl}/auth/login`, {
         method: 'POST',
@@ -82,15 +91,16 @@ class AuthService {
 
       const authResponse = await response.json();
       this.handleAuthResponse(authResponse);
-      // Don't auto-connect WebSocket here - let the app decide when to connect
       return authResponse;
     } catch (error) {
       console.error('Login error:', error);
+      this.isAuthenticated = false;
       throw error;
     }
   }
 
   async register(email, password, displayName) {
+    this.attemptedAuth = true;
     try {
       const response = await fetch(`${this.apiBaseUrl}/auth/register`, {
         method: 'POST',
@@ -105,11 +115,56 @@ class AuthService {
         throw new Error(error.message || 'Registration failed');
       }
 
+      const registrationResponse = await response.json();
+      // Don't set isAuthenticated yet - need email verification
+      return registrationResponse;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    }
+  }
+
+  async verifyEmail(email, code) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/verify-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, code }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Verification failed');
+      }
+
       const authResponse = await response.json();
       this.handleAuthResponse(authResponse);
       return authResponse;
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Email verification error:', error);
+      throw error;
+    }
+  }
+
+  async resendVerification(email) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to resend verification code');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Resend verification error:', error);
       throw error;
     }
   }
@@ -127,12 +182,12 @@ class AuthService {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      this.isAuthenticated = false;
       this.clearAuth();
     }
   }
 
   handleAuthResponse(authResponse) {
-    // Store tokens
     this.accessToken = authResponse.accessToken;
     this.refreshToken = authResponse.refreshToken;
     this.userInfo = {
@@ -140,11 +195,9 @@ class AuthService {
       email: authResponse.email,
       displayName: authResponse.displayName,
     };
-    
-    // Calculate expiry time (convert expiresIn from seconds to milliseconds)
+
     this.tokenExpiryTime = Date.now() + (authResponse.expiresIn * 1000);
     
-    // Store in localStorage
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('accessToken', this.accessToken);
       localStorage.setItem('refreshToken', this.refreshToken);
@@ -152,13 +205,14 @@ class AuthService {
       localStorage.setItem('tokenExpiryTime', this.tokenExpiryTime.toString());
       console.log('Tokens stored in localStorage');
     }
-    
-    // Schedule token refresh
+
+    this.isAuthenticated = true;
     this.scheduleTokenRefresh();
   }
 
   async refreshAccessToken() {
     if (!this.refreshToken) {
+      this.isAuthenticated = false;
       throw new Error('No refresh token available');
     }
 
@@ -182,6 +236,7 @@ class AuthService {
       return authResponse;
     } catch (error) {
       console.error('Token refresh error:', error);
+      this.isAuthenticated = false;
       this.clearAuth();
       throw error;
     }
@@ -206,78 +261,6 @@ class AuthService {
     }
   }
 
-
-  // ==================== Public API Methods with Token Management ====================
-
-  async authenticatedFetch(url, options = {}) {
-    // Check if token is about to expire
-    if (this.tokenExpiryTime && (this.tokenExpiryTime - Date.now()) < this.refreshThresholdMs) {
-      console.log('Token about to expire, refreshing...');
-      await this.refreshAccessToken();
-    }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.accessToken}`,
-      ...options.headers,
-    };
-
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    // If unauthorized, try to refresh token and retry once
-    if (response.status === 401) {
-      console.log('Received 401, attempting token refresh...');
-      try {
-        await this.refreshAccessToken();
-        // Retry with new token
-        headers['Authorization'] = `Bearer ${this.accessToken}`;
-        const retryResponse = await fetch(url, {
-          ...options,
-          headers,
-        });
-        return retryResponse;
-      } catch (error) {
-        this.clearAuth();
-        throw new Error('Session expired. Please login again.');
-      }
-    }
-
-    // Track activity on API calls
-    this.handleUserActivity();
-
-    return response;
-  }
-
-  async get(url) {
-    return this.authenticatedFetch(url, { method: 'GET' });
-  }
-
-  async post(url, data) {
-    return this.authenticatedFetch(url, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async put(url, data) {
-    return this.authenticatedFetch(url, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async delete(url) {
-    return this.authenticatedFetch(url, { method: 'DELETE' });
-  }
-
-  
-  isAuthenticated() {
-    return !!this.accessToken && !!this.refreshToken;
-  }
-
   getAccessToken() {
     return this.accessToken;
   }
@@ -290,16 +273,13 @@ class AuthService {
     return this.userInfo;
   }
 
-  getTokenExpiryTime() {
-    return this.tokenExpiryTime;
-  }
-
   clearAuth() {
     console.log('Clearing authentication data');
     this.accessToken = null;
     this.refreshToken = null;
     this.userInfo = null;
     this.tokenExpiryTime = null;
+    this.isAuthenticated = false;
     
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
@@ -316,10 +296,65 @@ class AuthService {
   }
 
   destroy() {
-    if (typeof document !== 'undefined') {
-    }
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
+    }
+  }
+
+  //password management
+  async forgotPassword(email) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send reset email');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
+    }
+  }
+
+  async validateResetToken(token) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/reset-password/validate?token=${encodeURIComponent(token)}`, {
+        method: 'GET',
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Validate token error:', error);
+      return false;
+    }
+  }
+
+  async resetPassword(token, newPassword) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token, newPassword }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to reset password');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Reset password error:', error);
+      throw error;
     }
   }
 }
@@ -327,9 +362,8 @@ class AuthService {
 // Create and export singleton instance
 const authService = new AuthService();
 
-// Initialize only in browser environment, but DON'T auto-connect WebSocket
+// Initialize in browser environment
 if (typeof window !== 'undefined') {
-  // Only load tokens, don't connect WebSocket
   authService.initialize().catch(console.error);
 }
 

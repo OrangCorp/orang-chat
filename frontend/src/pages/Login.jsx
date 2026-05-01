@@ -19,11 +19,7 @@ const Login = () => {
       sx={{ 
         p: 4, 
         width: '100%',
-        borderRadius: 4 // MUI spacing unit (4 = 32px)
-        // Or use a specific value:
-        // borderRadius: '20px'
-        // Or extra rounded:
-        // borderRadius: 8 // 64px - very rounded!
+        borderRadius: 4
       }}
     >
       <Typography variant="h4" align="center" gutterBottom>
@@ -41,8 +37,7 @@ const Login = () => {
           helperText={errors.email?.message}
           sx={{
             '& .MuiOutlinedInput-root': {
-              borderRadius: '20px 8px 20px 8px', // top-left, top-right, bottom-right, bottom-left
-              // This makes top corners very rounded, bottom corners slightly rounded
+              borderRadius: '20px 8px 20px 8px',
             }
           }}
         />
@@ -57,8 +52,7 @@ const Login = () => {
           helperText={errors.password?.message}
           sx={{
             '& .MuiOutlinedInput-root': {
-              borderRadius: '20px 8px 20px 8px', // top-left, top-right, bottom-right, bottom-left
-              // This makes top corners very rounded, bottom corners slightly rounded
+              borderRadius: '20px 8px 20px 8px',
             }
           }}
         />
@@ -70,10 +64,10 @@ const Login = () => {
           sx={{ 
             mt: 3,
             borderRadius: '20px 8px 20px 8px',
-            display: 'block',     // Makes margin auto work
-            mx: 'auto',           // Horizontal margin auto = centered
-            px: 4,                // Optional: add some horizontal padding
-            minWidth: '100px'     // Optional: set a minimum width
+            display: 'block',
+            mx: 'auto',
+            px: 4,
+            minWidth: '100px'
           }}
           disabled={loading}
         >
@@ -90,6 +84,18 @@ const Login = () => {
             sx={{ textTransform: 'none' }}
           >
             Sign up
+          </Button>
+        </Typography>
+      </Box>
+      
+      <Box sx={{ mt: 1, textAlign: 'center' }}>
+        <Typography variant="body2">
+          <Button 
+            color="secondary" 
+            onClick={() => navigate('/verify-email')}
+            sx={{ textTransform: 'none' }}
+          >
+            Verify Email
           </Button>
         </Typography>
       </Box>
