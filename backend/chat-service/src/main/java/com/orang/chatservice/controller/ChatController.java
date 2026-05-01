@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @Controller
@@ -40,6 +41,10 @@ public class ChatController {
         presenceService.updateLastActivity(message.getSenderId().toString());
 
         message.setTimestamp(LocalDateTime.now());
+        // assign a client-visible message id so frontend can correlate optimistic messages
+        if (message.getMessageId() == null) {
+            message.setMessageId(UUID.randomUUID());
+        }
 
         if (shouldRouteToGroupTopic(message)) {
             messagingTemplate.convertAndSend(

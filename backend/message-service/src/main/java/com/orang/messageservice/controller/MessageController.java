@@ -92,7 +92,8 @@ public class MessageController {
                 userUUID,
                 request.getContent(),
                 request.getAttachmentIds(),
-                request.getReplyToMessageId()
+                request.getReplyToMessageId(),
+                request.getMessageId()
         );
         return ResponseEntity.ok(response);
     }

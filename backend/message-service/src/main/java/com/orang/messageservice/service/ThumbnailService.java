@@ -43,10 +43,19 @@ public class ThumbnailService {
 
     /**
      * Requests async thumbnail generation for an attachment.
-     * Does nothing if the file type is not supported.
+     * Does nothing if the file type is not supported or unknown.
      */
     public void requestThumbnailGeneration(Attachment attachment) {
-        if (!supportsFileType(attachment.getFileType())) {
+        FileType fileType;
+        try {
+            fileType = attachment.getFileType();
+        } catch (IllegalArgumentException e) {
+            // Unknown or unsupported content type - skip silently
+            log.debug("Skipping thumbnail generation for unknown content type: {}", attachment.getContentType());
+            return;
+        }
+
+        if (!supportsFileType(fileType)) {
             return;
         }
 
@@ -54,7 +63,7 @@ public class ThumbnailService {
                 .attachmentId(attachment.getId())
                 .conversationId(attachment.getConversationId())
                 .storageKey(attachment.getStorageKey())
-                .fileType(attachment.getFileType())
+                .fileType(fileType)
                 .build();
 
         rabbitTemplate.convertAndSend(
