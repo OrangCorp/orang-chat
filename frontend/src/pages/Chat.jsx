@@ -35,7 +35,6 @@ import attachmentService from '../services/attachmentService';
 import MessageBubble from '../components/chat/MessageBubble';
 import { emitConversationUpdated } from '../utils/conversationEvents';
 
-// Role display helper
 const getRoleLabel = (role) => {
   switch (role) {
     case 'ADMIN': return 'Admin';
@@ -98,18 +97,14 @@ const Chat = () => {
   const [contactsLoading, setContactsLoading] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
 
-  // Mute state
   const [muted, setMuted] = useState(false);
   const [muteLoading, setMuteLoading] = useState(false);
 
-  // Attachment state
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
   useEffect(() => {
-    if (conversation?.id) {
-      loadMuteStatus();
-    }
+    if (conversation?.id) loadMuteStatus();
   }, [conversation]);
 
   const loadMuteStatus = async () => {
@@ -139,7 +134,6 @@ const Chat = () => {
     }
   };
 
-  // Helper: check scroll position
   const checkIfAtBottom = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return true;
@@ -147,9 +141,7 @@ const Chat = () => {
     return scrollTop + clientHeight >= scrollHeight - 10;
   }, []);
 
-  const updateIsAtBottom = useCallback(() => {
-    setIsAtBottom(checkIfAtBottom());
-  }, [checkIfAtBottom]);
+  const updateIsAtBottom = useCallback(() => setIsAtBottom(checkIfAtBottom()), [checkIfAtBottom]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -171,7 +163,6 @@ const Chat = () => {
     }
   }, [checkIfAtBottom, updateIsAtBottom]);
 
-  // Reset typing state when chat changes
   useEffect(() => {
     typingCooldownRef.current = false;
     typingTimersRef.current.forEach(clearTimeout);
@@ -181,7 +172,6 @@ const Chat = () => {
     setSelectedFiles([]);
   }, [chatId]);
 
-  // Load conversation & messages
   const loadConversationData = useCallback(async () => {
     if (!chatId || !user) return;
     setLoading(true);
@@ -204,7 +194,6 @@ const Chat = () => {
         setParticipants(profiles);
       }
 
-      // Use requestAnimationFrame instead of setTimeout
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
       });
@@ -214,10 +203,9 @@ const Chat = () => {
     } finally {
       setLoading(false);
     }
-  }, [chatId, user]); // ONLY chatId and user - NOT scrollToBottom!
+  }, [chatId, user]);
 
   const loadedChatIdRef = useRef(null);
-
   useEffect(() => {
     if (chatId !== loadedChatIdRef.current) {
       loadedChatIdRef.current = chatId;
@@ -232,7 +220,9 @@ const Chat = () => {
     };
   }, []);
 
-  // WebSocket setup
+  // =========================================================================
+  // WebSocket setup – simplified: no temp messages, no GROUP self‑ignore
+  // =========================================================================
   useEffect(() => {
     if (!conversation || !user || !chatId) return;
     if (subscriptionSetupRef.current) return;
@@ -244,48 +234,37 @@ const Chat = () => {
           console.log('Chat service not connected, connecting...');
           await chatService.connect();
         }
-        
+
         const handleMessage = async (message) => {
-          // Filter out messages that don't belong to the current conversation
+          // Filter irrelevant conversations
           if (message.type === 'DIRECT') {
             const otherParticipant = conversation.participants?.find(p => p.userId !== user.id);
-            const isRelevantMessage = 
+            const isRelevant =
               message.senderId === otherParticipant?.userId ||
               message.recipientId === otherParticipant?.userId;
-            
-            if (!isRelevantMessage) {
-              return;
-            }
+            if (!isRelevant) return;
           }
-          
           if (message.type === 'GROUP') {
-            if (message.conversationId !== conversation.id) {
-              return;
-            }
+            if (message.conversationId !== conversation.id) return;
           }
 
-          // Handle TYPING messages
+          // Typing indicators
           if (message.type === 'TYPING') {
             const { senderId } = message;
-            
             if (senderId === user.id) return;
-            
             if (conversation.type === 'DIRECT') {
               const otherParticipant = conversation.participants?.find(p => p.userId !== user.id);
               if (senderId !== otherParticipant?.userId) return;
             }
-            
             if (typingTimersRef.current.has(senderId)) {
               clearTimeout(typingTimersRef.current.get(senderId));
               typingTimersRef.current.delete(senderId);
             }
-            
             setTypingUsers(prev => {
               const next = new Set(prev);
               next.add(senderId);
               return next;
             });
-            
             const timer = setTimeout(() => {
               setTypingUsers(prev => {
                 const next = new Set(prev);
@@ -294,14 +273,12 @@ const Chat = () => {
               });
               typingTimersRef.current.delete(senderId);
             }, 5000);
-            
             typingTimersRef.current.set(senderId, timer);
             return;
           }
 
-          // Handle regular messages
+          // Regular messages
           if ((message.type === 'DIRECT' || message.type === 'GROUP') && message.senderId) {
-            // Remove typing indicator when a message is sent
             if (typingTimersRef.current.has(message.senderId)) {
               clearTimeout(typingTimersRef.current.get(message.senderId));
               typingTimersRef.current.delete(message.senderId);
@@ -311,46 +288,36 @@ const Chat = () => {
                 return next;
               });
             }
-            
             if (message.senderId !== user.id) {
               await userService.getProfile(message.senderId).catch(() => null);
             }
           }
-          
-          // ===== SIMPLIFIED LOGIC HERE =====
-          // For our own messages in GROUP chats - ignore them (temp message already shown)
-          if (message.senderId === user.id && message.type === 'GROUP') {
-            return;
+
+          // Fetch attachment details if needed
+          if (message.attachmentIds?.length > 0) {
+            try {
+              const attachmentDetails = await Promise.all(
+                message.attachmentIds.map(id =>
+                  fetch(`/api/attachments/${id}`, {
+                    headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+                  }).then(r => r.json())
+                )
+              );
+              message.attachments = attachmentDetails;
+            } catch (err) {
+              console.error('Failed to fetch attachment details:', err);
+            }
           }
 
-         if (message.attachmentIds?.length > 0) {
-          try {
-            const attachmentDetails = await Promise.all(
-              message.attachmentIds.map(id => 
-                fetch(`/api/attachments/${id}`, {
-                  headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-                }).then(r => r.json())
-              )
-            );
-            // Assign to message BEFORE spreading
-            message.attachments = attachmentDetails;
-            console.log('📎 Fetched attachment details:', attachmentDetails);
-          } catch (err) {
-            console.error('Failed to fetch attachment details:', err);
-          }
-        }
+          const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
 
-        const messageWithId = { ...message, id: message.id || `ws-${Date.now()}` };
-        console.log('✅ Adding message with attachments:', messageWithId.attachments?.length);
+          // No more GROUP self‑ignore – backend sends our own messages back now
+          setMessages(prev => {
+            const existingRealMessage = prev.findIndex(m => m.id === message.id);
+            if (existingRealMessage !== -1) return prev;
+            return [...prev, messageWithId];
+          });
 
-        setMessages(prev => {
-          const existingRealMessage = prev.findIndex(m => m.id === message.id);
-          if (existingRealMessage !== -1) return prev;
-          return [...prev, messageWithId];
-        });
-          // ===== END SIMPLIFIED LOGIC =====
-          
-          // Scroll to bottom if needed
           const container = messagesContainerRef.current;
           if (container) {
             const { scrollTop, scrollHeight, clientHeight } = container;
@@ -360,32 +327,34 @@ const Chat = () => {
             }
           }
         };
-        
+
         if (conversation.type === 'DIRECT') {
           chatService.subscribeToPrivateMessages(handleMessage);
-        } else if (conversation.type === 'GROUP') {
+        } else {
           chatService.subscribeToGroup(conversation.id, handleMessage);
         }
-      } catch (err) { 
-        console.error('WebSocket subscription failed:', err); 
+      } catch (err) {
+        console.error('WebSocket subscription failed:', err);
       }
     };
-    
+
     setupSubscriptions();
-    
+
     return () => {
       subscriptionSetupRef.current = false;
       if (conversation) {
         if (conversation.type === 'DIRECT') {
           chatService.unsubscribe('/user/queue/messages');
-        } else if (conversation.type === 'GROUP') {
+        } else {
           chatService.unsubscribe(`/topic/group/${conversation.id}`);
         }
       }
     };
   }, [conversation, user, chatId]);
 
-  // Send typing event
+  // =========================================================================
+  // Send message via WebSocket (no temp messages, no self‑ignore)
+  // =========================================================================
   const sendTyping = useCallback(() => {
     if (!chatService.isConnected()) return;
     if (typingCooldownRef.current) return;
@@ -406,10 +375,7 @@ const Chat = () => {
 
     chatService.sendTyping(typingMessage);
     typingCooldownRef.current = true;
-
-    setTimeout(() => {
-      typingCooldownRef.current = false;
-    }, 4000);
+    setTimeout(() => { typingCooldownRef.current = false; }, 4000);
   }, [conversation, user]);
 
   const handleTyping = (e) => {
@@ -419,7 +385,6 @@ const Chat = () => {
     sendTyping();
   };
 
-  // File handling
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -431,7 +396,6 @@ const Chat = () => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Send message - handleSend
   const handleSend = async (e) => {
     e.preventDefault();
     if ((!input.trim() && selectedFiles.length === 0) || sending || !conversation) return;
@@ -440,41 +404,10 @@ const Chat = () => {
     setSending(true);
 
     let uploadedIds = [];
-    const filesToUpload = [...selectedFiles];
-    
-    // Store the temp message ID so we can update it later
-    const tempId = `temp-${Date.now()}`;
-    
-    if (filesToUpload.length > 0) {
+    if (selectedFiles.length > 0) {
       setUploadingFiles(true);
       setSelectedFiles([]);
-      
-      const tempMessage = {
-        id: tempId,
-        senderId: user.id,
-        content: content || '',
-        type: conversation.type,
-        ...(conversation.type === 'DIRECT' 
-          ? { recipientId: conversation.participants?.find(p => p.userId !== user.id)?.userId }
-          : { conversationId: conversation.id }
-        ),
-        createdAt: new Date().toISOString(),
-        attachments: filesToUpload.map(f => ({
-          id: `uploading-${Math.random()}`,
-          fileName: f.name,
-          uploading: true
-        }))
-      };
-      
-      setMessages(prev => [...prev, tempMessage]);
-      
-      // Scroll after temp message
-      const wasAtBottom = checkIfAtBottom();
-      if (wasAtBottom) {
-        setTimeout(() => scrollToBottom(true), 50);
-      }
-      
-      for (const file of filesToUpload) {
+      for (const file of selectedFiles) {
         try {
           const response = await attachmentService.upload(file, conversation.id);
           uploadedIds.push(response);
@@ -484,48 +417,8 @@ const Chat = () => {
         }
       }
       setUploadingFiles(false);
-      
-      // Update the temp message with real attachment data
-      setMessages(prev => prev.map(m => {
-        if (m.id === tempId) {
-          return {
-            ...m,
-            attachments: uploadedIds.map(att => ({
-              id: att.id,
-              fileName: att.fileName || filesToUpload[0]?.name || 'File',
-              fileSize: att.fileSize,
-              thumbnailAvailable: att.thumbnailAvailable,
-              uploading: false
-            }))
-          };
-        }
-        return m;
-      }));
     }
 
-    // Text-only message
-    if (filesToUpload.length === 0) {
-      const tempMessage = {
-        id: tempId,
-        senderId: user.id,
-        content: content || '',
-        type: conversation.type,
-        ...(conversation.type === 'DIRECT' 
-          ? { recipientId: conversation.participants?.find(p => p.userId !== user.id)?.userId }
-          : { conversationId: conversation.id }
-        ),
-        createdAt: new Date().toISOString()
-      };
-      
-      setMessages(prev => [...prev, tempMessage]);
-      
-      const wasAtBottom = checkIfAtBottom();
-      if (wasAtBottom) {
-        setTimeout(() => scrollToBottom(true), 50);
-      }
-    }
-
-    // Send via WebSocket
     const messagePayload = {
       senderId: user.id,
       content: content || '',
@@ -539,7 +432,7 @@ const Chat = () => {
     } else {
       messagePayload.conversationId = conversation.id;
     }
-    
+
     chatService.sendMessage(messagePayload);
     setSending(false);
   };
