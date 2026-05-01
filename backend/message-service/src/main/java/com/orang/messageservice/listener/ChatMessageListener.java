@@ -54,13 +54,14 @@ public class ChatMessageListener {
                 conversationId = conversation.getId();
             }
 
-            messageService.saveMessage(
+                messageService.saveMessage(
                     conversationId,
                     event.getSenderId(),
                     event.getContent(),
                     event.getAttachmentIds(),
-                    event.getReplyToMessageId()
-            );
+                    event.getReplyToMessageId(),
+                    event.getMessageId()
+                );
 
             log.info("Message saved successfully to conversation {}", conversationId);
         } catch (AmqpRejectAndDontRequeueException e) {

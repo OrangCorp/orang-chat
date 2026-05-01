@@ -25,4 +25,7 @@ public class CreateMessageRequest {
     private List<UUID> attachmentIds;
 
     private UUID replyToMessageId;
+    
+    // Optional client-provided optimistic message id
+    private UUID messageId;
 }

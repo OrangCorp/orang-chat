@@ -54,11 +54,12 @@ public class MessageService {
     }
 
     @Transactional
-    public MessageResponse saveMessage(UUID conversationId,
-                                       UUID senderId,
-                                       String content,
-                                       List<UUID> attachmentIds,
-                                       UUID replyToMessageId) {  // ── NEW
+        public MessageResponse saveMessage(UUID conversationId,
+                                           UUID senderId,
+                                           String content,
+                                           List<UUID> attachmentIds,
+                                           UUID replyToMessageId,
+                                           UUID messageId) {  // optional external id
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -92,6 +93,15 @@ public class MessageService {
                 .content(content)
                 .replyToMessageId(validatedReplyToId)
                 .build();
+
+        // If an external messageId was provided (from websocket optimistic send), preserve it.
+                if (messageId != null) {
+                        // Reject duplicate client-provided ids to avoid overwriting existing messages
+                        if (messageRepository.existsById(messageId)) {
+                                throw new IllegalArgumentException("Message id already exists: " + messageId);
+                        }
+                        message.setId(messageId);
+                }
 
         Message saved = messageRepository.saveAndFlush(message);
 
