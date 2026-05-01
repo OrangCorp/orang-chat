@@ -101,8 +101,11 @@ public class AttachmentController {
 
         if (!Boolean.TRUE.equals(attachment.getThumbnailGenerated()) ||
                 attachment.getThumbnailStorageKey() == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Thumbnail not available");
+            return ResponseEntity.status(HttpStatus.TOO_EARLY)
+                    .body(new ThumbnailErrorResponse(
+                            "THUMBNAIL_NOT_READY",
+                            "Thumbnail is still being generated"
+                    ));
         }
 
         // Mode 1: Return presigned URL (client downloads directly from MinIO)
@@ -155,4 +158,7 @@ public class AttachmentController {
                 .thumbnailUrl(thumbnailUrl)
                 .build();
     }
+
+        private record ThumbnailErrorResponse(String code, String message) {
+        }
 }
