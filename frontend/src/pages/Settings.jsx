@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box, Paper, Typography, Button, Alert, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField,
+  Switch, FormControlLabel, Divider, Chip
 } from '@mui/material';
-import { Mail as MailIcon, Lock as LockIcon } from '@mui/icons-material';
+import { 
+  Mail as MailIcon, 
+  Lock as LockIcon, 
+  Notifications as NotificationsIcon,
+  NotificationsOff as NotificationsOffIcon 
+} from '@mui/icons-material';
 import authService from '../services/authService';
+import notificationService from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
 
 const Settings = () => {
@@ -16,6 +23,76 @@ const Settings = () => {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState(null);
   const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  // Push notifications state
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushError, setPushError] = useState(null);
+  const [pushStatus, setPushStatus] = useState('disabled'); // 'disabled' | 'enabled' | 'unsupported'
+
+  // Check push notification status on mount
+  useEffect(() => {
+    checkPushStatus();
+  }, []);
+
+  const checkPushStatus = async () => {
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushStatus('unsupported');
+      return;
+    }
+
+    try {
+      const permission = Notification.permission;
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      
+      if (permission === 'granted' && subscription) {
+        setPushEnabled(true);
+        setPushStatus('enabled');
+      } else if (permission === 'denied') {
+        setPushEnabled(false);
+        setPushStatus('disabled');
+      } else {
+        setPushEnabled(false);
+        setPushStatus('disabled');
+      }
+    } catch (err) {
+      console.debug('Could not check push status:', err);
+      setPushStatus('unsupported');
+    }
+  };
+
+  const handlePushToggle = async (e) => {
+    const enable = e.target.checked;
+    setPushLoading(true);
+    setPushError(null);
+
+    try {
+      if (enable) {
+        // Request permission and subscribe
+        const granted = await notificationService.requestPermission();
+        if (!granted) {
+          setPushError('Notification permission was denied. Please enable it in your browser settings.');
+          setPushEnabled(false);
+          return;
+        }
+        await notificationService.subscribeToPush();
+        setPushEnabled(true);
+        setPushStatus('enabled');
+      } else {
+        // Unsubscribe from push
+        await notificationService.unsubscribeFromPush();
+        setPushEnabled(false);
+        setPushStatus('disabled');
+      }
+    } catch (err) {
+      console.error('Failed to toggle push notifications:', err);
+      setPushError(err.message || 'Failed to update notification settings');
+      setPushEnabled(!enable);
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const handleForgotPassword = async () => {
     setForgotError(null);
@@ -58,6 +135,66 @@ const Settings = () => {
         </Box>
         
         <Box sx={{ p: 3 }}>
+          {/* Notifications Section */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <NotificationsIcon color="primary" />
+            <Typography variant="h6">Notifications</Typography>
+          </Box>
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Receive push notifications for new messages, reactions, mentions, and contact requests.
+            You can disable these at any time.
+          </Typography>
+          
+          {pushStatus === 'unsupported' ? (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Push notifications are not supported in your browser. Please use a modern browser like Chrome or Firefox.
+            </Alert>
+          ) : (
+            <>
+              {pushError && (
+                <Alert severity="error" sx={{ mb: 2 }}>{pushError}</Alert>
+              )}
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                <Box>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={pushEnabled}
+                        onChange={handlePushToggle}
+                        disabled={pushLoading || Notification.permission === 'denied'}
+                      />
+                    }
+                    label={
+                      <Typography variant="body1">
+                        {pushLoading ? 'Updating...' : pushEnabled ? 'Push notifications enabled' : 'Push notifications disabled'}
+                      </Typography>
+                    }
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 4, display: 'block' }}>
+                    {pushEnabled 
+                      ? 'You will receive notifications for new messages, reactions, and contact requests.'
+                      : Notification.permission === 'denied'
+                        ? 'Notifications are blocked in your browser settings. Please update your browser permissions to enable them.'
+                        : 'Enable to receive notifications even when you\'re not actively using the app.'
+                    }
+                  </Typography>
+                </Box>
+                <Chip 
+                  icon={pushEnabled ? <NotificationsIcon /> : <NotificationsOffIcon />}
+                  label={pushEnabled ? 'Active' : 'Inactive'}
+                  color={pushEnabled ? 'success' : 'default'}
+                  size="small"
+                  variant="outlined"
+                />
+              </Box>
+            </>
+          )}
+
+          <Divider sx={{ my: 3 }} />
+
+          {/* Security Section */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <LockIcon color="primary" />
             <Typography variant="h6">Security</Typography>

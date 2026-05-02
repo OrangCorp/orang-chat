@@ -17,34 +17,20 @@ if ('serviceWorker' in navigator) {
   });
 
   // Listen for messages from service worker
+  // main.jsx - Keep the SW message listener but ONLY dispatch custom events
   navigator.serviceWorker.addEventListener('message', (event) => {
     const { type, url } = event.data || {};
-    console.log('📨 SW message:', type);
+    console.log('📨 SW message:', type, event.data);
 
-    switch (type) {
-      case 'contact_request':
-        window.dispatchEvent(new CustomEvent('refresh-notifications'));
-        break;
-      case 'new_message':
-        window.dispatchEvent(new CustomEvent('new_message', { detail: event.data }));
-        break;
-      case 'reaction':
-        window.dispatchEvent(new CustomEvent('reaction', { detail: event.data }));
-        break;
-      case 'mention':
-        window.dispatchEvent(new CustomEvent('mention', { detail: event.data }));
-        break;
-      case 'group_added':
-        // Forward to Header via custom event
-        window.dispatchEvent(new CustomEvent('sw-message', { detail: event.data }));
-        break;
-      case 'NOTIFICATION_CLICKED':
-        if (url) {
-          window.location.href = url;
-        }
-        break;
-      default:
-        console.log('Unknown notification type:', type);
+    // Forward ALL push notification types as a single custom event
+    const pushTypes = ['new_message', 'reaction', 'mention', 'group_added', 'member_added', 'new_chat', 'message_deleted', 'message_edited'];
+    
+    if (pushTypes.includes(type)) {
+      window.dispatchEvent(new CustomEvent('sw-message', { detail: event.data }));
+    } else if (type === 'contact_request') {
+      window.dispatchEvent(new CustomEvent('refresh-notifications'));
+    } else if (type === 'NOTIFICATION_CLICKED' && url) {
+      window.location.href = url;
     }
   });
 }

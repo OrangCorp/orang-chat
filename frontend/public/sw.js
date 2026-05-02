@@ -1,4 +1,4 @@
-// public/sw.js - Updated to forward immediately
+// public/sw.js - Silent push notifications (no popups, in-app only)
 let pendingNotifications = [];
 
 self.addEventListener('push', event => {
@@ -18,9 +18,6 @@ self.addEventListener('push', event => {
     body: data.body || 'You have a new notification',
     icon: data.icon || '/logo192.png',
     url: data.url || data.data?.url || '/',
-    contactId: data.contactId || data.data?.contactId,
-    requesterId: data.requesterId || data.data?.requesterId,
-    recipientId: data.recipientId || data.data?.recipientId,
     conversationId: data.conversationId || data.data?.conversationId,
     messageId: data.messageId || data.data?.messageId,
     timestamp: Date.now()
@@ -31,7 +28,7 @@ self.addEventListener('push', event => {
   // Store for missed notifications
   pendingNotifications.push(notificationData);
   
-  // IMMEDIATELY forward to all open app windows
+  // IMMEDIATELY forward to all open app windows (in-app only, no popup)
   self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
     console.log(`📤 Forwarding notification to ${clients.length} open windows`);
     clients.forEach(client => {
@@ -39,19 +36,7 @@ self.addEventListener('push', event => {
     });
   });
   
-  // Show browser notification
-  const options = {
-    body: notificationData.body,
-    icon: notificationData.icon,
-    badge: '/badge.png',
-    tag: `notification-${Date.now()}`,
-    requireInteraction: true,
-    data: notificationData
-  };
-  
-  event.waitUntil(
-    self.registration.showNotification(notificationData.title, options)
-  );
+  // NO showNotification - silent mode, in-app only
 });
 
 // Handle messages from the app
@@ -76,13 +61,11 @@ self.addEventListener('message', event => {
   }
 });
 
-// Handle notification click
+// Handle notification click - not needed since we don't show popups
+// but keeping it in case the backend sends requireInteraction
 self.addEventListener('notificationclick', event => {
-  console.log('👆 Notification clicked');
   event.notification.close();
-  
   const urlToOpen = event.notification.data?.url || '/';
-  
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
       for (const client of clientList) {
