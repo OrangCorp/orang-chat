@@ -1,40 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+// Header.jsx - Full updated with message/reaction notifications
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AppBar,
-  Toolbar,
-  Box,
-  Button,
-  TextField,
-  InputAdornment,
-  Popper,
-  Paper,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemAvatar,
-  ListItemText,
-  Avatar,
-  CircularProgress,
-  ClickAwayListener,
-  IconButton,
-  Menu,
-  MenuItem,
-  Typography,
-  Divider,
-  Badge,
-  Tooltip
+  AppBar, Toolbar, Box, Button, TextField, InputAdornment, Popper, Paper,
+  List, ListItem, ListItemButton, ListItemAvatar, ListItemText, Avatar,
+  CircularProgress, ClickAwayListener, IconButton, Menu, MenuItem,
+  Typography, Divider, Badge, Tooltip
 } from '@mui/material';
-import { 
-  Search as SearchIcon, 
-  Chat as ChatIcon,
-  Person as PersonIcon,
-  Settings as SettingsIcon,
-  Logout as LogoutIcon,
+import {
+  Search as SearchIcon, Chat as ChatIcon, Person as PersonIcon,
+  Settings as SettingsIcon, Logout as LogoutIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   Notifications as NotificationsIcon,
-  Check as CheckIcon,
-  Close as CloseIcon
+  Check as CheckIcon, Close as CloseIcon,
+  Message as MessageIcon,
+  ThumbUp as ReactionIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
@@ -58,16 +38,17 @@ const Header = () => {
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
-  // Notifications
+  // Notifications state
   const [notificationsAnchor, setNotificationsAnchor] = useState(null);
-  const [notifications, setNotifications] = useState([]);
+  const [contactRequests, setContactRequests] = useState([]);
+  const [pushNotifications, setPushNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+
+  const unreadCount = contactRequests.length + pushNotifications.length;
 
   // Load current user profile
   useEffect(() => {
     if (!user?.id) return;
-
     const loadUserProfile = async () => {
       try {
         setProfileLoading(true);
@@ -84,54 +65,166 @@ const Header = () => {
         setProfileLoading(false);
       }
     };
-
     loadUserProfile();
   }, [user]);
 
-  // Load notifications (incoming contact requests)
-  const loadNotifications = async () => {
-    if (!user?.id) return;
+  // ------------------------------------------------------------------
+  // Push notification handling
+  // ------------------------------------------------------------------
+  const addPushNotification = useCallback(async (data) => {
+    const { type, title, body, conversationId, messageId, url, senderId } = data || {};
+    let senderName = 'Someone';
+    let avatarUrl = null;
+    if (senderId) {
+      try {
+        const profile = await userService.getProfile(senderId);
+        senderName = profile?.displayName || 'Unknown';
+        avatarUrl = profile?.avatarUrl;
+      } catch (e) { /* ignore */ }
+    }
+    const newNotif = {
+      id: `push-${Date.now()}-${Math.random()}`,
+      type: type || 'unknown',
+      title: title || 'Notification',
+      body: body || '',
+      conversationId,
+      messageId,
+      senderId,
+      senderName,
+      avatarUrl,
+      url: url || (conversationId ? `/chat/${conversationId}` : '/'),
+      timestamp: new Date().toISOString(),
+    };
+    setPushNotifications(prev => [newNotif, ...prev]);
+  }, []);
 
+  // Listen for SW messages
+  useEffect(() => {
+    const handleSWMessage = async (event) => {
+      const data = event.detail || event.data;
+      if (!data) return;
+      const { type } = data || {};
+      if (type === 'new_message' || type === 'reaction' || type === 'mention' || type === 'group_added') {
+        await addPushNotification(data);
+      }
+    };
+
+    window.addEventListener('sw-message', handleSWMessage);
+    navigator.serviceWorker?.addEventListener('message', handleSWMessage);
+
+    // Check for missed notifications
+    navigator.serviceWorker?.ready.then(reg => {
+      if (reg.active) reg.active.postMessage({ type: 'CHECK_MISSED' });
+    });
+
+    return () => {
+      window.removeEventListener('sw-message', handleSWMessage);
+      navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
+    };
+  }, [addPushNotification]);
+
+  const handleDismissPush = (id) => {
+    setPushNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handlePushClick = (notification) => {
+    if (notification.url) navigate(notification.url);
+    handleDismissPush(notification.id);
+    setNotificationsAnchor(null);
+  };
+
+  // ------------------------------------------------------------------
+  // Contact request handling
+  // ------------------------------------------------------------------
+  const loadContactRequests = useCallback(async () => {
+    if (!user?.id) return;
     try {
       setNotificationsLoading(true);
-      const incomingRequests = await userService.getIncomingRequests();
+      const incomingRequests = await userService.getIncomingRequests(true);
 
-      const formatted = incomingRequests.map(req => ({
-        id: req.id,
-        userId: req.requesterId,
-        displayName: req.requesterDisplayName,
-        avatarUrl: req.requesterAvatarUrl,
-        status: req.status,
-        createdAt: req.createdAt,
-        read: false,
-        direction: 'incoming'
-      }));
+      const requesterIds = [...new Set(incomingRequests.map(r => r.requesterId))];
+      let profileMap = new Map();
+      if (requesterIds.length > 0) {
+        try {
+          profileMap = await userService.getProfiles(requesterIds);
+        } catch (err) { /* ignore */ }
+      }
 
-      setNotifications(formatted);
-      setUnreadCount(formatted.filter(n => !n.read).length);
+      const formatted = incomingRequests.map(req => {
+        const profile = profileMap.get(req.requesterId);
+        return {
+          id: req.id,
+          userId: req.requesterId,
+          displayName: profile?.displayName || 'Unknown User',
+          avatarUrl: profile?.avatarUrl || null,
+          status: req.status,
+          createdAt: req.createdAt,
+          type: 'contact_request'
+        };
+      });
+
+      setContactRequests(formatted);
     } catch (error) {
-      console.error('Failed to load notifications:', error);
+      console.error('Failed to load contact requests:', error);
     } finally {
       setNotificationsLoading(false);
     }
-  };
-
-  // Refresh notifications every 30s
-  useEffect(() => {
-    if (!user?.id) return;
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
   }, [user?.id]);
 
-  // Logout
+  // Refresh on events
+  useEffect(() => {
+    const handleRefresh = () => loadContactRequests();
+    window.addEventListener('refresh-notifications', handleRefresh);
+    window.addEventListener('contact-request-resolved', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-notifications', handleRefresh);
+      window.removeEventListener('contact-request-resolved', handleRefresh);
+    };
+  }, [loadContactRequests]);
+
+  useEffect(() => {
+    if (user?.id) loadContactRequests();
+  }, [user?.id, loadContactRequests]);
+
+  const handleAcceptRequest = async (notification) => {
+    try {
+      await userService.acceptContactRequest(notification.id);
+      setContactRequests(prev => prev.filter(n => n.id !== notification.id));
+      window.dispatchEvent(new CustomEvent('contact-status-changed', { 
+        detail: { userId: notification.userId, status: 'ACCEPTED' } 
+      }));
+      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+        detail: { contactId: notification.id, userId: notification.userId } 
+      }));
+    } catch (error) {
+      console.error('Failed to accept request:', error);
+    }
+  };
+
+  const handleDeclineRequest = async (notification) => {
+    try {
+      await userService.rejectContactRequest(notification.id);
+      setContactRequests(prev => prev.filter(n => n.id !== notification.id));
+      window.dispatchEvent(new CustomEvent('contact-status-changed', { 
+        detail: { userId: notification.userId, status: null } 
+      }));
+      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+        detail: { contactId: notification.id, userId: notification.userId } 
+      }));
+    } catch (error) {
+      console.error('Failed to decline request:', error);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Logout, Profile menu, Search (unchanged)
+  // ------------------------------------------------------------------
   const handleLogout = () => {
     userService.clearCache();
     logout();
     navigate('/login');
   };
 
-  // Profile menu handlers
   const handleProfileMenuOpen = (e) => setProfileMenuAnchor(e.currentTarget);
   const handleProfileMenuClose = () => setProfileMenuAnchor(null);
   const handleProfileClick = () => {
@@ -143,46 +236,17 @@ const Header = () => {
     navigate('/settings');
   };
 
-  // Notifications menu
-  const handleNotificationsOpen = (e) => {
-    setNotificationsAnchor(e.currentTarget);
-    if (unreadCount > 0) {
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    }
-  };
+  const handleNotificationsOpen = (e) => setNotificationsAnchor(e.currentTarget);
   const handleNotificationsClose = () => setNotificationsAnchor(null);
 
-  const handleAcceptRequest = async (notification) => {
-    try {
-      await userService.acceptContactRequest(notification.id);
-      setNotifications(prev => prev.filter(n => n.id !== notification.id));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Failed to accept request:', error);
-    }
-  };
-
-  const handleDeclineRequest = async (notification) => {
-    try {
-      await userService.rejectContactRequest(notification.id);
-      setNotifications(prev => prev.filter(n => n.id !== notification.id));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Failed to decline request:', error);
-    }
-  };
-
-  // Search
+  // Search handlers
   useEffect(() => {
     if (searchQuery.trim().length < 2) {
       setSearchResults([]);
       setSearchOpen(false);
       return;
     }
-
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         setSearching(true);
@@ -196,7 +260,6 @@ const Header = () => {
         setSearching(false);
       }
     }, 300);
-
     return () => clearTimeout(searchTimeoutRef.current);
   }, [searchQuery, user?.id]);
 
@@ -221,6 +284,12 @@ const Header = () => {
   const getDisplayName = () => currentUserProfile?.displayName || user?.username || user?.email?.split('@')[0] || 'User';
   const getAvatarInitial = () => getDisplayName().charAt(0).toUpperCase();
 
+  // Combined notifications list
+  const allNotifications = [
+    ...contactRequests,
+    ...pushNotifications,
+  ].sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp));
+
   return (
     <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
       <Toolbar>
@@ -241,7 +310,6 @@ const Header = () => {
               endAdornment: searching && <InputAdornment position="end"><CircularProgress size={20} color="inherit" /></InputAdornment>
             }}
           />
-
           {searchOpen && (
             <ClickAwayListener onClickAway={() => setSearchOpen(false)}>
               <Popper open={searchOpen} anchorEl={searchAnchorRef.current} placement="bottom-start" sx={{ width: searchAnchorRef.current?.clientWidth, zIndex: 1300 }}>
@@ -277,15 +345,12 @@ const Header = () => {
 
           <Tooltip title="Profile & Settings">
             <Button onClick={handleProfileMenuOpen} sx={{ display: 'flex', alignItems: 'center', gap: 1, textTransform: 'none', color: 'white', borderRadius: 20, px: 2, py: 0.5, '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}>
-              <Badge color="success" variant="dot" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} overlap="circular" invisible={!currentUserProfile?.online}>
-                <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-                  {!profileLoading && getAvatarInitial()}
-                  {profileLoading && <CircularProgress size={24} sx={{ color: 'white' }} />}
-                </Avatar>
-              </Badge>
+              <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
+                {!profileLoading && getAvatarInitial()}
+                {profileLoading && <CircularProgress size={24} sx={{ color: 'white' }} />}
+              </Avatar>
               <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left' }}>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>{getDisplayName()}</Typography>
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>{currentUserProfile?.online ? 'Online' : 'Offline'}</Typography>
               </Box>
               <KeyboardArrowDownIcon sx={{ fontSize: 20 }} />
             </Button>
@@ -294,40 +359,78 @@ const Header = () => {
       </Toolbar>
 
       {/* Notifications dropdown */}
-      <Menu anchorEl={notificationsAnchor} open={Boolean(notificationsAnchor)} onClose={handleNotificationsClose} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }} PaperProps={{ sx: { mt: 1, width: 380, maxHeight: 500, borderRadius: 2, overflow: 'hidden' } }}>
+      <Menu
+        anchorEl={notificationsAnchor}
+        open={Boolean(notificationsAnchor)}
+        onClose={handleNotificationsClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { mt: 1, width: 420, maxHeight: 500, borderRadius: 2, overflow: 'hidden' } }}
+      >
         <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
           <Typography variant="subtitle1" fontWeight="bold">Notifications</Typography>
         </Box>
         <Divider />
-        {notificationsLoading ? (
+        {notificationsLoading && contactRequests.length === 0 && pushNotifications.length === 0 ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={32} /></Box>
-        ) : notifications.length === 0 ? (
+        ) : allNotifications.length === 0 ? (
           <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">No notifications</Typography></Box>
         ) : (
           <List sx={{ p: 0 }}>
-            {notifications.map((notification) => (
-              <React.Fragment key={notification.id}>
-                <ListItem sx={{ py: 2, px: 2 }}>
-                  <ListItemAvatar>
-                    <Avatar src={notification.avatarUrl}>{notification.displayName?.charAt(0).toUpperCase()}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={<Typography variant="body2" fontWeight="medium"><strong>{notification.displayName}</strong> sent you a request</Typography>}
-                    secondary={<Typography variant="caption" color="text.secondary">Pending approval • {notification.createdAt && new Date(notification.createdAt).toLocaleDateString()}</Typography>}
-                  />
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Accept">
-                      <IconButton size="small" color="success" onClick={() => handleAcceptRequest(notification)} sx={{ bgcolor: 'success.light', '&:hover': { bgcolor: 'success.main' } }}>
-                        <CheckIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Decline">
-                      <IconButton size="small" color="error" onClick={() => handleDeclineRequest(notification)} sx={{ bgcolor: 'error.light', '&:hover': { bgcolor: 'error.main' } }}>
+            {allNotifications.map((notif) => (
+              <React.Fragment key={notif.id}>
+                {notif.type === 'contact_request' ? (
+                  <ListItem sx={{ py: 2, px: 2 }}>
+                    <ListItemAvatar>
+                      <Avatar src={notif.avatarUrl}>{notif.displayName?.charAt(0).toUpperCase()}</Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={<Typography variant="body2" fontWeight="medium"><strong>{notif.displayName}</strong> sent you a request</Typography>}
+                      secondary={<Typography variant="caption" color="text.secondary">Pending approval • {notif.createdAt && new Date(notif.createdAt).toLocaleDateString()}</Typography>}
+                    />
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Tooltip title="Accept">
+                        <IconButton size="small" color="success" onClick={() => handleAcceptRequest(notif)} sx={{ bgcolor: 'success.light', '&:hover': { bgcolor: 'success.main' } }}>
+                          <CheckIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Decline">
+                        <IconButton size="small" color="error" onClick={() => handleDeclineRequest(notif)} sx={{ bgcolor: 'error.light', '&:hover': { bgcolor: 'error.main' } }}>
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </ListItem>
+                ) : (
+                  <ListItem
+                    component="div"
+                    onClick={() => handlePushClick(notif)}
+                    sx={{ py: 2, px: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                    secondaryAction={
+                      <IconButton edge="end" size="small" onClick={(e) => { e.stopPropagation(); handleDismissPush(notif.id); }}>
                         <CloseIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
-                  </Box>
-                </ListItem>
+                    }
+                  >
+                    <ListItemAvatar>
+                      <Avatar src={notif.avatarUrl}>
+                        {notif.type === 'new_message' || notif.type === 'mention' ? <MessageIcon /> : <ReactionIcon />}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={
+                        <Typography variant="body2" fontWeight="medium">
+                          <strong>{notif.senderName}</strong> {notif.body || notif.title}
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                )}
                 <Divider />
               </React.Fragment>
             ))}
@@ -338,12 +441,9 @@ const Header = () => {
       {/* Profile menu */}
       <Menu anchorEl={profileMenuAnchor} open={Boolean(profileMenuAnchor)} onClose={handleProfileMenuClose} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }} PaperProps={{ sx: { mt: 1, width: 280, borderRadius: 2, overflow: 'hidden' } }}>
         <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Badge color="success" variant="dot" anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} overlap="circular" invisible={!currentUserProfile?.online}>
-            <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 48, height: 48, bgcolor: 'secondary.main', border: '2px solid white' }}>{getAvatarInitial()}</Avatar>
-          </Badge>
+          <Avatar src={currentUserProfile?.avatarUrl} sx={{ width: 48, height: 48, bgcolor: 'secondary.main', border: '2px solid white' }}>{getAvatarInitial()}</Avatar>
           <Box>
             <Typography variant="subtitle1" fontWeight="bold">{getDisplayName()}</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>{currentUserProfile?.online ? 'Active now' : 'Offline'}</Typography>
           </Box>
         </Box>
         <Divider />

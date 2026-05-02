@@ -10,6 +10,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -25,17 +26,24 @@ public class ThumbnailReadyListener {
             key = "attachment.thumbnail.ready"
     ))
     public void handleThumbnailReady(ThumbnailReadyEvent event) {
-        log.info("Broadcasting thumbnail ready for attachment {} in conversation {}",
-                event.getAttachmentId(), event.getConversationId());
+        try {
+            log.info("Broadcasting thumbnail ready for attachment {} in conversation {}",
+                    event.getAttachmentId(), event.getConversationId());
 
-        messagingTemplate.convertAndSend(
-                "/topic/group." + event.getConversationId(),
-                Map.of(
-                        "type", "THUMBNAIL_READY",
-                        "attachmentId", event.getAttachmentId().toString(),
-                        "messageId", event.getMessageId() != null ? event.getMessageId().toString() : null,
-                        "thumbnailUrl", event.getThumbnailUrl()
-                )
-        );
+            // Use HashMap instead of Map.of() to allow null values
+            Map<String, String> payload = new HashMap<>();
+            payload.put("type", "THUMBNAIL_READY");
+            payload.put("attachmentId", event.getAttachmentId() != null ? event.getAttachmentId().toString() : null);
+            payload.put("messageId", event.getMessageId() != null ? event.getMessageId().toString() : null);
+            payload.put("thumbnailUrl", event.getThumbnailUrl());
+
+            messagingTemplate.convertAndSend(
+                    "/topic/group." + event.getConversationId(),
+                    payload
+            );
+        } catch (Exception e) {
+            log.warn("Failed to broadcast thumbnail ready event: {}", e.getMessage());
+            // Don't retry
+        }
     }
 }
