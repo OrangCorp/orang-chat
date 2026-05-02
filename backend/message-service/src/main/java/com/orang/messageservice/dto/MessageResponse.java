@@ -1,6 +1,8 @@
 package com.orang.messageservice.dto;
 
 import com.orang.messageservice.entity.FileType;
+import com.orang.messageservice.entity.ReactionType;
+import java.util.Map;
 import lombok.Builder;
 import lombok.Data;
 
@@ -26,6 +28,8 @@ public class MessageResponse {
 
     private ReplyPreview replyTo;
     private List<UUID> mentionedUserIds;
+    private Map<ReactionType, Long> reactionCounts;
+    private List<ReactionInfo> reactions;
 
     @Data
     @Builder
@@ -48,5 +52,14 @@ public class MessageResponse {
         private UUID senderId;
         private String contentPreview;
         private boolean deleted;
+    }
+
+    @Data
+    @Builder
+    public static class ReactionInfo {
+        private UUID id;
+        private UUID userId;
+        private ReactionType reactionType;
+        private java.time.LocalDateTime createdAt;
     }
 }
