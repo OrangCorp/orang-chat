@@ -100,7 +100,8 @@ public class MessageService {
                 .build();
 
         // Save without setting ID - database generates a new UUID
-        Message saved = messageRepository.save(message);
+        Message saved = messageRepository.saveAndFlush(message);
+        //log.info("Message persisted with ID: {}", saved.getId()); // ADD THIS
 
         if (attachmentIds != null && !attachmentIds.isEmpty()) {
             attachmentService.linkAttachmentsToMessage(attachmentIds, saved.getId(), senderId);
