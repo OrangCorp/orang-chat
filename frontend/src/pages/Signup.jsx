@@ -1,112 +1,164 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { Paper, TextField, Button, Typography, Box } from '@mui/material';
-import { useAuth } from '../context/AuthContext';
+import { Paper, TextField, Button, Typography, Box, Alert, CircularProgress } from '@mui/material';
+import authService from '../services/authService';
 
 const Signup = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm();
-  const { signup, loading } = useAuth();
   const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    displayName: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState(null);
 
-  const onSubmit = async (data) => {
-    const success = await signup(data.email, data.password, data.displayName);
-    if (success) navigate('/');
+  const validate = () => {
+    const newErrors = {};
+    
+    if (!formData.displayName || formData.displayName.length < 2) {
+      newErrors.displayName = 'Name must be at least 2 characters';
+    }
+    
+    if (!formData.email) {
+      newErrors.email = 'Email is required';
+    } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(formData.email)) {
+      newErrors.email = 'Invalid email address';
+    }
+    
+    if (!formData.password || formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
+    }
+    
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setApiError(null);
+    
+    if (!validate()) return;
+    
+    setLoading(true);
+    try {
+      const response = await authService.register(
+        formData.email, 
+        formData.password, 
+        formData.displayName
+      );
+      navigate('/verify-email', { state: { email: response.email } });
+    } catch (err) {
+      setApiError(err.message || 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Paper 
-      elevation={3} 
-      sx={{ 
-        p: 4, 
-        width: '100%',
-        borderRadius: 4 // MUI spacing unit (4 = 32px)
-        // Or use a specific value:
-        // borderRadius: '20px'
-        // Or extra rounded:
-        // borderRadius: 8 // 64px - very rounded!
-      }}
-    >
+    <Paper elevation={3} sx={{ p: 4, width: '100%', borderRadius: 4 }}>
       <Typography variant="h4" align="center" gutterBottom>
         Sign Up
       </Typography>
       
-      <form onSubmit={handleSubmit(onSubmit)}>
+      {apiError && <Alert severity="error" sx={{ mb: 2 }}>{apiError}</Alert>}
+      
+      <form onSubmit={handleSubmit}>
         <TextField
-          {...register('displayName', { required: 'Name is required' })}
-          label="Name"
-          type="text"
+          name="displayName"
+          label="Display Name"
           fullWidth
           margin="normal"
+          value={formData.displayName}
+          onChange={handleChange}
           error={!!errors.displayName}
-          helperText={errors.displayName?.message}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '20px 8px 20px 8px', // top-left, top-right, bottom-right, bottom-left
-              // This makes top corners very rounded, bottom corners slightly rounded
-            }
-          }}
+          helperText={errors.displayName}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '20px 8px 20px 8px' } }}
         />
+        
         <TextField
-          {...register('email', { required: 'Email is required' })}
+          name="email"
           label="Email"
           type="email"
           fullWidth
           margin="normal"
+          value={formData.email}
+          onChange={handleChange}
           error={!!errors.email}
-          helperText={errors.email?.message}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '20px 8px 20px 8px', // top-left, top-right, bottom-right, bottom-left
-              // This makes top corners very rounded, bottom corners slightly rounded
-            }
-          }}
+          helperText={errors.email}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '20px 8px 20px 8px' } }}
         />
         
         <TextField
-          {...register('password', { required: 'Password is required' })}
+          name="password"
           label="Password"
           type="password"
           fullWidth
           margin="normal"
+          value={formData.password}
+          onChange={handleChange}
           error={!!errors.password}
-          helperText={errors.password?.message}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '20px 8px 20px 8px', // top-left, top-right, bottom-right, bottom-left
-              // This makes top corners very rounded, bottom corners slightly rounded
-            }
-          }}
+          helperText={errors.password}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '20px 8px 20px 8px' } }}
+        />
+        
+        <TextField
+          name="confirmPassword"
+          label="Confirm Password"
+          type="password"
+          fullWidth
+          margin="normal"
+          value={formData.confirmPassword}
+          onChange={handleChange}
+          error={!!errors.confirmPassword}
+          helperText={errors.confirmPassword}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '20px 8px 20px 8px' } }}
         />
         
         <Button 
           type="submit" 
           variant="contained"
           size="large"
+          disabled={loading}
           sx={{ 
             mt: 3,
             borderRadius: '20px 8px 20px 8px',
-            display: 'block',     // Makes margin auto work
-            mx: 'auto',           // Horizontal margin auto = centered
-            px: 4,                // Optional: add some horizontal padding
-            minWidth: '100px'     // Optional: set a minimum width
+            display: 'block',
+            mx: 'auto',
+            px: 4,
+            minWidth: '120px'
           }}
-          disabled={loading}
         >
-          {loading ? 'Signing in...' : 'Sign Up'}
+          {loading ? <CircularProgress size={24} /> : 'Sign Up'}
         </Button>
       </form>
       
       <Box sx={{ mt: 2, textAlign: 'center' }}>
         <Typography variant="body2">
           Already have an account?{' '}
-          <Button 
-            color="primary" 
-            onClick={() => navigate('/login')}
-            sx={{ textTransform: 'none' }}
-          >
+          <Button color="primary" onClick={() => navigate('/login')} sx={{ textTransform: 'none' }}>
             Log In
           </Button>
         </Typography>
+      </Box>
+      
+      <Box sx={{ mt: 1, textAlign: 'center' }}>
+        <Button color="secondary" onClick={() => navigate('/verify-email')} sx={{ textTransform: 'none' }}>
+          Already have a code? Verify Email
+        </Button>
       </Box>
     </Paper>
   );

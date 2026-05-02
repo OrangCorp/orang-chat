@@ -1,158 +1,134 @@
-// AuthContext.js - Fixed infinite loop
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+// AuthContext.js - Activity-based presence only
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import authService from '../services/authService';
+import chatService from '../services/chatService';
+import notificationService from '../services/notificationService';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [webSocketConnected, setWebSocketConnected] = useState(false);
-  
-  // Use ref to track if we've already checked auth to prevent loops
-  const authCheckRef = useRef(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const activityTimeoutRef = useRef(null);
+  const lastHeartbeatRef = useRef(0);
+  const HEARTBEAT_THROTTLE_MS = 60000; // Max one heartbeat per minute
 
-  useEffect(() => {
-    const initializeAuth = async () => {
-      // Prevent multiple initializations
-      if (authCheckRef.current) return;
-      authCheckRef.current = true;
+  const syncAuthState = useCallback(() => {
+    const authIsAuthenticated = authService.isAuthenticated;
+    const userInfo = authService.getUserInfo();
+    
+    setIsAuthenticated(authIsAuthenticated);
+    
+    if (authIsAuthenticated && userInfo) {
+      const newUser = {
+        id: userInfo.userId,
+        email: userInfo.email,
+        displayName: userInfo.displayName,
+        accessToken: authService.getAccessToken(),
+        tokenType: 'Bearer',
+      };
       
-      // Just load tokens, don't connect WebSocket yet
-      if (authService.isAuthenticated()) {
-        const userInfo = authService.getUserInfo();
-        if (userInfo) {
-          setUser({
-            id: userInfo.userId,
-            email: userInfo.email,
-            displayName: userInfo.displayName,
-            accessToken: authService.getAccessToken(),
-            tokenType: 'Bearer',
-          });
+      // Only update if something actually changed
+      setUser(prev => {
+        if (!prev) return newUser;
+        if (prev.id === newUser.id && 
+            prev.accessToken === newUser.accessToken &&
+            prev.displayName === newUser.displayName) {
+          return prev; // No change
         }
-      }
-      setLoading(false);
-    };
+        return newUser;
+      });
+    } else if (!authIsAuthenticated) {
+      setUser(prev => prev ? null : prev);
+      localStorage.removeItem('user');
+    }
+  }, []);
 
-    initializeAuth();
+  const sendActivityHeartbeat = useCallback(() => {
+    if (!isAuthenticated || !chatService.isConnected()) return;
+    
+    const now = Date.now();
+    if (now - lastHeartbeatRef.current > HEARTBEAT_THROTTLE_MS) {
+      chatService.sendHeartbeat(false);
+      lastHeartbeatRef.current = now;
+    }
+  }, [isAuthenticated]);
 
-    // Set up an interval to check if token is still valid
-    // But don't cause re-renders unnecessarily
-    const checkAuthInterval = setInterval(() => {
-      const isAuth = authService.isAuthenticated();
-      if (!isAuth && user) {
-        // Only update state if user exists but auth is gone
-        setUser(null);
-        localStorage.removeItem('user');
-        setWebSocketConnected(false);
-      }
-    }, 30000); // Check every 30 seconds instead of 5
+  // Handle user activity
+  const handleUserActivity = useCallback(() => {
+    // Clear existing timeout
+    if (activityTimeoutRef.current) {
+      clearTimeout(activityTimeoutRef.current);
+    }
+    
+    // Send heartbeat immediately on activity
+    sendActivityHeartbeat();
+    
+    // Set timeout to mark as inactive after 5 minutes of no activity
+    // (This doesn't send anything, just clears the timeout reference)
+    activityTimeoutRef.current = setTimeout(() => {
+      activityTimeoutRef.current = null;
+    }, 300000);
+  }, [sendActivityHeartbeat]);
 
-    return () => {
-      clearInterval(checkAuthInterval);
-    };
-  }, []); // Empty dependency array - only run once on mount
-
-  // Separate effect for token refresh listener
+  // Sync with authService periodically
   useEffect(() => {
-    // Listen for token refresh events to update user state
-    const handleTokenRefresh = () => {
-      if (user) {
-        setUser(prevUser => ({
-          ...prevUser,
-          accessToken: authService.getAccessToken(),
-        }));
-        
-        // Update stored user
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          userData.accessToken = authService.getAccessToken();
-          localStorage.setItem('user', JSON.stringify(userData));
+    syncAuthState();
+    const interval = setInterval(syncAuthState, 2000);
+    return () => clearInterval(interval);
+  }, [syncAuthState]);
+
+  // Initialize chat service when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      chatService.connect().then(() => {
+        // Send initial heartbeat on connection
+        chatService.sendHeartbeat(true);
+        lastHeartbeatRef.current = Date.now();
+      }).catch(console.error);
+
+      notificationService.initialize()
+      .then(() => console.log('✅ Push notifications initialized'))
+      .catch(err => console.error('❌ Push init failed:', err));
+      
+      // Set up activity listeners
+      const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+      activityEvents.forEach(event => {
+        window.addEventListener(event, handleUserActivity);
+      });
+      
+      // Also track visibility changes (tab focus)
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          handleUserActivity();
         }
-      }
-    };
-
-    // You'll need to add an event emitter to authService for this
-    // For now, we can use a simple interval to sync token
-    const tokenSyncInterval = setInterval(() => {
-      if (user && authService.getAccessToken() !== user.accessToken) {
-        handleTokenRefresh();
-      }
-    }, 5000);
-
-    return () => {
-      clearInterval(tokenSyncInterval);
-    };
-  }, [user]); // Only depends on user, but won't cause loops because we're not setting user unconditionally
-
-  const connectWebSocket = async () => {
-    if (!user) {
-      console.warn('Cannot connect WebSocket: No user authenticated');
-      return false;
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        activityEvents.forEach(event => {
+          window.removeEventListener(event, handleUserActivity);
+        });
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        
+        if (activityTimeoutRef.current) {
+          clearTimeout(activityTimeoutRef.current);
+        }
+        
+        chatService.disconnect();
+      };
     }
-    
-    if (webSocketConnected) {
-      console.log('WebSocket already connected');
-      return true;
-    }
-    
-    try {
-      await authService.connectWebSocket();
-      setWebSocketConnected(true);
-      return true;
-    } catch (error) {
-      console.error('Failed to connect WebSocket:', error);
-      setWebSocketConnected(false);
-      return false;
-    }
-  };
-
-  const disconnectWebSocket = () => {
-    authService.disconnectWebSocket();
-    setWebSocketConnected(false);
-  };
+  }, [isAuthenticated, handleUserActivity]);
 
   const login = async (email, password) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const authResponse = await authService.login(email, password);
-      
-      const userData = {
-        id: authResponse.userId,
-        email: authResponse.email,
-        displayName: authResponse.displayName,
-        accessToken: authResponse.accessToken,
-        tokenType: authResponse.tokenType || 'Bearer',
-      };
-
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      setLoading(false);
-      return true;
-      
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-      return false;
-    }
+    const result = await authService.login(email, password);
+    syncAuthState();
+    return result;
   };
 
   const logout = async () => {
-    try {
-      await authService.logout();
-    } catch (err) {
-      console.error('Logout error:', err);
-    } finally {
-      setUser(null);
-      setError(null);
-      setWebSocketConnected(false);
-      localStorage.removeItem('user');
-    }
+    await authService.logout();
+    syncAuthState();
   };
 
   const signup = async (email, password, displayName) => {
@@ -160,82 +136,32 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     
     try {
-      const authResponse = await authService.register(email, password, displayName);
-      
-      const newUser = {
-        id: authResponse.userId,
-        email: authResponse.email,
-        displayName: authResponse.displayName,
-        accessToken: authResponse.accessToken,
-        tokenType: authResponse.tokenType || 'Bearer',
-      };
-
-      setUser(newUser);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      
+      const registrationResponse = await authService.register(email, password, displayName);
+      // Don't set user yet - need email verification
       setLoading(false);
-      return true;
-      
+      return registrationResponse;
     } catch (err) {
-      // Parse error message properly
       let errorMessage = 'Registration failed. Please try again.';
       
       if (err.message.includes('Email already registered')) {
         errorMessage = 'Email already registered';
       } else if (err.message.includes('Validation')) {
         errorMessage = err.message;
-      } else if (err.message.includes('displayName')) {
-        errorMessage = 'Invalid display name';
-      } else if (err.message.includes('password')) {
-        errorMessage = 'Password must be at least 8 characters';
       }
       
       setError(errorMessage);
       setLoading(false);
-      return false;
+      throw err;
     }
   };
 
-  const fetchWithAuth = async (url, options = {}) => {
-    try {
-      const response = await authService.authenticatedFetch(url, options);
-      return response;
-    } catch (error) {
-      console.error('Fetch with auth error:', error);
-      throw error;
-    }
-  };
-
-  const sendChatMessage = (messagePayload) => {
-    authService.sendChatMessage(messagePayload);
-  };
-
-  const sendHeartbeat = () => {
-    authService.sendHeartbeat();
-  };
-
-  const subscribeToTopic = (destination, callback) => {
-    return authService.subscribeToTopic(destination, callback);
-  };
-
-  // Memoize the context value to prevent unnecessary re-renders
   const contextValue = {
     user,
-    loading,
-    error,
-    webSocketConnected,
+    isAuthenticated,
     login,
     logout,
     signup,
-    fetchWithAuth,
-    sendChatMessage,
-    sendHeartbeat,
-    subscribeToTopic,
-    connectWebSocket,
-    disconnectWebSocket,
-    isAuthenticated: !!user,
     getAccessToken: () => authService.getAccessToken(),
-    refreshToken: () => authService.refreshAccessToken(),
   };
 
   return (
