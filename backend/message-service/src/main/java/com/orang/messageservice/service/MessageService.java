@@ -50,7 +50,7 @@ public class MessageService {
         }
 
         Page<Message> messages = messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
-        return messages.map(messageMapper::toMessageResponse);
+        return messages.map(m -> messageMapper.toMessageResponse(m, requesterId));
     }
 
     @Transactional
@@ -129,7 +129,7 @@ public class MessageService {
                 attachmentIds != null ? attachmentIds.size() : 0,
                 validatedReplyToId);
 
-        return messageMapper.toMessageResponse(saved);
+        return messageMapper.toMessageResponse(saved, senderId);
     }
 
     @Transactional
@@ -155,7 +155,7 @@ public class MessageService {
                 saved.getEditedAt()
         );
 
-        return messageMapper.toMessageResponse(saved);
+        return messageMapper.toMessageResponse(saved, userId);
     }
 
     @Transactional

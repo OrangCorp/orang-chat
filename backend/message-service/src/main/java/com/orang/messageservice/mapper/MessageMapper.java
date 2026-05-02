@@ -5,6 +5,12 @@ import com.orang.messageservice.entity.Attachment;
 import com.orang.messageservice.entity.Message;
 import com.orang.messageservice.repository.MessageMentionRepository;
 import com.orang.messageservice.repository.MessageRepository;
+import com.orang.messageservice.repository.MessageReactionRepository;
+import com.orang.messageservice.service.ReactionService;
+import com.orang.messageservice.entity.ReactionType;
+import com.orang.messageservice.entity.MessageReaction;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -18,8 +24,10 @@ public class MessageMapper {
 
     private final MessageRepository messageRepository;
     private final MessageMentionRepository messageMentionRepository;
+    private final ReactionService reactionService;
+    private final MessageReactionRepository messageReactionRepository;
 
-    public MessageResponse toMessageResponse(Message message) {
+    public MessageResponse toMessageResponse(Message message, java.util.UUID requesterId) {
         MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
                 .id(message.getId())
                 .conversationId(message.getConversationId())
@@ -54,6 +62,23 @@ public class MessageMapper {
         List<UUID> mentionedIds = messageMentionRepository
                 .findMentionedUserIdsByMessageId(message.getId());
         builder.mentionedUserIds(mentionedIds);
+
+        Map<ReactionType, Long> counts = reactionService.getReactionCounts(message.getId());
+        builder.reactionCounts(counts);
+
+        // `myReaction` removed — full reaction entries are available in `reactions` list.
+
+        List<MessageReaction> reactions = messageReactionRepository.findByMessageId(message.getId());
+        if (reactions != null && !reactions.isEmpty()) {
+            builder.reactions(reactions.stream().map(r -> MessageResponse.ReactionInfo.builder()
+                .id(r.getId())
+                .userId(r.getUserId())
+                .reactionType(r.getReactionType())
+                .createdAt(r.getCreatedAt())
+                .build()).collect(Collectors.toList()));
+        } else {
+            builder.reactions(java.util.Collections.emptyList());
+        }
 
         return builder.build();
     }

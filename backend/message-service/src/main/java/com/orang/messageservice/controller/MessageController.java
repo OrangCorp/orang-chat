@@ -136,6 +136,6 @@ public class MessageController {
         Page<Message> messages = messageRepository.findMentionedMessages(
                 userUUID, conversationId, pageable);
 
-        return ResponseEntity.ok(messages.map(messageMapper::toMessageResponse));
+        return ResponseEntity.ok(messages.map(m -> messageMapper.toMessageResponse(m, userUUID)));
     }
 }
