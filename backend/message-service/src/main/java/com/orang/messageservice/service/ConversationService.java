@@ -353,8 +353,11 @@ public class ConversationService {
                 .findFirst()
                 .orElseThrow(() -> new ForbiddenException("You are not a participant of this conversation"));
 
-        if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
-            throw new ForbiddenException("Only admins can delete the conversation");
+        // For direct conversations, any participant may delete the conversation.
+        if (conversation.getType() != Conversation.ConversationType.DIRECT) {
+            if (requester.getRole() != ConversationParticipant.ParticipantRole.ADMIN) {
+                throw new ForbiddenException("Only admins can delete the conversation");
+            }
         }
 
         conversationRepository.delete(conversation);
