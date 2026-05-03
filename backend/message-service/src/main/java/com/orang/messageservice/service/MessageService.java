@@ -101,6 +101,8 @@ public class MessageService {
 
         if (messageId != null) {
             builder.id(messageId);
+        } else {
+            builder.id(UUID.randomUUID());
         }
 
         Message message = builder.build();

@@ -1,5 +1,5 @@
 // services/userService.js
-const API_BASE_URL = '/api'; // Through gateway
+const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:8080/api';
 
 // Helper for auth headers
 const getHeaders = () => {
