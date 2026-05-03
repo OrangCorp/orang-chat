@@ -25,12 +25,16 @@ public class RabbitMQConfig {
     public static final String MESSAGE_NOTIFICATION_QUEUE = "notification.message.sent";
     public static final String REACTION_NOTIFICATION_QUEUE = "notification.reaction";
     public static final String MEMBER_ADDED_NOTIFICATION_QUEUE = "notification.member.added";
+    public static final String DIRECT_CONVERSATION_CREATED_NOTIFICATION_QUEUE =
+            RabbitMQConstants.DIRECT_CONVERSATION_CREATED_NOTIFICATION_QUEUE;
 
     // Routing keys (must match what publishers use!)
     public static final String MESSAGE_SENT_ROUTING_KEY = "message.sent";
     public static final String REACTION_ROUTING_KEY = "message.reaction";
     public static final String MEMBER_ADDED_ROUTING_KEY = "group.member.added";
     public static final String MENTION_ROUTING_KEY = "message.mention";
+    public static final String DIRECT_CONVERSATION_CREATED_ROUTING_KEY =
+            RabbitMQConstants.DIRECT_CONVERSATION_CREATED_KEY;
 
     @Bean
     public MessageConverter jsonMessageConverter() {
@@ -92,6 +96,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue directConversationCreatedNotificationQueue() {
+        return QueueBuilder.durable(DIRECT_CONVERSATION_CREATED_NOTIFICATION_QUEUE).build();
+    }
+
+    @Bean
     public Queue contactRequestNotificationQueue() {
         return QueueBuilder.durable(RabbitMQConstants.CONTACT_REQUEST_NOTIFICATION_QUEUE).build();
     }
@@ -130,6 +139,14 @@ public class RabbitMQConfig {
                 .bind(mentionNotificationQueue())
                 .to(chatExchange())
                 .with(MENTION_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding directConversationCreatedNotificationBinding() {
+        return BindingBuilder
+                .bind(directConversationCreatedNotificationQueue())
+                .to(chatExchange())
+                .with(DIRECT_CONVERSATION_CREATED_ROUTING_KEY);
     }
 
     @Bean
