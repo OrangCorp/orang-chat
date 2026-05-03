@@ -2,7 +2,7 @@ name: Deploy to Azure VM
 
 on:
   push:
-    branches: [test-deploy]
+    branches: [deployment-tests]
 
 jobs:
   deploy:
