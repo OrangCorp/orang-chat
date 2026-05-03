@@ -77,7 +77,7 @@ const Login = () => {
       
       <Box sx={{ mt: 2, textAlign: 'center' }}>
         <Typography variant="body2">
-          Don't have an account?{' '}
+          Don't have an account? Tough Luck!{' '}
           <Button 
             color="primary" 
             onClick={() => navigate('/signup')}
