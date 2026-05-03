@@ -1,6 +1,6 @@
 // services/notificationService.js
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:8080/api';
 
 const getHeaders = () => {
   const token = localStorage.getItem('accessToken');
@@ -147,7 +147,7 @@ class NotificationService {
       console.log('Endpoint:', subscription.endpoint);
       
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/push/subscribe', {
+      const response = await fetch(`${API_BASE_URL}/push/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

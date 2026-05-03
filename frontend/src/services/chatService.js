@@ -1,6 +1,8 @@
 // services/chatService.js
 import { Client } from '@stomp/stompjs';
 
+const WS_URL = import.meta.env.DEV ? '/ws' : `ws://${window.location.hostname}:8080/ws`;
+
 class ChatService {
   constructor() {
     if (ChatService.instance) {
