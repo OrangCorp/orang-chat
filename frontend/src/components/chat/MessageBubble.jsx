@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Paper, Typography, Avatar, IconButton, TextField, Button, Menu, MenuItem, Dialog, DialogTitle, List, ListItem, ListItemAvatar, ListItemText } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -14,7 +14,7 @@ import {
   Image as ImageIcon,
 } from '@mui/icons-material';
 
-const THUMBNAILS_ENABLED = false;
+const THUMBNAILS_ENABLED = true;
 
 // Reaction emoji mapping
 const REACTION_EMOJI = {
@@ -214,9 +214,10 @@ const MessageBubble = ({
   );
 };
 
-// AttachmentItem - unchanged
+// AttachmentItem
 const AttachmentItem = ({ attachment }) => {
   const [thumbnailSrc, setThumbnailSrc] = useState(null);
+  const retryTimeoutRef = useRef(null);
 
   const getFileInfo = (fileName) => {
     if (!fileName) return { icon: <InsertDriveFileIcon fontSize="small" />, type: 'file' };
@@ -236,12 +237,33 @@ const AttachmentItem = ({ attachment }) => {
 
   useEffect(() => {
     let cancelled = false;
-    if (fileInfo.type === 'image' && attachment.id && !attachment.uploading) {
-      attachmentService.getThumbnailBlobUrl(attachment.id)
-        .then(url => { if (!cancelled) setThumbnailSrc(url); })
-        .catch(() => { if (!cancelled) setThumbnailSrc(null); });
-    }
-    return () => { cancelled = true; };
+    
+    const fetchThumbnail = async () => {
+      if (!THUMBNAILS_ENABLED || fileInfo.type !== 'image' || !attachment.id || attachment.uploading) return;
+      
+      try {
+        const url = await attachmentService.getThumbnailBlobUrl(attachment.id);
+        if (!cancelled) setThumbnailSrc(url);
+      } catch (err) {
+        if (err?.status === 425) {
+          // Not ready yet - silently retry
+          if (!cancelled) {
+            retryTimeoutRef.current = setTimeout(fetchThumbnail, 2000);
+          }
+        }
+        // Other errors (404, 500) - just show icon, no retry
+      }
+    };
+    
+    fetchThumbnail();
+    
+    return () => {
+      cancelled = true;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
   }, [attachment.id, fileInfo.type, attachment.uploading]);
 
   useEffect(() => {

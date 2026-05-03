@@ -60,7 +60,21 @@ class AttachmentService {
     const response = await fetch(`${API_BASE_URL}/attachments/${attachmentId}/thumbnail`, {
       headers: getHeaders()
     });
-    if (!response.ok) throw new Error('Thumbnail failed');
+    
+    if (response.status === 425) {
+      // Thumbnail not ready yet - expected behavior, don't log as error
+      const error = new Error('Thumbnail not ready');
+      error.status = 425;
+      throw error;
+    }
+    
+    if (!response.ok) {
+      // Other errors - log but still throw silently
+      const error = new Error('Thumbnail failed');
+      error.status = response.status;
+      throw error;
+    }
+    
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }

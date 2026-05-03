@@ -458,9 +458,11 @@ const Chat = () => {
 
   const handleReaction = async (messageId, reactionType) => {
     try {
-      await messageService.toggleReaction(messageId, reactionType);
+      const responce = await messageService.toggleReaction(messageId, reactionType);
+      //console.log('reaction responce: ', responce);
       // Optionally re-fetch reactions (or update locally)
       const updatedReactions = await messageService.getReactions(messageId);
+      //console.log('updated reactions: ', updatedReactions);
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: updatedReactions } : m));
     } catch (err) {
       console.error('Reaction failed:', err);
