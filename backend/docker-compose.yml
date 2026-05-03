@@ -28,6 +28,18 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: orangchat-frontend
+    ports:
+      - "80:80"
+    networks:
+      - orangchat-network
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
 
   auth-service:
     build:

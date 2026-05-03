@@ -149,6 +149,48 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>check-core-services-coverage</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <includes>
+                                        <include>com/orang/messageservice/service/MessageService</include>
+                                        <include>com/orang/messageservice/service/ReactionService</include>
+                                        <include>com/orang/messageservice/service/MentionParserService</include>
+                                        <include>com/orang/messageservice/service/ConversationService</include>
+                                        <include>com/orang/messageservice/service/ReadReceiptService</include>
+                                        <include>com/orang/messageservice/service/PinnedMessageService</include>
+                                        <include>com/orang/messageservice/service/AttachmentService</include>
+                                        <include>com/orang/messageservice/service/MessageSearchService</include>
+                                        <include>com/orang/messageservice/service/GroupEventService</include>
+                                        <include>com/orang/messageservice/service/JwtService</include>
+                                        <include>com/orang/messageservice/service/MessageEventPublisher</include>
+                                        <include>com/orang/messageservice/service/ThumbnailService</include>
+                                        <include>com/orang/messageservice/service/MinioFileStorageService</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.80</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 

@@ -1,6 +1,8 @@
 // services/chatService.js
 import { Client } from '@stomp/stompjs';
 
+const WS_URL = '/ws';
+
 class ChatService {
   constructor() {
     if (ChatService.instance) {

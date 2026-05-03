@@ -1,5 +1,5 @@
 // services/userService.js
-const API_BASE_URL = '/api'; // Through gateway
+const API_BASE_URL = '/api';
 
 // Helper for auth headers
 const getHeaders = () => {

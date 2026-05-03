@@ -310,11 +310,16 @@ const Chat = () => {
             }
           }
 
-          const messageWithId = { ...message, id: message.messageId || `ws-${Date.now()}` };
+          const messageWithId = { 
+            ...message, 
+            id: message.messageId || message.id || `ws-${Date.now()}` 
+          };
 
           // No more GROUP self‑ignore – backend sends our own messages back now
           setMessages(prev => {
-            const existingRealMessage = prev.findIndex(m => m.id === message.id);
+            const existingRealMessage = prev.findIndex(m => 
+              m.id === (message.messageId || message.id)
+            );
             if (existingRealMessage !== -1) return prev;
             return [...prev, messageWithId];
           });
@@ -458,12 +463,44 @@ const Chat = () => {
 
   const handleReaction = async (messageId, reactionType) => {
     try {
-      const responce = await messageService.toggleReaction(messageId, reactionType);
-      //console.log('reaction responce: ', responce);
-      // Optionally re-fetch reactions (or update locally)
-      const updatedReactions = await messageService.getReactions(messageId);
-      //console.log('updated reactions: ', updatedReactions);
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: updatedReactions } : m));
+      // Toggle the reaction
+      await messageService.toggleReaction(messageId, reactionType);
+      
+      // Get updated counts
+      const updatedCounts = await messageService.getReactions(messageId);
+      
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        
+        // Get current reactions array
+        const currentReactions = Array.isArray(m.reactions) ? m.reactions : [];
+        
+        // Check if user already has this reaction
+        const existingReactionIndex = currentReactions.findIndex(
+          r => r.userId === user.id && r.reactionType === reactionType
+        );
+        
+        let updatedReactions;
+        if (existingReactionIndex >= 0) {
+          // Remove the reaction (user toggled it off)
+          updatedReactions = currentReactions.filter((_, idx) => idx !== existingReactionIndex);
+        } else {
+          // Add a placeholder reaction
+          const placeholderReaction = {
+            id: `temp-${Date.now()}-${Math.random()}`,
+            userId: user.id,
+            reactionType: reactionType,
+            createdAt: new Date().toISOString(),
+          };
+          updatedReactions = [...currentReactions, placeholderReaction];
+        }
+        
+        return {
+          ...m,
+          reactionCounts: updatedCounts,
+          reactions: updatedReactions,
+        };
+      }));
     } catch (err) {
       console.error('Reaction failed:', err);
     }
@@ -1156,6 +1193,7 @@ const Chat = () => {
                 onDelete={handleDeleteMessage}
                 onReaction={handleReaction}
                 highlight={msg.id === contextData.targetMessageId}
+                participants={participants}
               />
             ))}
           </Box>
@@ -1190,6 +1228,7 @@ const Chat = () => {
                 onEdit={handleEditMessage}
                 onDelete={handleDeleteMessage}
                 onReaction={handleReaction}
+                participants={participants}
               />
             ))}
           </Box>

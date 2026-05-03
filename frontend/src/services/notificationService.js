@@ -147,7 +147,7 @@ class NotificationService {
       console.log('Endpoint:', subscription.endpoint);
       
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/push/subscribe', {
+      const response = await fetch(`${API_BASE_URL}/push/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

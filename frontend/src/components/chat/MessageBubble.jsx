@@ -46,8 +46,12 @@ const MessageBubble = ({
   const [reactionsDialogOpen, setReactionsDialogOpen] = useState(false);
 
   const attachments = message.attachments || [];
-  const reactions = message.reactions || {}; // { LIKE: 3, HEART: 1, ... }
-  const totalReactions = Object.values(reactions).reduce((sum, count) => sum + count, 0);
+  const reactionCounts = message.reactionCounts || {};
+  const totalReactions = Object.values(reactionCounts).reduce((sum, count) => sum + count, 0);
+  const reactionEntries = Object.entries(reactionCounts).filter(([, count]) => count > 0);
+  const shownReactions = reactionEntries.slice(0, 3);
+  const remainingCount = reactionEntries.length - 3;
+  const reactionList = Array.isArray(message.reactions) ? message.reactions : [];
 
   const startEdit = () => setEditing(true);
   const saveEdit = () => {
@@ -67,10 +71,11 @@ const MessageBubble = ({
     setReactionMenuAnchor(null);
   };
 
-  // Build reaction summary (up to 3 unique types)
-  const reactionEntries = Object.entries(reactions).filter(([, count]) => count > 0);
-  const shownReactions = reactionEntries.slice(0, 3);
-  const remainingCount = reactionEntries.length - 3;
+  const handleReactionsClick = () => {
+    if (reactionList.length > 0) {
+      setReactionsDialogOpen(true);
+    }
+  };
 
   if (message.type === 'SYSTEM') {
     return (
@@ -150,9 +155,9 @@ const MessageBubble = ({
               py: 0.25,
               bgcolor: 'rgba(0,0,0,0.05)',
               borderRadius: 4,
-              cursor: 'pointer',
+              cursor: reactionList.length > 0 ? 'pointer' : 'default',
             }}
-            onClick={() => setReactionsDialogOpen(true)}
+            onClick={handleReactionsClick}
           >
             {shownReactions.map(([type, count]) => (
               <Box key={type} sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
@@ -200,14 +205,28 @@ const MessageBubble = ({
       <Dialog open={reactionsDialogOpen} onClose={() => setReactionsDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Reactions</DialogTitle>
         <List>
-          {reactionEntries.map(([type, count]) => (
-            <ListItem key={type}>
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: 'transparent' }}>{REACTION_EMOJI[type]}</Avatar>
-              </ListItemAvatar>
-              <ListItemText primary={`${count} ${type.toLowerCase()}${count > 1 ? 's' : ''}`} />
-            </ListItem>
-          ))}
+          {reactionList.map((reaction, idx) => {
+            const profile = participants?.[reaction.userId];
+            const displayName = profile?.displayName || reaction.userId?.slice(0, 8) || 'Unknown';
+            const avatarUrl = profile?.avatarUrl;
+            return (
+              <ListItem key={reaction.id || idx}>
+                <ListItemAvatar>
+                  <Avatar src={avatarUrl}>
+                    {displayName.charAt(0).toUpperCase()}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2">{REACTION_EMOJI[reaction.reactionType] || reaction.reactionType}</Typography>
+                      <Typography variant="body2">{displayName}</Typography>
+                    </Box>
+                  }
+                />
+              </ListItem>
+            );
+          })}
         </List>
       </Dialog>
     </Box>

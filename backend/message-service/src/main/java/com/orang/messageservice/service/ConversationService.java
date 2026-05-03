@@ -22,6 +22,7 @@ public class ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final GroupEventService groupEventService;
+    private final ConversationNotificationEventService conversationNotificationEventService;
 
     public List<ConversationResponse> getConversations(UUID userId) {
         List<Conversation> conversations = conversationRepository.findByParticipantIdsContaining(userId);
@@ -50,7 +51,16 @@ public class ConversationService {
         addParticipant(newConversation, userId1, ConversationParticipant.ParticipantRole.MEMBER, null);
         addParticipant(newConversation, userId2, ConversationParticipant.ParticipantRole.MEMBER, null);
 
-        return toConversationResponse(conversationRepository.save(newConversation));
+        Conversation savedConversation = conversationRepository.save(newConversation);
+
+        // Notify the recipient that a new direct chat was created.
+        conversationNotificationEventService.directConversationCreated(
+            savedConversation.getId(),
+            userId1,
+            userId2
+        );
+
+        return toConversationResponse(savedConversation);
     }
 
     @Transactional
@@ -76,7 +86,16 @@ public class ConversationService {
             }
         }
 
-        return toConversationResponse(conversationRepository.save(newConversation));
+        Conversation savedConversation = conversationRepository.save(newConversation);
+
+        // Emit member-added events for initial group members (except creator).
+        for (UUID participantId : participantIds) {
+            if (!participantId.equals(creatorId)) {
+                groupEventService.memberAdded(savedConversation.getId(), participantId, creatorId);
+            }
+        }
+
+        return toConversationResponse(savedConversation);
     }
 
     private void addParticipant(Conversation conversation, UUID userId,
