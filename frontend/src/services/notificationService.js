@@ -1,6 +1,6 @@
 // services/notificationService.js
 
-const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:8080/api';
+const API_BASE_URL = '/api';
 
 const getHeaders = () => {
   const token = localStorage.getItem('accessToken');

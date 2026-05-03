@@ -18,7 +18,7 @@ class AuthService {
     this.tokenExpiryTime = null;
     
     // API endpoints
-    this.apiBaseUrl = import.meta.env.DEV ? '/api' : 'http://localhost:8080/api';
+    this.apiBaseUrl = '/api';
     
     AuthService.instance = this;
   }
