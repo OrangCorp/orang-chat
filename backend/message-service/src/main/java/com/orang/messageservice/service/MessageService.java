@@ -91,15 +91,21 @@ public class MessageService {
             }
         }
 
-        // Build the message - let the database generate the ID
-        Message message = Message.builder()
+        // Build the message. If client provided a messageId, use it so
+        // frontend optimistic IDs align with persisted records.
+        Message.MessageBuilder builder = Message.builder()
                 .conversationId(conversationId)
                 .senderId(senderId)
                 .content(content)
-                .replyToMessageId(validatedReplyToId)
-                .build();
+                .replyToMessageId(validatedReplyToId);
 
-        // Save without setting ID - database generates a new UUID
+        if (messageId != null) {
+            builder.id(messageId);
+        }
+
+        Message message = builder.build();
+
+        // Persist the message (will use provided ID if present)
         Message saved = messageRepository.saveAndFlush(message);
         //log.info("Message persisted with ID: {}", saved.getId()); // ADD THIS
 
