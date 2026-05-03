@@ -66,8 +66,6 @@ public class MessageMapper {
         Map<ReactionType, Long> counts = reactionService.getReactionCounts(message.getId());
         builder.reactionCounts(counts);
 
-        // `myReaction` removed — full reaction entries are available in `reactions` list.
-
         List<MessageReaction> reactions = messageReactionRepository.findByMessageId(message.getId());
         if (reactions != null && !reactions.isEmpty()) {
             builder.reactions(reactions.stream().map(r -> MessageResponse.ReactionInfo.builder()

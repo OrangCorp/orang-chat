@@ -3,6 +3,7 @@ package com.orang.notificationservice.listener;
 import com.orang.notificationservice.dto.NotificationPayload;
 import com.orang.notificationservice.service.WebPushService;
 import com.orang.shared.event.ContactRequestSentEvent;
+import com.orang.shared.event.DirectConversationCreatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,5 +51,29 @@ class NotificationEventListenerTest {
         assertThat(payload.getTag()).isEqualTo("contact-request-" + contactId);
         assertThat(payload.getData().getType()).isEqualTo("contact_request");
         assertThat(payload.getData().getUrl()).isEqualTo("/contacts/pending/incoming");
+    }
+
+    @Test
+    void handleDirectConversationCreatedSendsNotificationToRecipient() {
+        UUID conversationId = UUID.fromString("49b32d01-5a28-4013-b5a0-0651fe20adfd");
+        UUID initiatorId = UUID.fromString("844ec9f6-f781-4f67-aab0-1f33cf9734f7");
+        UUID recipientId = UUID.fromString("bc9e3f0b-8c33-4ef0-8c8d-b1d0f3f8f9d2");
+
+        listener.handleDirectConversationCreated(DirectConversationCreatedEvent.builder()
+                .conversationId(conversationId)
+                .initiatorId(initiatorId)
+                .recipientId(recipientId)
+                .build());
+
+        ArgumentCaptor<NotificationPayload> payloadCaptor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(webPushService).sendToUser(eq(recipientId), payloadCaptor.capture());
+
+        NotificationPayload payload = payloadCaptor.getValue();
+        assertThat(payload.getTitle()).isEqualTo("New Chat");
+        assertThat(payload.getBody()).isEqualTo("Someone started a conversation with you");
+        assertThat(payload.getTag()).isEqualTo("direct-chat-created-" + conversationId);
+        assertThat(payload.getData().getType()).isEqualTo("direct_chat_created");
+        assertThat(payload.getData().getConversationId()).isEqualTo(conversationId);
+        assertThat(payload.getData().getUrl()).isEqualTo("/conversations/" + conversationId);
     }
 }

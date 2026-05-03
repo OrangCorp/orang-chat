@@ -47,7 +47,7 @@ public class AuthService {
     @Transactional
     public RegistrationResponse register(RegisterRequest registerRequest){
         if (userRepository.existsByEmail(registerRequest.getEmail().toLowerCase())) {
-            throw new BadRequestException("Email already exists");
+            throw new BadRequestException("Invalid email or password");
         }
 
         User user = User.builder()

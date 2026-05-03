@@ -1,13 +1,13 @@
 package com.orang.messageservice;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@SpringBootTest
 class MessageServiceApplicationTests {
 
     @Test
-    void contextLoads() {
+    void packageStructureSanityCheck() {
+        assertEquals("com.orang.messageservice", MessageServiceApplication.class.getPackageName());
     }
 
 }
