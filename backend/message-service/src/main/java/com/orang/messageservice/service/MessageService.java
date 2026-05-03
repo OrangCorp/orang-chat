@@ -75,7 +75,7 @@ public class MessageService {
         if (messageId != null && messageRepository.existsById(messageId)) {
             log.info("Message {} already exists, returning existing", messageId);
             Message existing = messageRepository.findById(messageId).orElseThrow();
-            return messageMapper.toMessageResponse(existing);
+            return messageMapper.toMessageResponse(existing, senderId);
         }
 
         // Validate reply reference
