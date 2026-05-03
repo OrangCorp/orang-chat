@@ -35,8 +35,6 @@ services:
     container_name: orangchat-frontend
     ports:
       - "80:80"
-    environment:
-      - VITE_API_URL=http://localhost:8080/api
     networks:
       - orangchat-network
     depends_on:
