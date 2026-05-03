@@ -130,25 +130,23 @@ class NotificationService {
   // notificationService.js - Fix the subscribeToPush method
   async subscribeToPush() {
     try {
-      // 1. Get VAPID public key
       const vapidKey = await this.getVapidPublicKey();
-      console.log('🔑 Got VAPID key');
-      
-      // 2. Get service worker registration
       const registration = await navigator.serviceWorker.ready;
-      console.log('👷 Service worker ready');
       
-      // 3. Create browser push subscription
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
-      });
-      console.log('📱 Browser subscription created:', subscription.endpoint);
+      let subscription = await registration.pushManager.getSubscription();
       
-      // 4. Save to backend - this is the part that's failing!
+      if (!subscription) {
+        console.log('Creating new browser subscription...');
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
+        });
+      }
+      
+      console.log('📱 Sending subscription to backend...');
+      console.log('Endpoint:', subscription.endpoint);
+      
       const token = localStorage.getItem('accessToken');
-      console.log('🔐 Using token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
-      
       const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: {
@@ -161,23 +159,23 @@ class NotificationService {
             p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
             auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
           },
-          expirationTime: subscription.expirationTime
+          expirationTime: subscription.expirationTime || null
         })
       });
       
-      console.log('📡 Subscribe response status:', response.status);
+      console.log('Backend response status:', response.status);
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Failed to save subscription:', response.status, errorText);
-        throw new Error(`Failed to save subscription: ${response.status}`);
+        const text = await response.text();
+        console.error('Backend subscription failed:', response.status, text);
+        throw new Error(`Subscribe failed: ${response.status}`);
       }
       
       const result = await response.json();
-      console.log('✅ Subscription saved to backend:', result);
+      console.log('✅ Backend subscription saved:', result.id);
       return subscription;
     } catch (error) {
-      console.error('❌ Push subscription failed:', error);
+      console.error('❌ subscribeToPush failed:', error);
       throw error;
     }
   }
@@ -206,36 +204,37 @@ class NotificationService {
 
 
   async initialize() {
-    // Only initialize if we haven't already
-    if (this._initialized) return;
-    this._initialized = true;
-    
     console.log('🔔 Initializing push notifications...');
     
-    // Check if browser supports push
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.log('Push notifications not supported in this browser');
+      console.log('Push not supported');
       return;
     }
     
-    // Check if already subscribed
-    const existingSubscription = await this.getCurrentSubscription();
-    if (existingSubscription) {
-      console.log('Already subscribed to push notifications');
-      return;
-    }
-    
-    // Request permission and subscribe
     try {
+      // Check if we have a browser subscription
+      const registration = await navigator.serviceWorker.ready;
+      const existingSubscription = await registration.pushManager.getSubscription();
+      
+      if (existingSubscription) {
+        // We have a browser subscription - make sure backend knows about it
+        console.log('📱 Browser subscription exists, syncing to backend...');
+        await this.subscribeToPush();
+        this._initialized = true;
+        return;
+      }
+      
+      // No subscription yet - create one
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         await this.subscribeToPush();
         console.log('✅ Push notifications initialized successfully');
+        this._initialized = true;
       } else {
         console.log('Notification permission denied');
       }
     } catch (error) {
-      console.error('Failed to initialize push notifications:', error);
+      console.error('Push initialization failed:', error);
     }
   }
 }

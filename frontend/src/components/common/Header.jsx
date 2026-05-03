@@ -1,4 +1,4 @@
-// Header.jsx - Full updated with message/reaction notifications
+// Header.jsx - Complete updated with proper notification handling
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -15,11 +15,52 @@ import {
   Check as CheckIcon, Close as CloseIcon,
   Message as MessageIcon,
   ThumbUp as ReactionIcon,
+  PersonAdd as PersonAddIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Group as GroupIcon,
+  AlternateEmail as MentionIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import messageService from '../../services/messageService';
 import logoImg from '../../assets/logo.png';
+
+// Helper to format notification message based on type
+const getNotificationText = (notif) => {
+  const name = notif.senderName || notif.title || 'Someone';
+  const body = notif.body || '';
+  
+  // Choose icon based on type
+  let icon = <MessageIcon />;
+  switch (notif.type) {
+    case 'reaction': icon = <ReactionIcon />; break;
+    case 'mention': icon = <MentionIcon />; break;
+    case 'group_added': case 'member_added': icon = <GroupIcon />; break;
+    case 'message_deleted': icon = <DeleteIcon />; break;
+    case 'message_edited': icon = <EditIcon />; break;
+    case 'contact_request': icon = <PersonAddIcon />; break;
+  }
+  
+  return { title: name, body, icon };
+};
+
+// Helper to format time
+const formatNotificationTime = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  
+  return date.toLocaleDateString();
+};
 
 const Header = () => {
   const { logout, user } = useAuth();
@@ -72,46 +113,114 @@ const Header = () => {
   // Push notification handling
   // ------------------------------------------------------------------
   const addPushNotification = useCallback(async (data) => {
-    const { type, title, body, conversationId, messageId, url, senderId } = data || {};
+    const { type, title, body, url, conversationId } = data || {};
+    
     let senderName = 'Someone';
     let avatarUrl = null;
-    if (senderId) {
+    let displayTitle = title || 'Notification';
+    let displayBody = body || '';
+    
+    if (conversationId) {
       try {
-        const profile = await userService.getProfile(senderId);
-        senderName = profile?.displayName || 'Unknown';
-        avatarUrl = profile?.avatarUrl;
-      } catch (e) { /* ignore */ }
+        // Fetch conversations to get participant info
+        const conversations = await messageService.getConversations();
+        const conversation = conversations.find(c => c.id === conversationId);
+        
+        if (conversation) {
+          if (conversation.type === 'DIRECT') {
+            // Find the other participant
+            const otherParticipant = conversation.participants?.find(p => p.userId !== user?.id);
+            if (otherParticipant) {
+              // Get profile from cache or fetch it
+              const profile = await userService.getProfile(otherParticipant.userId);
+              senderName = profile?.displayName || 'Unknown';
+              avatarUrl = profile?.avatarUrl;
+              
+              // Update notification text based on type
+              switch (type) {
+                case 'new_message':
+                  displayTitle = senderName;
+                  displayBody = 'sent you a message';
+                  break;
+                case 'reaction':
+                  displayTitle = senderName;
+                  displayBody = 'reacted to your message';
+                  break;
+                case 'mention':
+                  displayTitle = senderName;
+                  displayBody = 'mentioned you';
+                  break;
+                default:
+                  displayTitle = senderName;
+                  displayBody = body || 'sent a notification';
+              }
+            }
+          } else if (conversation.type === 'GROUP') {
+            // It's a group - show group name
+            displayTitle = conversation.name || 'Group Chat';
+            switch (type) {
+              case 'new_message':
+                displayBody = 'New message';
+                break;
+              case 'reaction':
+                displayBody = 'New reaction';
+                break;
+              case 'mention':
+                displayBody = 'You were mentioned';
+                break;
+              case 'group_added':
+              case 'member_added':
+                displayBody = 'You were added to this group';
+                break;
+              default:
+                displayBody = body || 'New notification';
+            }
+          }
+        }
+      } catch (e) {
+        console.debug('Could not fetch conversation info for notification:', e);
+      }
     }
+    
+    // Fix URL: backend uses /conversations/ but frontend uses /chat/
+    const chatUrl = url?.replace('/conversations/', '/chat/') || '/';
+    
     const newNotif = {
       id: `push-${Date.now()}-${Math.random()}`,
       type: type || 'unknown',
-      title: title || 'Notification',
-      body: body || '',
+      title: displayTitle,
+      body: displayBody,
       conversationId,
-      messageId,
-      senderId,
       senderName,
       avatarUrl,
-      url: url || (conversationId ? `/chat/${conversationId}` : '/'),
+      url: chatUrl,
       timestamp: new Date().toISOString(),
     };
+    
     setPushNotifications(prev => [newNotif, ...prev]);
-  }, []);
+  }, [user?.id]);
 
   // Listen for SW messages
   useEffect(() => {
     const handleSWMessage = async (event) => {
       const data = event.detail || event.data;
       if (!data) return;
+      
       const { type } = data || {};
-      if (type === 'new_message' || type === 'reaction' || type === 'mention' || type === 'group_added') {
+      const notifTypes = [
+        'new_message', 'reaction', 'mention', 
+        'group_added', 'member_added', 'new_chat',
+        'message_deleted', 'message_edited'
+      ];
+      
+      if (notifTypes.includes(type)) {
         await addPushNotification(data);
       }
     };
 
+    // ONLY listen for custom event, NOT direct SW messages
     window.addEventListener('sw-message', handleSWMessage);
-    navigator.serviceWorker?.addEventListener('message', handleSWMessage);
-
+    
     // Check for missed notifications
     navigator.serviceWorker?.ready.then(reg => {
       if (reg.active) reg.active.postMessage({ type: 'CHECK_MISSED' });
@@ -119,7 +228,6 @@ const Header = () => {
 
     return () => {
       window.removeEventListener('sw-message', handleSWMessage);
-      navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
     };
   }, [addPushNotification]);
 
@@ -171,7 +279,6 @@ const Header = () => {
     }
   }, [user?.id]);
 
-  // Refresh on events
   useEffect(() => {
     const handleRefresh = () => loadContactRequests();
     window.addEventListener('refresh-notifications', handleRefresh);
@@ -217,7 +324,7 @@ const Header = () => {
   };
 
   // ------------------------------------------------------------------
-  // Logout, Profile menu, Search (unchanged)
+  // Logout, Profile menu, Search
   // ------------------------------------------------------------------
   const handleLogout = () => {
     userService.clearCache();
@@ -377,63 +484,74 @@ const Header = () => {
           <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">No notifications</Typography></Box>
         ) : (
           <List sx={{ p: 0 }}>
-            {allNotifications.map((notif) => (
-              <React.Fragment key={notif.id}>
-                {notif.type === 'contact_request' ? (
-                  <ListItem sx={{ py: 2, px: 2 }}>
-                    <ListItemAvatar>
-                      <Avatar src={notif.avatarUrl}>{notif.displayName?.charAt(0).toUpperCase()}</Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={<Typography variant="body2" fontWeight="medium"><strong>{notif.displayName}</strong> sent you a request</Typography>}
-                      secondary={<Typography variant="caption" color="text.secondary">Pending approval • {notif.createdAt && new Date(notif.createdAt).toLocaleDateString()}</Typography>}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Tooltip title="Accept">
-                        <IconButton size="small" color="success" onClick={() => handleAcceptRequest(notif)} sx={{ bgcolor: 'success.light', '&:hover': { bgcolor: 'success.main' } }}>
-                          <CheckIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Decline">
-                        <IconButton size="small" color="error" onClick={() => handleDeclineRequest(notif)} sx={{ bgcolor: 'error.light', '&:hover': { bgcolor: 'error.main' } }}>
+            {allNotifications.map((notif) => {
+              const notifText = getNotificationText(notif);
+              return (
+                <React.Fragment key={notif.id}>
+                  {notif.type === 'contact_request' ? (
+                    <ListItem sx={{ py: 2, px: 2 }}>
+                      <ListItemAvatar>
+                        <Avatar src={notif.avatarUrl}>{notif.displayName?.charAt(0).toUpperCase()}</Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={<Typography variant="body2" fontWeight="medium"><strong>{notif.displayName}</strong> sent you a request</Typography>}
+                        secondary={<Typography variant="caption" color="text.secondary">Pending approval • {notif.createdAt && new Date(notif.createdAt).toLocaleDateString()}</Typography>}
+                      />
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Accept">
+                          <IconButton size="small" color="success" onClick={() => handleAcceptRequest(notif)} sx={{ bgcolor: 'success.light', '&:hover': { bgcolor: 'success.main' } }}>
+                            <CheckIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Decline">
+                          <IconButton size="small" color="error" onClick={() => handleDeclineRequest(notif)} sx={{ bgcolor: 'error.light', '&:hover': { bgcolor: 'error.main' } }}>
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </ListItem>
+                  ) : (
+                    <ListItem
+                      component="div"
+                      onClick={() => handlePushClick(notif)}
+                      sx={{ py: 2, px: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                      secondaryAction={
+                        <IconButton 
+                          edge="end" 
+                          size="small" 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            e.preventDefault();
+                            handleDismissPush(notif.id); 
+                          }}
+                        >
                           <CloseIcon fontSize="small" />
                         </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </ListItem>
-                ) : (
-                  <ListItem
-                    component="div"
-                    onClick={() => handlePushClick(notif)}
-                    sx={{ py: 2, px: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                    secondaryAction={
-                      <IconButton edge="end" size="small" onClick={(e) => { e.stopPropagation(); handleDismissPush(notif.id); }}>
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    }
-                  >
-                    <ListItemAvatar>
-                      <Avatar src={notif.avatarUrl}>
-                        {notif.type === 'new_message' || notif.type === 'mention' ? <MessageIcon /> : <ReactionIcon />}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Typography variant="body2" fontWeight="medium">
-                          <strong>{notif.senderName}</strong> {notif.body || notif.title}
-                        </Typography>
                       }
-                      secondary={
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                )}
-                <Divider />
-              </React.Fragment>
-            ))}
+                    >
+                      <ListItemAvatar>
+                        <Avatar src={notif.avatarUrl}>
+                          {notifText.icon}
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Typography variant="body2" fontWeight="medium">
+                            <strong>{notifText.title}</strong> {notifText.body}
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography variant="caption" color="text.secondary">
+                            {formatNotificationTime(notif.timestamp)}
+                          </Typography>
+                        }
+                      />
+                    </ListItem>
+                  )}
+                  <Divider />
+                </React.Fragment>
+              );
+            })}
           </List>
         )}
       </Menu>

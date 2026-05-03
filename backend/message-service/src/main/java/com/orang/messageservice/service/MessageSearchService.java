@@ -106,7 +106,7 @@ public class MessageSearchService {
                 combinedMessages.getLast().getCreatedAt());
 
         List<MessageResponse> messageDtos = combinedMessages.stream()
-                .map(messageMapper::toMessageResponse)
+                .map(msg -> messageMapper.toMessageResponse(msg, userId))
                 .toList();
 
         log.debug("Messages around {}: {} messages found", messageId, combinedMessages.size());
