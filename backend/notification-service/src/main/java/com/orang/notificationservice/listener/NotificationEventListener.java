@@ -5,6 +5,7 @@ import com.orang.notificationservice.dto.NotificationPayload;
 import com.orang.notificationservice.service.WebPushService;
 import com.orang.shared.constants.RabbitMQConstants;
 import com.orang.shared.event.ContactRequestSentEvent;
+import com.orang.shared.event.DirectConversationCreatedEvent;
 import com.orang.shared.event.GroupMemberEvent;
 import com.orang.shared.event.MentionEvent;
 import com.orang.shared.event.MessageReactionEvent;
@@ -60,6 +61,43 @@ public class NotificationEventListener {
 
         } catch (Exception e) {
             log.error("Failed to process ContactRequestSentEvent: {}", e.getMessage(), e);
+        }
+    }
+
+    // =========================================================================
+    // Direct Conversation Notifications
+    // =========================================================================
+
+    @RabbitListener(queues = RabbitMQConfig.DIRECT_CONVERSATION_CREATED_NOTIFICATION_QUEUE)
+    public void handleDirectConversationCreated(DirectConversationCreatedEvent event) {
+        log.info("Received DirectConversationCreatedEvent: conversationId={}, initiatorId={}, recipientId={}",
+                event.getConversationId(), event.getInitiatorId(), event.getRecipientId());
+
+        if (event.getRecipientId() == null || event.getConversationId() == null) {
+            log.warn("DirectConversationCreatedEvent missing recipientId or conversationId - skipping notification");
+            return;
+        }
+
+        try {
+            NotificationPayload payload = NotificationPayload.builder()
+                    .title("New Chat")
+                    .body("Someone started a conversation with you")
+                    .icon("/icons/app-icon-192.png")
+                    .tag("direct-chat-created-" + event.getConversationId())
+                    .requireInteraction(true)
+                    .data(NotificationPayload.NotificationData.builder()
+                            .type("direct_chat_created")
+                            .conversationId(event.getConversationId())
+                            .url("/conversations/" + event.getConversationId())
+                            .build())
+                    .build();
+
+            webPushService.sendToUser(event.getRecipientId(), payload);
+
+            log.info("Sent direct chat created notification to user {} for conversation {}",
+                    event.getRecipientId(), event.getConversationId());
+        } catch (Exception e) {
+            log.error("Failed to process DirectConversationCreatedEvent: {}", e.getMessage(), e);
         }
     }
 
