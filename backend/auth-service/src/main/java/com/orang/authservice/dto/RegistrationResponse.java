@@ -17,4 +17,7 @@ public class RegistrationResponse {
     private String email;
     private String displayName;
     private boolean emailVerified;
+    
+    // Optional warning message if email failed to send
+    private String warning;
 }

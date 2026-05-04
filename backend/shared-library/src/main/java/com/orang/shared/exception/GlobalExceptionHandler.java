@@ -40,6 +40,30 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(e.getStatus()).body(error);
     }
 
+    /**
+     * Handles EmailServiceException with detailed error type information.
+     * These exceptions typically indicate temporary mail server unavailability.
+     */
+    @ExceptionHandler(EmailServiceException.class)
+    public ResponseEntity<ErrorResponse> handleEmailServiceException(
+            EmailServiceException e,
+            HttpServletRequest request) {
+
+        logger.warn("Email service error occurred: {} (Type: {})",
+                e.getMessage(),
+                e.getErrorType());
+
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(e.getStatus().value())
+                .error(e.getStatus().getReasonPhrase())
+                .message(e.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(e.getStatus()).body(error);
+    }
+
     // -----------------------------------------
     // Validation Exceptions (400)
     // -----------------------------------------

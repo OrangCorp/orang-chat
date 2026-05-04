@@ -78,6 +78,10 @@ management:
   health:
     defaults:
       enabled: true
+    # Disable mail health check since it can fail if MailTrap limit is reached
+    # Email failures should not prevent app startup
+    mail:
+      enabled: false
 
 springdoc:
   api-docs:
