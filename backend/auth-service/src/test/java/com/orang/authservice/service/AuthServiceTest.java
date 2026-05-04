@@ -229,7 +229,7 @@ class AuthServiceTest {
                         // Act + Assert
                         assertThatThrownBy(() -> authService.register(registerRequest))
                                         .isInstanceOf(BadRequestException.class)
-                                        .hasMessage("Email already exists");
+                                        .hasMessage("Invalid email or password");
 
                         verify(userRepository, never()).save(any());
                         verify(emailTokenService, never()).generateVerificationCode(anyString());
