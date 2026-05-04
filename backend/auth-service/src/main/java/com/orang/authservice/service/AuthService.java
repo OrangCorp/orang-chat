@@ -5,6 +5,7 @@ import com.orang.authservice.entity.User;
 import com.orang.authservice.repository.UserRepository;
 import com.orang.shared.event.UserRegisteredEvent;
 import com.orang.shared.exception.BadRequestException;
+import com.orang.shared.exception.EmailServiceException;
 import com.orang.shared.exception.ForbiddenException;
 import com.orang.shared.exception.ResourceNotFoundException;
 import com.orang.shared.exception.UnauthorizedException;
@@ -67,21 +68,32 @@ public class AuthService {
         publishUserRegisteredEventAfterCommit(userEvent);
 
         String code = emailTokenService.generateVerificationCode(savedUser.getEmail());
-        emailService.sendVerificationEmail(
-                savedUser.getEmail(),
-                savedUser.getDisplayName(),
-                code
-        );
-
-        return buildPendingVerificationResponse(savedUser);
+        try {
+            emailService.sendVerificationEmail(
+                    savedUser.getEmail(),
+                    savedUser.getDisplayName(),
+                    code
+            );
+            log.info("Verification email sent successfully for user: {}", savedUser.getId());
+            return buildPendingVerificationResponse(savedUser, null);
+        } catch (EmailServiceException e) {
+            log.warn("Failed to send verification email for user: {}. Error: {} (Type: {}). User was created, but email failed.",
+                    savedUser.getId(), e.getMessage(), e.getErrorType());
+            // Return success but with warning - user account is created
+            // They can request email resend or check spam folder
+            String warning = "Your account was created successfully, but we couldn't send the verification email. " +
+                    "Please check your spam folder or request a new verification email.";
+            return buildPendingVerificationResponse(savedUser, warning);
+        }
     }
 
-    private RegistrationResponse buildPendingVerificationResponse(User user) {
+    private RegistrationResponse buildPendingVerificationResponse(User user, String warning) {
         return RegistrationResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
                 .displayName(user.getDisplayName())
                 .emailVerified(false)
+                .warning(warning)
                 .build();
     }
 
@@ -139,11 +151,23 @@ public class AuthService {
         }
 
         String code = emailTokenService.generateVerificationCode(normalizedEmail);
-        emailService.sendVerificationEmail(
-                normalizedEmail,
-                user.getDisplayName(),
-                code
-        );
+        try {
+            emailService.sendVerificationEmail(
+                    normalizedEmail,
+                    user.getDisplayName(),
+                    code
+            );
+            log.info("Verification email resent successfully for user: {}", user.getId());
+        } catch (EmailServiceException e) {
+            log.warn("Failed to resend verification email for user: {}. Error: {} (Type: {})",
+                    user.getId(), e.getMessage(), e.getErrorType());
+            // Re-throw with a user-friendly message for resend scenario
+            throw new EmailServiceException(
+                    "Unable to send verification email at this moment. Please try again in a few moments.",
+                    e.getErrorType(),
+                    e
+            );
+        }
     }
 
     public void requestPasswordReset(String email) {
@@ -157,13 +181,23 @@ public class AuthService {
         String token = emailTokenService.generateResetToken(normalizedEmail);
         String resetUrl = passwordResetBaseUrl + "?token=" + token;
 
-        emailService.sendPasswordResetEmail(
-                normalizedEmail,
-                user.getDisplayName(),
-                resetUrl
-        );
-
-        log.info("Password reset email sent for user: {}", user.getId());
+        try {
+            emailService.sendPasswordResetEmail(
+                    normalizedEmail,
+                    user.getDisplayName(),
+                    resetUrl
+            );
+            log.info("Password reset email sent successfully for user: {}", user.getId());
+        } catch (EmailServiceException e) {
+            log.warn("Failed to send password reset email for user: {}. Error: {} (Type: {})",
+                    user.getId(), e.getMessage(), e.getErrorType());
+            // Re-throw with a user-friendly message for password reset scenario
+            throw new EmailServiceException(
+                    "Unable to send password reset email at this moment. Please try again in a few moments.",
+                    e.getErrorType(),
+                    e
+            );
+        }
     }
 
     public void validateResetToken(String token) {
