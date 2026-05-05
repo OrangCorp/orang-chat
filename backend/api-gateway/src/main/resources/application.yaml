@@ -10,7 +10,7 @@ spring:
     web-application-type: reactive
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:orangchat-redis}
+      host: ${REDIS_HOST:orangchat-redis}
       port: ${REDIS_PORT:6379}
       connect-timeout: 2000ms
       lettuce:
