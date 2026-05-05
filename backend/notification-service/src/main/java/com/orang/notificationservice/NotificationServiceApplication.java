@@ -1,10 +1,11 @@
 package com.orang.notificationservice;
 
+import com.orang.shared.autoconfigure.SharedSchedulerAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 
-@SpringBootApplication
+@SpringBootApplication(exclude = {SharedSchedulerAutoConfiguration.class})
 @ComponentScan(basePackages = {
         "com.orang.notificationservice",
         "com.orang.shared.exception"

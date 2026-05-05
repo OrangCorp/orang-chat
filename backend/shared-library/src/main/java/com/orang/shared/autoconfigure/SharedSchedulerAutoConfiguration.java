@@ -8,13 +8,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-
-import java.util.Optional;
 
 @AutoConfiguration
 @ConditionalOnClass(LockProvider.class)
-@EnableSchedulerLock(defaultLockAtMostFor = "10m")
 public class SharedSchedulerAutoConfiguration {
 
     @Bean
@@ -24,9 +22,20 @@ public class SharedSchedulerAutoConfiguration {
         return new RedisLockProvider(connectionFactory, "orangchat-lock");
     }
 
-    @Bean
+    /**
+     * This now only runs if someone explicitly added @EnableSchedulerLock
+     * but forgot to provide Redis.
+     */
+    @Configuration
     @ConditionalOnMissingBean(LockProvider.class)
-    public LockProvider fallbackLockProvider() {
-        return (lockConfiguration) -> Optional.empty();
+    @ConditionalOnBean(annotation = EnableSchedulerLock.class)
+    public static class MissingLockProviderConfiguration {
+        @Bean
+        public LockProvider lockProvider() {
+            throw new IllegalStateException(
+                    "ShedLock is enabled via @EnableSchedulerLock but no RedisLockProvider could be created. " +
+                            "Check your Redis configuration!"
+            );
+        }
     }
 }

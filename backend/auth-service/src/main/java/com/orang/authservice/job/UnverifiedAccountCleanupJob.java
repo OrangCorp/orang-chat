@@ -4,6 +4,7 @@ import com.orang.authservice.entity.User;
 import com.orang.authservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,11 @@ public class UnverifiedAccountCleanupJob {
     private int unverifiedAccountTtlDays;
 
     @Scheduled(cron = "0 0 2 * * *")
+    @SchedulerLock(
+            name = "UnverifiedAccountCleanup",
+            lockAtMostFor = "20m",
+            lockAtLeastFor = "5m"
+    )
     @Transactional
     public void cleanupUnverifiedAccounts() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(unverifiedAccountTtlDays);

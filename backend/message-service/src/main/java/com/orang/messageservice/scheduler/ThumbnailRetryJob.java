@@ -5,6 +5,7 @@ import com.orang.messageservice.repository.AttachmentRepository;
 import com.orang.messageservice.service.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,11 @@ public class ThumbnailRetryJob {
      * Processes max 20 attachments per run to prevent resource spikes.
      */
     @Scheduled(cron = "0 */30 * * * *")
+    @SchedulerLock(
+            name = "ThumbnailRetry",
+            lockAtMostFor = "15m",
+            lockAtLeastFor = "1m"
+    )
     @Transactional
     public void retryFailedThumbnails() {
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(RETRY_BACKOFF_MINUTES);
