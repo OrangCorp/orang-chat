@@ -210,6 +210,8 @@ class MessageSearchServiceTest {
                 .thenReturn(Arrays.asList(before));
         when(messageRepository.findMessagesAfterTimestamp(conversationId, targetMessage.getCreatedAt(), PageRequest.of(0, 2)))
                 .thenReturn(Arrays.asList(after));
+        when(messageRepository.existsOlderMessages(conversationId, before.getCreatedAt())).thenReturn(true);
+        when(messageRepository.existsNewerMessages(conversationId, after.getCreatedAt())).thenReturn(true);
 
         MessagesAroundResponse result = messageSearchService.getMessagesAround(
                 conversationId, userId, messageId, 5);

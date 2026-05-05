@@ -149,4 +149,20 @@ class GroupEventServiceTest {
         assertEquals(triggeredBy, event.getTriggeredBy());
         assertEquals(GroupUpdatedEvent.UpdateType.RENAMED, event.getUpdateType());
     }
+
+    @Test
+    void groupDeletedPublishesEvent() {
+        groupEventService.groupDeleted(conversationId, triggeredBy);
+
+        ArgumentCaptor<String> routingKeyCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<GroupUpdatedEvent> eventCaptor = ArgumentCaptor.forClass(GroupUpdatedEvent.class);
+
+        verify(rabbitTemplate).convertAndSend(eq("group.exchange"), routingKeyCaptor.capture(), eventCaptor.capture());
+
+        assertEquals("group.deleted", routingKeyCaptor.getValue());
+        GroupUpdatedEvent event = eventCaptor.getValue();
+        assertEquals(conversationId, event.getConversationId());
+        assertEquals(triggeredBy, event.getTriggeredBy());
+        assertEquals(GroupUpdatedEvent.UpdateType.DELETED, event.getUpdateType());
+    }
 }

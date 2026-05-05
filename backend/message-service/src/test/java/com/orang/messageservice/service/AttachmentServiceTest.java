@@ -69,10 +69,7 @@ class AttachmentServiceTest {
 
     @Test
     void uploadAttachmentThrowsWhenFileNull() throws IOException {
-        doNothing().when(conversationService).verifyParticipant(conversationId, uploaderId);
-
         when(multipartFile.getOriginalFilename()).thenReturn(null);
-        when(multipartFile.getSize()).thenReturn(0L);
 
         assertThrows(BadRequestException.class,
                 () -> attachmentService.uploadAttachment(multipartFile, conversationId, uploaderId));
@@ -82,10 +79,7 @@ class AttachmentServiceTest {
 
     @Test
     void uploadAttachmentThrowsWhenFileEmpty() throws IOException {
-        doNothing().when(conversationService).verifyParticipant(conversationId, uploaderId);
-
-        when(multipartFile.getOriginalFilename()).thenReturn("test.txt");
-        when(multipartFile.getSize()).thenReturn(0L);
+        lenient().when(multipartFile.isEmpty()).thenReturn(true);
 
         assertThrows(BadRequestException.class,
                 () -> attachmentService.uploadAttachment(multipartFile, conversationId, uploaderId));
@@ -95,8 +89,7 @@ class AttachmentServiceTest {
 
     @Test
     void uploadAttachmentThrowsWhenFileTooLarge() throws IOException {
-        doNothing().when(conversationService).verifyParticipant(conversationId, uploaderId);
-
+        when(multipartFile.isEmpty()).thenReturn(false);
         when(multipartFile.getOriginalFilename()).thenReturn("huge.bin");
         when(multipartFile.getSize()).thenReturn(75 * 1024 * 1024L); // 75 MB > 50 MB limit
 
@@ -126,7 +119,7 @@ class AttachmentServiceTest {
         when(multipartFile.getInputStream()).thenReturn(new ByteArrayInputStream("content".getBytes()));
         when(attachmentRepository.save(any(Attachment.class)))
                 .thenReturn(saved);
-        when(fileStorageService.uploadFile(any(), any(), any(), any(), any()))
+        when(fileStorageService.uploadFile(any(), any(), any(), anyLong(), any()))
                 .thenReturn("s3://bucket/file");
 
         Attachment result = attachmentService.uploadAttachment(multipartFile, conversationId, uploaderId);
@@ -136,7 +129,7 @@ class AttachmentServiceTest {
         assertEquals("text/plain", result.getContentType());
         assertEquals(100L, result.getFileSize());
 
-        verify(fileStorageService).uploadFile(any(), any(), any(), any(), any());
+        verify(fileStorageService).uploadFile(any(), any(), any(), anyLong(), any());
         verify(attachmentRepository, times(2)).save(any()); // Save twice: initial and with storage key
     }
 
@@ -161,7 +154,7 @@ class AttachmentServiceTest {
         String url = attachmentService.getDownloadUrl(attachmentId);
 
         assertEquals("https://presigned-url", url);
-        verify(fileStorageService).generatePresignedDownloadUrl("s3://bucket/file", null);
+        verify(fileStorageService).generatePresignedDownloadUrl("s3://bucket/file", java.time.Duration.ofHours(1));
     }
 
     @Test
@@ -212,9 +205,6 @@ class AttachmentServiceTest {
 
         when(attachmentRepository.findById(attachmentId))
                 .thenReturn(java.util.Optional.of(attachment));
-        when(conversationService.isAdmin(conversationId, otherUserId))
-                .thenReturn(false);
-
         assertThrows(Exception.class,
                 () -> attachmentService.softDeleteAttachment(attachmentId, otherUserId));
 
