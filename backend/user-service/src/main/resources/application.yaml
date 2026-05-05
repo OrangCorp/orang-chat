@@ -1,5 +1,6 @@
 server:
-  port: 8082
+  port: ${USER_SERVER_PORT:8082}
+  server-header: " "
 
 spring:
   threads:
@@ -7,34 +8,39 @@ spring:
       enabled: true
   application:
     name: user-service
+
   datasource:
-    url: jdbc:postgresql://localhost:5433/user_db
-    username: useruser
-    password: userpass
+    url: ${USER_SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/user_db}
+    username: ${USER_DATABASE_USERNAME:useruser}
+    password: ${USER_DATABASE_PASSWORD:userpass}
+
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    show-sql: ${HIBERNATE_SHOW_SQL:false}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: ${HIBERNATE_FORMAT_SQL:true}
+
   rabbitmq:
-    host: ${RABBITMQ_HOST:rabbitmq}
-    port: 5672
-    username: ${RABBITMQ_USER:orangchat}
-    password: ${RABBITMQ_PASSWORD:orangchat123}
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:orangchat}
+    password: ${SPRING_RABBITMQ_PASSWORD:orangchat123}
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: 6379
+      port: ${REDIS_PORT:6379}
+
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
 
 jwt:
-  secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
 
 management:
   endpoints:
@@ -44,7 +50,7 @@ management:
       base-path: /actuator
   endpoint:
     health:
-      show-details: never
+      show-details: ${HEALTH_SHOW_DETAILS:never}
       probes:
         enabled: true
   health:
@@ -53,7 +59,9 @@ management:
 
 logging:
   level:
-    com.orang.userservice: DEBUG
+    com.orang.userservice: ${LOG_LEVEL_APP:DEBUG}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    org.springframework.amqp: ${LOG_LEVEL_AMQP:INFO}
 
 springdoc:
   api-docs:
