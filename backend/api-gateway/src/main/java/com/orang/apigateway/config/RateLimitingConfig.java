@@ -1,11 +1,13 @@
 package com.orang.apigateway.config;
 
 import com.orang.shared.security.JwtUtils;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
@@ -51,33 +53,25 @@ public class RateLimitingConfig {
 
                 return jwtUtils.extractUserId(token)
                         .map(Mono::just)
-                        .orElseGet(() -> {
-                            InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
-                            if (remoteAddress != null) {
-                                String host;
-                                if (remoteAddress.getAddress() != null) {
-                                    host = remoteAddress.getAddress().getHostAddress();
-                                } else {
-                                    host = remoteAddress.getHostString();
-                                }
-                                return Mono.just("anon-" + host);
-                            }
-                            return Mono.just("anonymous");
-                        });
+                        .orElseGet(() -> getStringMono(exchange));
             }
 
-            InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
-            if (remoteAddress != null) {
-                String host;
-                if (remoteAddress.getAddress() != null) {
-                    host = remoteAddress.getAddress().getHostAddress();
-                } else {
-                    host = remoteAddress.getHostString();
-                }
-                return Mono.just("anon-" + host);
-            }
-
-            return Mono.just("anonymous");
+            return getStringMono(exchange);
         };
+    }
+
+    @NonNull
+    private Mono<String> getStringMono(ServerWebExchange exchange) {
+        InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+        if (remoteAddress != null) {
+            String host;
+            if (remoteAddress.getAddress() != null) {
+                host = remoteAddress.getAddress().getHostAddress();
+            } else {
+                host = remoteAddress.getHostString();
+            }
+            return Mono.just("anon-" + host);
+        }
+        return Mono.just("anonymous");
     }
 }

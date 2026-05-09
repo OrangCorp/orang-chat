@@ -36,6 +36,10 @@ public class RabbitMQConfig {
     public static final String DIRECT_CONVERSATION_CREATED_ROUTING_KEY =
             RabbitMQConstants.DIRECT_CONVERSATION_CREATED_KEY;
 
+    public static final String NOTIFICATION_EXCHANGE = "notification.exchange";
+    public static final String UNREAD_COUNT_ROUTING_KEY = "notification.unread.count";
+    public static final String UNREAD_COUNT_QUEUE = "chat.notification.unread";
+
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
@@ -160,5 +164,23 @@ public class RabbitMQConfig {
     @Bean
     public TopicExchange contactExchange() {
         return new TopicExchange(RabbitMQConstants.CONTACT_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public TopicExchange notificationExchange() {
+        return new TopicExchange(NOTIFICATION_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue unreadCountQueue() {
+        return QueueBuilder.durable(UNREAD_COUNT_QUEUE).build();
+    }
+
+    @Bean
+    public Binding unreadCountBinding() {
+        return BindingBuilder
+                .bind(unreadCountQueue())
+                .to(notificationExchange())
+                .with(UNREAD_COUNT_ROUTING_KEY);
     }
 }
