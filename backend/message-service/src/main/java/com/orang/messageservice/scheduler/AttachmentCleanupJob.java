@@ -5,6 +5,7 @@ import com.orang.messageservice.repository.AttachmentRepository;
 import com.orang.messageservice.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,11 @@ public class AttachmentCleanupJob {
      * Runs daily at 2 AM server time.
      */
     @Scheduled(cron = "0 0 2 * * *")
+    @SchedulerLock(
+            name = "AttachmentCleanup_expired",
+            lockAtMostFor = "15m",
+            lockAtLeastFor = "5m"
+    )
     @Transactional
     public void cleanupExpiredAttachments() {
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(30);
@@ -67,6 +73,11 @@ public class AttachmentCleanupJob {
      * Runs daily at 3 AM server time.
      */
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(
+            name = "AttachmentCleanup_orphaned",
+            lockAtMostFor = "15m",
+            lockAtLeastFor = "5m"
+    )
     @Transactional
     public void cleanupOrphanedAttachments() {
         LocalDateTime cutoffDate = LocalDateTime.now().minusHours(24);

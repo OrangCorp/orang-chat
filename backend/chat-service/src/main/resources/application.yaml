@@ -1,5 +1,6 @@
 server:
-  port: 8083
+  port: ${CHAT_SERVER_PORT:8083}
+  server-header: " "
 
 spring:
   threads:
@@ -8,23 +9,23 @@ spring:
   application:
     name: chat-service
   rabbitmq:
-    host: ${RABBITMQ_HOST:rabbitmq}
-    port: 5672
-    username: ${RABBITMQ_USER:orangchat}
-    password: ${RABBITMQ_PASSWORD:orangchat123}
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USER:orangchat}
+    password: ${SPRING_RABBITMQ_PASSWORD:orangchat123}
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 jwt:
-  secret: myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
 
 logging:
   level:
-    com.orang.chatservice: DEBUG
-    org.springframework.messaging: INFO
-    org.springframework.web.socket: INFO
+    com.orang.chatservice: ${LOG_LEVEL_APP:DEBUG}
+    org.springframework.messaging: ${LOG_LEVEL_MESSAGING:INFO}
+    org.springframework.web.socket: ${LOG_LEVEL_WEBSOCKET:INFO}
 
 management:
   endpoints:
@@ -34,7 +35,7 @@ management:
       base-path: /actuator
   endpoint:
     health:
-      show-details: never
+      show-details: ${HEALTH_SHOW_DETAILS:never}
       probes:
         enabled: true
   health:
