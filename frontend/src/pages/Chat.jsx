@@ -691,6 +691,7 @@ const Chat = () => {
     if (!window.confirm('Delete this conversation? This will remove it from your list.')) return;
     try {
       await messageService.deleteConversation(conversation.id);
+      emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
       console.error('Failed to delete conversation:', err);
@@ -703,8 +704,19 @@ const Chat = () => {
     try {
       const contactsList = await userService.getContacts();
       const existingIds = new Set(conversation.participants?.map(p => p.userId) || []);
-      const availableContacts = contactsList.filter(c => c.status === 'ACCEPTED' && !existingIds.has(c.userId));
-      setContacts(availableContacts);
+      const acceptedContacts = contactsList.filter(c => c.status === 'ACCEPTED');
+      
+      // Extract just the contact user IDs (not the current user)
+      const contactIds = acceptedContacts
+        .map(c => c.requesterId === user.id ? c.recipientId : c.requesterId)
+        .filter(id => !existingIds.has(id));
+      
+      if (contactIds.length > 0) {
+        await userService.getProfiles(contactIds);
+      }
+      
+      // Store just the IDs
+      setContacts(contactIds);
     } catch (err) {
       console.error('Failed to load contacts:', err);
     } finally {
@@ -968,12 +980,12 @@ const Chat = () => {
                       <CircularProgress size={24} />
                     </Box>
                   ) : contacts.length > 0 ? (
-                    contacts.map((contact) => {
-                      const profile = userService.profileCache.get(contact.userId);
+                    contacts.map((contactId) => {
+                      const profile = userService.profileCache.get(contactId);
                       return (
-                        <ListItem key={contact.userId} disablePadding>
-                          <ListItemButton onClick={() => handleToggleUserToAdd(contact.userId)}>
-                            <Checkbox checked={selectedUsersToAdd.has(contact.userId)} size="small" />
+                        <ListItem key={contactId} disablePadding>
+                          <ListItemButton onClick={() => handleToggleUserToAdd(contactId)}>
+                            <Checkbox checked={selectedUsersToAdd.has(contactId)} size="small" />
                             <Avatar src={profile?.avatarUrl} sx={{ width: 32, height: 32, mr: 2 }}>
                               {profile?.displayName?.charAt(0).toUpperCase() || '?'}
                             </Avatar>
@@ -1056,12 +1068,16 @@ const Chat = () => {
   };
   
   const getDisplayName = (userId) => {
+    if (!userId) return 'Unknown';
     if (userId === user.id) return 'You';
     const p = participants[userId];
     return p?.displayName || userId.slice(0, 8);
   };
   
-  const getAvatar = (userId) => (userId === user.id ? null : participants[userId]?.avatarUrl);
+  const getAvatar = (userId) => {
+    if (!userId) return null;
+    return userId === user.id ? null : participants[userId]?.avatarUrl;
+  };
   
   const formatLastSeen = (lastSeen) => {
     if (!lastSeen) return 'Never';
@@ -1129,7 +1145,7 @@ const Chat = () => {
                 >
                   <ListItemAvatar>
                     <Avatar src={getAvatar(result.senderId)}>
-                      {getDisplayName(result.senderId).charAt(0)}
+                      {(getDisplayName(result.senderId) || '?').charAt(0)}
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
@@ -1240,17 +1256,27 @@ const Chat = () => {
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
       <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
-        
-        {searchMode !== 'off' ? (
+        {searchMode !== 'off' || viewMode === 'members' ? (
           <>
-            <IconButton onClick={exitSearchMode}><CloseIcon /></IconButton>
+            <IconButton onClick={() => {
+              setSearchMode('off');
+              setSearchQuery('');
+              setSearchResults([]);
+              setContextData(null);
+              setViewMode('chat');
+            }}>
+              <CloseIcon />
+            </IconButton>
             <Typography variant="h6" sx={{ flex: 1 }}>
-              {searchMode === 'results' ? 'Search Results' : 'Message Context'}
+              {searchMode === 'results' ? 'Search Results' : 
+              searchMode === 'context' ? 'Message Context' : 
+              'Members'}
             </Typography>
           </>
         ) : (
           <>
+            <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
+            
             <IconButton 
               onClick={() => handleProfileClick(
                 conversation.type === 'DIRECT' ? otherId : conversation.id
@@ -1284,7 +1310,7 @@ const Chat = () => {
               </Typography>
               
               {conversation.type === 'DIRECT' ? (
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Box 
                       sx={{ 
@@ -1311,7 +1337,7 @@ const Chat = () => {
                   )}
                 </Stack>
               ) : (
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                   {conversation.participants?.length || 0} members
                 </Typography>
               )}
@@ -1404,7 +1430,7 @@ const Chat = () => {
                       src={getAvatar(userId)} 
                       sx={{ width: 20, height: 20 }}
                     >
-                      {getDisplayName(userId).charAt(0)}
+                      {(getDisplayName(result.senderId) || '?').charAt(0)}
                     </Avatar>
                   ))}
                 </Box>

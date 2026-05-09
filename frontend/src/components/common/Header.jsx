@@ -115,87 +115,92 @@ const Header = () => {
   const addPushNotification = useCallback(async (data) => {
     const { type, title, body, url, conversationId } = data || {};
     
-    let senderName = 'Someone';
-    let avatarUrl = null;
-    let displayTitle = title || 'Notification';
-    let displayBody = body || '';
-    
-    if (conversationId) {
-      try {
-        // Fetch conversations to get participant info
-        const conversations = await messageService.getConversations();
-        const conversation = conversations.find(c => c.id === conversationId);
-        
-        if (conversation) {
-          if (conversation.type === 'DIRECT') {
-            // Find the other participant
-            const otherParticipant = conversation.participants?.find(p => p.userId !== user?.id);
-            if (otherParticipant) {
-              // Get profile from cache or fetch it
-              const profile = await userService.getProfile(otherParticipant.userId);
-              senderName = profile?.displayName || 'Unknown';
-              avatarUrl = profile?.avatarUrl;
-              
-              // Update notification text based on type
-              switch (type) {
-                case 'new_message':
-                  displayTitle = senderName;
-                  displayBody = 'sent you a message';
-                  break;
-                case 'reaction':
-                  displayTitle = senderName;
-                  displayBody = 'reacted to your message';
-                  break;
-                case 'mention':
-                  displayTitle = senderName;
-                  displayBody = 'mentioned you';
-                  break;
-                default:
-                  displayTitle = senderName;
-                  displayBody = body || 'sent a notification';
-              }
-            }
-          } else if (conversation.type === 'GROUP') {
-            // It's a group - show group name
-            displayTitle = conversation.name || 'Group Chat';
-            switch (type) {
-              case 'new_message':
-                displayBody = 'New message';
-                break;
-              case 'reaction':
-                displayBody = 'New reaction';
-                break;
-              case 'mention':
-                displayBody = 'You were mentioned';
-                break;
-              case 'group_added':
-              case 'member_added':
-                displayBody = 'You were added to this group';
-                break;
-              default:
-                displayBody = body || 'New notification';
-            }
-          }
-        }
-      } catch (e) {
-        console.debug('Could not fetch conversation info for notification:', e);
-      }
-    }
-    
-    // Fix URL: backend uses /conversations/ but frontend uses /chat/
-    const chatUrl = url?.replace('/conversations/', '/chat/') || '/';
-    
+    // Default notification
     const newNotif = {
       id: `push-${Date.now()}-${Math.random()}`,
       type: type || 'unknown',
-      title: displayTitle,
-      body: displayBody,
+      title: title || 'Notification',
+      body: body || '',
+      titlePlacement: 'prefix',
       conversationId,
-      senderName,
-      avatarUrl,
-      url: chatUrl,
+      senderName: null,
+      avatarUrl: null,
+      url: url?.replace('/conversations/', '/chat/') || '/',
       timestamp: new Date().toISOString(),
     };
+    
+    // No conversation to look up - use defaults
+    if (!conversationId) {
+      setPushNotifications(prev => [newNotif, ...prev]);
+      return;
+    }
+    
+    // Try to get conversation info
+    try {
+      const conversations = await messageService.getConversations();
+      const conversation = conversations.find(c => c.id === conversationId);
+      
+      if (!conversation) {
+        setPushNotifications(prev => [newNotif, ...prev]);
+        return;
+      }
+      
+      if (conversation.type === 'DIRECT') {
+        const otherParticipant = conversation.participants?.find(p => p.userId !== user?.id);
+        if (otherParticipant) {
+          const profile = await userService.getProfile(otherParticipant.userId);
+          newNotif.senderName = profile?.displayName || 'Unknown';
+          newNotif.avatarUrl = profile?.avatarUrl;
+          
+          switch (type) {
+            case 'new_message':
+              newNotif.title = newNotif.senderName;
+              newNotif.body = 'sent you a message';
+              break;
+            case 'direct_chat_created':
+              newNotif.title = newNotif.senderName;
+              newNotif.body = 'started a conversation with you';
+              break;
+            case 'reaction':
+              newNotif.title = newNotif.senderName;
+              newNotif.body = 'reacted to your message';
+              break;
+            case 'mention':
+              newNotif.title = newNotif.senderName;
+              newNotif.body = 'mentioned you';
+              break;
+          }
+        }
+      } else if (conversation.type === 'GROUP') {
+        const groupName = conversation.name || 'Group Chat';
+        
+        switch (type) {
+          case 'new_message':
+            newNotif.body = 'New message in';
+            newNotif.title = groupName;
+            newNotif.titlePlacement = 'suffix';
+            break;
+          case 'group_added':
+          case 'member_added':
+            newNotif.body = 'You were added to';
+            newNotif.title = groupName;
+            newNotif.titlePlacement = 'suffix';
+            break;
+          case 'reaction':
+            newNotif.title = groupName;
+            newNotif.body = 'New reaction';
+            newNotif.titlePlacement = 'suffix';
+            break;
+          case 'mention':
+            newNotif.title = groupName;
+            newNotif.body = 'You were mentioned';
+            newNotif.titlePlacement = 'suffix';
+            break;
+        }
+      }
+    } catch (e) {
+      console.debug('Could not fetch conversation info for notification:', e);
+    }
     
     setPushNotifications(prev => [newNotif, ...prev]);
   }, [user?.id]);
@@ -209,7 +214,7 @@ const Header = () => {
       const { type } = data || {};
       const notifTypes = [
         'new_message', 'reaction', 'mention', 
-        'group_added', 'member_added', 'new_chat',
+        'group_added', 'member_added', 'direct_chat_created',
         'message_deleted', 'message_edited'
       ];
       
@@ -537,7 +542,11 @@ const Header = () => {
                       <ListItemText
                         primary={
                           <Typography variant="body2" fontWeight="medium">
-                            <strong>{notifText.title}</strong> {notifText.body}
+                            {notif.titlePlacement === 'suffix' ? (
+                              <>{notif.body} <strong>{notif.title}</strong></>
+                            ) : (
+                              <><strong>{notif.title}</strong> {notif.body}</>
+                            )}
                           </Typography>
                         }
                         secondary={
