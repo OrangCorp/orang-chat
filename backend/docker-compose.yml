@@ -29,7 +29,7 @@ services:
     ports:
       - "80:80"
     networks:
-      - orangchat-network
+      - frontend-nw
     depends_on:
       - api-gateway
     restart: unless-stopped
@@ -56,7 +56,7 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:-orangchat123}
       - MAIL_USERNAME=${MAIL_USER:-cf0a8d7f867717}
       - MAIL_PASSWORD=${MAIL_PASS:-46009d0d87f280}
-      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+      - JWT_SECRET=${JWT_SECRET-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
       - SPRING_PROFILES_ACTIVE=dev
     depends_on:
       postgres-auth:
