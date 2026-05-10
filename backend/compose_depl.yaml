@@ -1,0 +1,353 @@
+services:
+  api-gateway:
+    build:
+      context: .
+      dockerfile: service.Dockerfile
+      args:
+        SERVICE_NAME: api-gateway
+        SERVICE_PORT: 8080
+    container_name: orangchat-api-gateway
+    expose:
+      - "8080"
+    networks:
+      - frontend-nw
+      - backend-nw
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - USER_SERVICE_URL=http://user-service:8082
+      - CHAT_SERVICE_URL=ws://chat-service:8083
+      - MESSAGE_SERVICE_URL=http://message-service:8084
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8085
+      - REDIS_HOST=redis
+      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+    restart: unless-stopped
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: orangchat-frontend
+    expose:
+      - "80"
+    networks:
+      - frontend-nw
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: service.Dockerfile
+      args:
+        SERVICE_NAME: auth-service
+        SERVICE_PORT: 8081
+    container_name: orangchat-auth-service
+    networks:
+      - backend-nw
+      - db-nw
+    environment:
+      - AUTH_SERVER_PORT=8081
+      - AUTH_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-auth:5432/auth_db
+      - AUTH_DATABASE_USERNAME=${AUTH_DB_USER:-authuser}
+      - AUTH_DATABASE_PASSWORD=${AUTH_DB_PASS:-authpass}
+      - REDIS_HOST=redis
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USER=${RABBIT_USER:-orangchat}
+      - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:-orangchat123}
+      - MAIL_USERNAME=${MAIL_USER:-cf0a8d7f867717}
+      - MAIL_PASSWORD=${MAIL_PASS:-46009d0d87f280}
+      - JWT_SECRET=${JWT_SECRET-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+      - SPRING_PROFILES_ACTIVE=dev
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: .
+      dockerfile: service.Dockerfile
+      args:
+        SERVICE_NAME: user-service
+        SERVICE_PORT: 8082
+    container_name: orangchat-user-service
+    networks:
+      - backend-nw
+      - db-nw
+    environment:
+      - USER_SERVER_PORT=8082
+      - USER_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
+      - USER_DATABASE_USERNAME=${USER_DB_USER:-useruser}
+      - USER_DATABASE_PASSWORD=${USER_DB_PASS:-userpass}
+      - REDIS_HOST=redis
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: service.Dockerfile
+      args:
+        SERVICE_NAME: chat-service
+        SERVICE_PORT: 8083
+    container_name: orangchat-chat-service
+    networks:
+      - backend-nw
+    environment:
+      - CHAT_SERVER_PORT=8083
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - REDIS_HOST=redis
+      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  message-service:
+    build:
+      context: .
+      dockerfile: service.Dockerfile
+      args:
+        SERVICE_NAME: message-service
+        SERVICE_PORT: 8084
+    container_name: orangchat-message-service
+    networks:
+      - backend-nw
+      - db-nw
+    environment:
+      - MESSAGE_SERVER_PORT=8084
+      - MESSAGE_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-message:5432/message_db
+      - MESSAGE_DATABASE_USERNAME=${MESSAGE_DB_USER:-messageuser}
+      - MESSAGE_DATABASE_PASSWORD=${MESSAGE_DB_PASS:-messagepass}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASS:-minioadmin123}
+      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+      - MINIO_DOWNLOAD_MODE=${MINIO_DOWNLOAD_MODE:-backend}
+      - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:-http://localhost:9000}
+    depends_on:
+      postgres-message:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: service.Dockerfile
+      args:
+        SERVICE_NAME: notification-service
+        SERVICE_PORT: 8085
+    container_name: orangchat-notification-service
+    networks:
+      - backend-nw
+      - db-nw
+    environment:
+      - NOTIFICATION_SERVER_PORT=8085
+      - NOTIFICATION_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-notification:5432/notification_db
+      - NOTIFICATION_DATABASE_USERNAME=${NOTIF_DB_USER:-notificationuser}
+      - NOTIFICATION_DATABASE_PASSWORD=${NOTIF_DB_PASS:-notificationpass}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+      - VAPID_PUBLIC_KEY=${VAPID_PUB:-BJpbtLz1TmeDHqF-SHenqYTjmGFD_rOAomOUXE-aHQ0g8_sENBPI8PiECPHo3Hn566y8BcCS52szGZtQWV0A_vU}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIV:-Hf17E44Uk_VegHbti_boVg68zgFQV6pXZ8Pg3Ct5ylk}
+      - VAPID_SUBJECT=mailto:admin@chatapp.com
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  postgres-auth:
+    image: postgres:18-alpine3.22
+    container_name: orangchat-postgres-auth
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: ${AUTH_DB_USER:-authuser}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASS:-authpass}
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    networks:
+      - db-nw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-user:
+    image: postgres:18-alpine3.22
+    container_name: orangchat-postgres-user
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: ${USER_DB_USER:-useruser}
+      POSTGRES_PASSWORD: ${USER_DB_PASS:-userpass}
+    volumes:
+      - postgres-user-data:/var/lib/postgresql/data
+    networks:
+      - db-nw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-message:
+    image: postgres:18-alpine3.22
+    container_name: orangchat-postgres-message
+    environment:
+      POSTGRES_DB: message_db
+      POSTGRES_USER: ${MESSAGE_DB_USER:-messageuser}
+      POSTGRES_PASSWORD: ${MESSAGE_DB_PASS:-messagepass}
+    volumes:
+      - postgres-message-data:/var/lib/postgresql/data
+    networks:
+      - db-nw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-notification:
+    image: postgres:18-alpine3.22
+    container_name: orangchat-postgres-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: ${NOTIF_DB_USER:-notificationuser}
+      POSTGRES_PASSWORD: ${NOTIF_DB_PASS:-notificationpass}
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+    networks:
+      - db-nw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8.6.1-alpine
+    container_name: orangchat-redis
+    # TODO: Add redis password
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend-nw
+      - db-nw
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4.2.4-management-alpine
+    container_name: orangchat-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-orangchat}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS:-orangchat123}
+    ports:
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - backend-nw
+      - db-nw
+    command: sh -c "rabbitmq-plugins enable --offline rabbitmq_stomp rabbitmq_management && rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    # Tag latest, ponieważ projekt jest zarchiwizowany na docker hubie
+    image: minio/minio:latest
+    container_name: orangchat-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASS:-minioadmin123}
+    volumes:
+      - minio-data:/data
+    networks:
+      - db-nw
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres-auth-data:
+  postgres-user-data:
+  postgres-message-data:
+  postgres-notification-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+
+networks:
+  frontend-nw: # Access from Internet (Gateway only)
+    driver: bridge
+  backend-nw:  # App logic (Services, Redis, RabbitMQ)
+    driver: bridge
+  db-nw:
+    driver: bridge
