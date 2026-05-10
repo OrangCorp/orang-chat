@@ -121,7 +121,7 @@ services:
       - CHAT_SERVER_PORT=8083
       - SPRING_RABBITMQ_HOST=rabbitmq
       - REDIS_HOST=redis
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
     depends_on:
       rabbitmq:
         condition: service_healthy
