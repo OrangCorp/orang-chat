@@ -1430,7 +1430,7 @@ const Chat = () => {
                       src={getAvatar(userId)} 
                       sx={{ width: 20, height: 20 }}
                     >
-                      {(getDisplayName(result.senderId) || '?').charAt(0)}
+                      {(getDisplayName(userId) || '?').charAt(0)}
                     </Avatar>
                   ))}
                 </Box>

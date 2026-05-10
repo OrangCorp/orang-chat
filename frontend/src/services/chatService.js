@@ -30,7 +30,7 @@ class ChatService {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       this.stompClient = new Client({
-        brokerURL: 'ws://localhost:8080/ws',
+        brokerURL: `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`,
         connectHeaders: {
           Authorization: `Bearer ${token}`
         },
