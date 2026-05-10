@@ -899,72 +899,53 @@ Queues:
 ### Event Publishing Pattern
 
 ```java
-// In service layer, after DB transaction commits:
-@Service
-public class UserService {
-    
-    private final UserRepository userRepository;
-    private final ApplicationEventPublisher applicationEventPublisher;
-    
-    @Transactional
-    public User register(RegisterRequest req) {
-        // 1. Save to database
-        User user = new User();
-        user.setEmail(req.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-        User saved = userRepository.save(user);
-        
-        // 2. After transaction commits, Spring detects and publishes event
-        return saved;
-        
-        // Note: No explicit publish call needed!
-        // Spring's transaction management handles this.
+     private void publishUserRegisteredEventAfterCommit(UserRegisteredEvent userEvent) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rabbitTemplate.convertAndSend(
+                            "user.exchange",
+                            "user.registered",
+                            userEvent
+                    );
+                }
+            });
+        } else {
+            rabbitTemplate.convertAndSend(
+                    "user.exchange",
+                    "user.registered",
+                    userEvent
+            );
+        }
     }
-    
-    // Event published automatically after save() commits:
-    @Bean
-    public ApplicationEventPublisher.EventPublishingStrategy strategy() {
-        // RabbitTemplate configured to send to RabbitMQ via Jackson2JsonMessageConverter
-        return event -> rabbitTemplate.convertAndSend(
-            "user.exchange",
-            "user.registered",
-            event
-        );
-    }
-}
 ```
 
 ### Event Consumption Pattern
 
 ```java
-@Service
-public class UserProfileService {
-    
-    private final ProfileRepository profileRepository;
-    
-    // Listen to user registration events from Auth Service
-    @RabbitListener(queues = "user.registered.queue")
-    public void onUserRegistered(UserRegisteredEvent event) {
-        // Check idempotency
-        Optional<Profile> existing = profileRepository.findById(event.getUserId());
-        if (existing.isPresent()) {
-            log.debug("Profile already exists for user: {}", event.getUserId());
-            return;
+  @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(value = "user.registered.queue", durable = "true"),
+            exchange = @Exchange(value = "user.exchange", type = "topic"),
+            key = "user.registered"
+    ))
+    public void userRegisteredEvent(UserRegisteredEvent event) {
+        log.info("User registered event received: userId={}", event.getUserId());
+
+        try {
+            profileService.createProfileIfNotExists(event.getUserId(), event.getDisplayName());
+        } catch (Exception e) {
+            log.error("Failed to create profile for userId={}: {}",
+                    event.getUserId(),
+                    e.getMessage(),
+                    e);
+            // Rethrow to trigger RabbitMQ retry/DLQ
+            throw new AmqpRejectAndDontRequeueException(
+                    "Failed to process UserRegisteredEvent for userId=" + event.getUserId(),
+                    e
+            );
         }
-        
-        // Create profile
-        Profile profile = new Profile();
-        profile.setUserId(event.getUserId());
-        profile.setDisplayName(event.getDisplayName());
-        profile.setCreatedAt(Instant.now());
-        
-        profileRepository.save(profile);
-        log.info("Profile created for user: {}", event.getUserId());
-        
-        // If exception thrown here, message goes to DLQ (Dead Letter Queue)
-        // Can be replayed later
     }
-}
 ```
 
 ---
@@ -1255,82 +1236,7 @@ Note:
 - All DBs: Replication for HA
 - All services: Health checks, auto-restart on failure
 ```
-
-### Kubernetes Deployment (Example)
-
-```yaml
-# Deployment for Auth Service
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: auth-service
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: auth-service
-  template:
-    metadata:
-      labels:
-        app: auth-service
-    spec:
-      containers:
-      - name: auth-service
-        image: orangchat/auth-service:latest
-        ports:
-        - containerPort: 8081
-        env:
-        - name: AUTH_SPRING_DATASOURCE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: auth-config
-              key: datasource-url
-        - name: REDIS_HOST
-          value: redis-service
-        - name: SPRING_RABBITMQ_HOST
-          value: rabbitmq-service
-        - name: JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: jwt-secret
-              key: secret
-        livenessProbe:
-          httpGet:
-            path: /actuator/health
-            port: 8081
-          initialDelaySeconds: 20
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /actuator/health/ready
-            port: 8081
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            cpu: 250m
-            memory: 512Mi
-          limits:
-            cpu: 500m
-            memory: 1Gi
-
----
-# Service to expose Auth Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: auth-service
-spec:
-  selector:
-    app: auth-service
-  ports:
-  - protocol: TCP
-    port: 8081
-    targetPort: 8081
-  type: ClusterIP
-```
-
----
+ ---
 
 ## Summary
 
