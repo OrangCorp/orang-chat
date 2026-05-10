@@ -1,7 +1,14 @@
 // services/chatService.js
 import { Client } from '@stomp/stompjs';
 
-const WS_URL = '/ws';
+const getBrokerURL = () => {
+  // If running in Vite dev mode (import.meta.env.DEV is true)
+  if (import.meta.env.DEV) {
+    return 'ws://localhost:8080/ws';  // Connect directly to gateway in dev
+  }
+  // Production - use relative URL that resolves to current host
+  return '/ws';
+};
 
 class ChatService {
   constructor() {
@@ -30,7 +37,7 @@ class ChatService {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       this.stompClient = new Client({
-        brokerURL: 'ws://localhost:8080/ws',
+        brokerURL: getBrokerURL(),
         connectHeaders: {
           Authorization: `Bearer ${token}`
         },
