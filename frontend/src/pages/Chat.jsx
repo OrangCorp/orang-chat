@@ -103,6 +103,8 @@ const Chat = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
+  const highlightedMessageRef = useRef(null);
+
   useEffect(() => {
     if (conversation?.id) loadMuteStatus();
   }, [conversation]);
@@ -170,6 +172,22 @@ const Chat = () => {
     setTypingUsers(new Set());
     setViewMode('chat');
     setSelectedFiles([]);
+  }, [chatId]);
+
+  const initialScrollDone = useRef(false);
+
+  useEffect(() => {
+    if (!loading && messages.length > 0 && !initialScrollDone.current) {
+      initialScrollDone.current = true;
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 100);
+    }
+  }, [loading, messages]);
+
+  // Reset when chat changes
+  useEffect(() => {
+    initialScrollDone.current = false;
   }, [chatId]);
 
   const loadConversationData = useCallback(async () => {
@@ -604,6 +622,15 @@ const Chat = () => {
     setSearchResults([]);
     setContextData(null);
   };
+
+  useEffect(() => {
+    if (contextData?.targetMessageId && highlightedMessageRef.current) {
+      highlightedMessageRef.current.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+    }
+  }, [contextData]);
 
   // Group management functions
   const getCurrentUserRole = () => {
@@ -1096,9 +1123,19 @@ const Chat = () => {
   };
   
   const getMessageTime = (msg) => {
-    const d = msg.createdAt || msg.timestamp;
+    let d = msg.createdAt || msg.timestamp;
     if (!d) return 'Just now';
-    try { return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return 'Just now'; }
+    try {
+      // If no timezone indicator, assume UTC
+      if (typeof d === 'string' && !/[+\-Z]/i.test(d.slice(-6))) {
+        d += 'Z';
+      }
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return 'Just now';
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Just now';
+    }
   };
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
@@ -1133,15 +1170,10 @@ const Chat = () => {
           ) : (
             <List>
               {searchResults.map((result) => (
-                <ListItem
-                  key={result.id}
-                  button
+                <ListItem 
+                  key={result.id} 
                   onClick={() => handleSearchResultClick(result.id)}
-                  sx={{
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}
+                  sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
                 >
                   <ListItemAvatar>
                     <Avatar src={getAvatar(result.senderId)}>
@@ -1197,20 +1229,24 @@ const Chat = () => {
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: '#f5f5f5' }}>
             {contextData.messages.map((msg) => (
-              <MessageBubble
-                key={msg.id || i}
-                message={msg}
-                isOwn={msg.senderId === user.id}
-                senderName={getDisplayName(msg.senderId)}
-                senderAvatar={getAvatar(msg.senderId)}
-                time={getMessageTime(msg)}
-                onAvatarClick={() => handleProfileClick(msg.senderId)}
-                onEdit={handleEditMessage}
-                onDelete={handleDeleteMessage}
-                onReaction={handleReaction}
-                highlight={msg.id === contextData.targetMessageId}
-                participants={participants}
-              />
+              <Box 
+                key={msg.id} 
+                ref={msg.id === contextData.targetMessageId ? highlightedMessageRef : null}
+              >
+                <MessageBubble
+                  message={msg}
+                  isOwn={msg.senderId === user.id}
+                  senderName={getDisplayName(msg.senderId)}
+                  senderAvatar={getAvatar(msg.senderId)}
+                  time={getMessageTime(msg)}
+                  onAvatarClick={() => handleProfileClick(msg.senderId)}
+                  onEdit={handleEditMessage}
+                  onDelete={handleDeleteMessage}
+                  onReaction={handleReaction}
+                  highlight={msg.id === contextData.targetMessageId}
+                  participants={participants}
+                />
+              </Box>
             ))}
           </Box>
         </Box>
