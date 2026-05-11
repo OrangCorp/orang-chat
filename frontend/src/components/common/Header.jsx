@@ -28,6 +28,7 @@ import userService from '../../services/userService';
 import messageService from '../../services/messageService';
 import notificationService from '../../services/notificationService';
 import logoImg from '../../assets/logo.png';
+import { emitConversationCreated } from '../../utils/conversationEvents';
 
 // Helper to get icon based on type
 const getIconForType = (type) => {
@@ -473,6 +474,7 @@ const Header = () => {
     setSearchQuery('');
     try {
       const conversation = await messageService.getOrCreateDirectChat(targetUser.userId);
+      emitConversationCreated(conversation); // Add this line
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       console.error('Failed to start chat:', error);
