@@ -1,11 +1,11 @@
-// Header.jsx - Complete updated with proper notification handling
+// Header.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AppBar, Toolbar, Box, Button, TextField, InputAdornment, Popper, Paper,
   List, ListItem, ListItemButton, ListItemAvatar, ListItemText, Avatar,
   CircularProgress, ClickAwayListener, IconButton, Menu, MenuItem,
-  Typography, Divider, Badge, Tooltip
+  Typography, Divider, Badge, Tooltip, Stack
 } from '@mui/material';
 import {
   Search as SearchIcon, Chat as ChatIcon, Person as PersonIcon,
@@ -20,29 +20,42 @@ import {
   Edit as EditIcon,
   Group as GroupIcon,
   AlternateEmail as MentionIcon,
+  DoneAll as MarkReadIcon,
+  ClearAll as ClearAllIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import messageService from '../../services/messageService';
+import notificationService from '../../services/notificationService';
 import logoImg from '../../assets/logo.png';
+import { emitConversationCreated } from '../../utils/conversationEvents';
 
-// Helper to format notification message based on type
-const getNotificationText = (notif) => {
-  const name = notif.senderName || notif.title || 'Someone';
-  const body = notif.body || '';
-  
-  // Choose icon based on type
-  let icon = <MessageIcon />;
-  switch (notif.type) {
-    case 'reaction': icon = <ReactionIcon />; break;
-    case 'mention': icon = <MentionIcon />; break;
-    case 'group_added': case 'member_added': icon = <GroupIcon />; break;
-    case 'message_deleted': icon = <DeleteIcon />; break;
-    case 'message_edited': icon = <EditIcon />; break;
-    case 'contact_request': icon = <PersonAddIcon />; break;
+// Helper to get icon based on type
+const getIconForType = (type) => {
+  switch (type) {
+    case 'NEW_MESSAGE':
+    case 'new_message': return <MessageIcon />;
+    case 'REACTION':
+    case 'reaction': return <ReactionIcon />;
+    case 'MENTION':
+    case 'mention': return <MentionIcon />;
+    case 'GROUP_ADDED':
+    case 'group_added':
+    case 'GROUP_REMOVED':
+    case 'group_removed':
+    case 'ADMIN_PROMOTED':
+    case 'ADMIN_DEMOTED':
+    case 'GROUP_UPDATED': return <GroupIcon />;
+    case 'CONTACT_REQUEST':
+    case 'contact_request': return <PersonAddIcon />;
+    case 'DIRECT_CONVERSATION_CREATED':
+    case 'direct_chat_created': return <ChatIcon />;
+    case 'MESSAGE_DELETED':
+    case 'message_deleted': return <DeleteIcon />;
+    case 'MESSAGE_EDITED':
+    case 'message_edited': return <EditIcon />;
+    default: return <MessageIcon />;
   }
-  
-  return { title: name, body, icon };
 };
 
 // Helper to format time
@@ -81,11 +94,9 @@ const Header = () => {
 
   // Notifications state
   const [notificationsAnchor, setNotificationsAnchor] = useState(null);
-  const [contactRequests, setContactRequests] = useState([]);
-  const [pushNotifications, setPushNotifications] = useState([]);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-
-  const unreadCount = contactRequests.length + pushNotifications.length;
+  const [inbox, setInbox] = useState([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Load current user profile
   useEffect(() => {
@@ -110,64 +121,73 @@ const Header = () => {
   }, [user]);
 
   // ------------------------------------------------------------------
-  // Push notification handling
+  // Notification formatting (same logic as old push notifications)
   // ------------------------------------------------------------------
-  const addPushNotification = useCallback(async (data) => {
-    const { type, title, body, url, conversationId } = data || {};
+  const formatNotification = useCallback(async (data) => {
+    const { type, title, body, url, conversationId, actorId } = data || {};
     
-    // Default notification
-    const newNotif = {
-      id: `push-${Date.now()}-${Math.random()}`,
-      type: type || 'unknown',
+    const formatted = {
+      ...data,
       title: title || 'Notification',
       body: body || '',
       titlePlacement: 'prefix',
-      conversationId,
+      url: url?.replace('/conversations/', '/chat/') || '/',
       senderName: null,
       avatarUrl: null,
-      url: url?.replace('/conversations/', '/chat/') || '/',
-      timestamp: new Date().toISOString(),
     };
     
-    // No conversation to look up - use defaults
-    if (!conversationId) {
-      setPushNotifications(prev => [newNotif, ...prev]);
-      return;
+    // Handle CONTACT_REQUEST - fetch requester profile
+    if (type === 'CONTACT_REQUEST' || type === 'contact_request') {
+      if (actorId) {
+        try {
+          const profile = await userService.getProfile(actorId);
+          formatted.senderName = profile?.displayName || 'Unknown';
+          formatted.avatarUrl = profile?.avatarUrl;
+          formatted.title = formatted.senderName;
+          formatted.body = 'sent you a contact request';
+        } catch (e) {
+          formatted.title = 'Someone';
+          formatted.body = 'sent you a contact request';
+        }
+      }
+      return formatted;
     }
     
-    // Try to get conversation info
+    if (!conversationId) return formatted;
+    
     try {
       const conversations = await messageService.getConversations();
       const conversation = conversations.find(c => c.id === conversationId);
       
-      if (!conversation) {
-        setPushNotifications(prev => [newNotif, ...prev]);
-        return;
-      }
+      if (!conversation) return formatted;
       
       if (conversation.type === 'DIRECT') {
         const otherParticipant = conversation.participants?.find(p => p.userId !== user?.id);
         if (otherParticipant) {
           const profile = await userService.getProfile(otherParticipant.userId);
-          newNotif.senderName = profile?.displayName || 'Unknown';
-          newNotif.avatarUrl = profile?.avatarUrl;
+          formatted.senderName = profile?.displayName || 'Unknown';
+          formatted.avatarUrl = profile?.avatarUrl;
           
           switch (type) {
             case 'new_message':
-              newNotif.title = newNotif.senderName;
-              newNotif.body = 'sent you a message';
+            case 'NEW_MESSAGE':
+              formatted.title = formatted.senderName;
+              formatted.body = 'sent you a message';
               break;
             case 'direct_chat_created':
-              newNotif.title = newNotif.senderName;
-              newNotif.body = 'started a conversation with you';
+            case 'DIRECT_CONVERSATION_CREATED':
+              formatted.title = formatted.senderName;
+              formatted.body = 'started a conversation with you';
               break;
             case 'reaction':
-              newNotif.title = newNotif.senderName;
-              newNotif.body = 'reacted to your message';
+            case 'REACTION':
+              formatted.title = formatted.senderName;
+              formatted.body = 'reacted to your message';
               break;
             case 'mention':
-              newNotif.title = newNotif.senderName;
-              newNotif.body = 'mentioned you';
+            case 'MENTION':
+              formatted.title = formatted.senderName;
+              formatted.body = 'mentioned you';
               break;
           }
         }
@@ -176,25 +196,29 @@ const Header = () => {
         
         switch (type) {
           case 'new_message':
-            newNotif.body = 'New message in';
-            newNotif.title = groupName;
-            newNotif.titlePlacement = 'suffix';
+          case 'NEW_MESSAGE':
+            formatted.body = 'New message in';
+            formatted.title = groupName;
+            formatted.titlePlacement = 'suffix';
             break;
           case 'group_added':
           case 'member_added':
-            newNotif.body = 'You were added to';
-            newNotif.title = groupName;
-            newNotif.titlePlacement = 'suffix';
+          case 'GROUP_ADDED':
+            formatted.body = 'You were added to';
+            formatted.title = groupName;
+            formatted.titlePlacement = 'suffix';
             break;
           case 'reaction':
-            newNotif.title = groupName;
-            newNotif.body = 'New reaction';
-            newNotif.titlePlacement = 'suffix';
+          case 'REACTION':
+            formatted.title = groupName;
+            formatted.body = 'New reaction';
+            formatted.titlePlacement = 'suffix';
             break;
           case 'mention':
-            newNotif.title = groupName;
-            newNotif.body = 'You were mentioned';
-            newNotif.titlePlacement = 'suffix';
+          case 'MENTION':
+            formatted.title = groupName;
+            formatted.body = 'You were mentioned';
+            formatted.titlePlacement = 'suffix';
             break;
         }
       }
@@ -202,129 +226,195 @@ const Header = () => {
       console.debug('Could not fetch conversation info for notification:', e);
     }
     
-    setPushNotifications(prev => [newNotif, ...prev]);
+    return formatted;
   }, [user?.id]);
 
-  // Listen for SW messages
+  // ------------------------------------------------------------------
+  // Inbox fetching
+  // ------------------------------------------------------------------
+  const fetchInbox = async () => {
+    setInboxLoading(true);
+    try {
+      const data = await notificationService.getInbox(0, 20);
+      const formatted = await Promise.all(
+        data.content.map(notif => formatNotification(notif))
+      );
+      setInbox(formatted);
+    } catch (e) {
+      console.error('Failed to fetch inbox', e);
+    } finally {
+      setInboxLoading(false);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Unread count - REST + WebSocket
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Fetch initial unread count
+    notificationService.getUnreadCount()
+      .then(setUnreadCount)
+      .catch(err => console.error('Failed to fetch unread count:', err));
+  }, [user?.id]);
+
+  // ------------------------------------------------------------------
+  // Refresh on push notifications
+  // ------------------------------------------------------------------
   useEffect(() => {
     const handleSWMessage = async (event) => {
       const data = event.detail || event.data;
       if (!data) return;
       
-      const { type } = data || {};
       const notifTypes = [
         'new_message', 'reaction', 'mention', 
         'group_added', 'member_added', 'direct_chat_created',
-        'message_deleted', 'message_edited'
+        'message_deleted', 'message_edited', 'contact_request'
       ];
       
-      if (notifTypes.includes(type)) {
-        await addPushNotification(data);
-      }
-    };
-
-    // ONLY listen for custom event, NOT direct SW messages
-    window.addEventListener('sw-message', handleSWMessage);
-    
-    // Check for missed notifications
-    navigator.serviceWorker?.ready.then(reg => {
-      if (reg.active) reg.active.postMessage({ type: 'CHECK_MISSED' });
-    });
-
-    return () => {
-      window.removeEventListener('sw-message', handleSWMessage);
-    };
-  }, [addPushNotification]);
-
-  const handleDismissPush = (id) => {
-    setPushNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  const handlePushClick = (notification) => {
-    if (notification.url) navigate(notification.url);
-    handleDismissPush(notification.id);
-    setNotificationsAnchor(null);
-  };
-
-  // ------------------------------------------------------------------
-  // Contact request handling
-  // ------------------------------------------------------------------
-  const loadContactRequests = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      setNotificationsLoading(true);
-      const incomingRequests = await userService.getIncomingRequests(true);
-
-      const requesterIds = [...new Set(incomingRequests.map(r => r.requesterId))];
-      let profileMap = new Map();
-      if (requesterIds.length > 0) {
+      if (notifTypes.includes(data.type)) {
         try {
-          profileMap = await userService.getProfiles(requesterIds);
-        } catch (err) { /* ignore */ }
+          const count = await notificationService.getUnreadCount();
+          setUnreadCount(count);
+        } catch (e) { /* ignore */ }
+        
+        if (notificationsAnchorRef.current) {
+          fetchInbox();
+        }
       }
-
-      const formatted = incomingRequests.map(req => {
-        const profile = profileMap.get(req.requesterId);
-        return {
-          id: req.id,
-          userId: req.requesterId,
-          displayName: profile?.displayName || 'Unknown User',
-          avatarUrl: profile?.avatarUrl || null,
-          status: req.status,
-          createdAt: req.createdAt,
-          type: 'contact_request'
-        };
-      });
-
-      setContactRequests(formatted);
-    } catch (error) {
-      console.error('Failed to load contact requests:', error);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    const handleRefresh = () => loadContactRequests();
+    };
+    
+    // Also listen for contact request events
+    const handleRefresh = () => {
+      notificationService.getUnreadCount()
+        .then(setUnreadCount)
+        .catch(() => {});
+    };
+    
+    window.addEventListener('sw-message', handleSWMessage);
     window.addEventListener('refresh-notifications', handleRefresh);
     window.addEventListener('contact-request-resolved', handleRefresh);
+    
     return () => {
+      window.removeEventListener('sw-message', handleSWMessage);
       window.removeEventListener('refresh-notifications', handleRefresh);
       window.removeEventListener('contact-request-resolved', handleRefresh);
     };
-  }, [loadContactRequests]);
+  }, [user?.id]);
 
+  // Ref for checking if notifications panel is open (used in the event listener above)
+  const notificationsAnchorRef = useRef(null);
   useEffect(() => {
-    if (user?.id) loadContactRequests();
-  }, [user?.id, loadContactRequests]);
+    notificationsAnchorRef.current = notificationsAnchor;
+  }, [notificationsAnchor]);
 
-  const handleAcceptRequest = async (notification) => {
+  // ------------------------------------------------------------------
+  // Notification actions
+  // ------------------------------------------------------------------
+  const handleNotificationsOpen = (e) => {
+    setNotificationsAnchor(e.currentTarget);
+    fetchInbox();
+  };
+
+  const handleNotificationsClose = () => {
+    setNotificationsAnchor(null);
+  };
+
+  const handleMarkRead = async (notif) => {
     try {
-      await userService.acceptContactRequest(notification.id);
-      setContactRequests(prev => prev.filter(n => n.id !== notification.id));
-      window.dispatchEvent(new CustomEvent('contact-status-changed', { 
-        detail: { userId: notification.userId, status: 'ACCEPTED' } 
-      }));
-      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
-        detail: { contactId: notification.id, userId: notification.userId } 
-      }));
-    } catch (error) {
-      console.error('Failed to accept request:', error);
+      const updated = await notificationService.markAsRead(notif.id);
+      setInbox(prev => prev.map(n => n.id === updated.id ? { ...n, read: true, readAt: updated.readAt } : n));
+      if (!notif.read) {
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (e) {
+      console.error('Mark read failed:', e);
     }
   };
 
-  const handleDeclineRequest = async (notification) => {
+  const handleDelete = async (notif) => {
     try {
-      await userService.rejectContactRequest(notification.id);
-      setContactRequests(prev => prev.filter(n => n.id !== notification.id));
-      window.dispatchEvent(new CustomEvent('contact-status-changed', { 
-        detail: { userId: notification.userId, status: null } 
-      }));
-      window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
-        detail: { contactId: notification.id, userId: notification.userId } 
-      }));
-    } catch (error) {
-      console.error('Failed to decline request:', error);
+      await notificationService.deleteNotification(notif.id);
+      setInbox(prev => prev.filter(n => n.id !== notif.id));
+      if (!notif.read) {
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationService.markAllRead();
+      setInbox(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (e) {
+      console.error('Mark all read failed:', e);
+    }
+  };
+
+  const handleClearAll = async () => {
+    try {
+      await notificationService.clearAllNotifications();
+      setInbox([]);
+      setUnreadCount(0);
+    } catch (e) {
+      console.error('Clear all failed:', e);
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif.read) {
+      await handleMarkRead(notif);
+    }
+    handleNotificationsClose();
+    
+    if (notif.conversationId) {
+      const url = `/chat/${notif.conversationId}` + (notif.messageId ? `?highlight=${notif.messageId}` : '');
+      navigate(url);
+    } else if (notif.type === 'CONTACT_REQUEST' || notif.type === 'contact_request') {
+      navigate('/contacts');
+    } else {
+      navigate('/');
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Contact request handling (accept/decline)
+  // ------------------------------------------------------------------
+  const handleAcceptRequest = async (notif) => {
+    try {
+      const requests = await userService.getIncomingRequests(true);
+      const request = requests.find(r => r.requesterId === notif.actorId);
+      
+      if (request) {
+        await userService.acceptContactRequest(request.id);
+        await notificationService.deleteNotification(notif.id);
+        setInbox(prev => prev.filter(n => n.id !== notif.id));
+        if (!notif.read) setUnreadCount(prev => Math.max(0, prev - 1));
+        window.dispatchEvent(new CustomEvent('contact-request-resolved'));
+      }
+    } catch (e) {
+      console.error('Accept failed:', e);
+    }
+  };
+
+  const handleDeclineRequest = async (notif) => {
+    try {
+      const requests = await userService.getIncomingRequests(true);
+      const request = requests.find(r => r.requesterId === notif.actorId);
+      
+      if (request) {
+        await userService.rejectContactRequest(request.id);
+        await notificationService.deleteNotification(notif.id);
+        setInbox(prev => prev.filter(n => n.id !== notif.id));
+        if (!notif.read) setUnreadCount(prev => Math.max(0, prev - 1));
+        window.dispatchEvent(new CustomEvent('contact-request-resolved'));
+      }
+    } catch (e) {
+      console.error('Decline failed:', e);
     }
   };
 
@@ -347,9 +437,6 @@ const Header = () => {
     handleProfileMenuClose();
     navigate('/settings');
   };
-
-  const handleNotificationsOpen = (e) => setNotificationsAnchor(e.currentTarget);
-  const handleNotificationsClose = () => setNotificationsAnchor(null);
 
   // Search handlers
   useEffect(() => {
@@ -387,6 +474,7 @@ const Header = () => {
     setSearchQuery('');
     try {
       const conversation = await messageService.getOrCreateDirectChat(targetUser.userId);
+      emitConversationCreated(conversation); // Add this line
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       console.error('Failed to start chat:', error);
@@ -395,12 +483,6 @@ const Header = () => {
 
   const getDisplayName = () => currentUserProfile?.displayName || user?.username || user?.email?.split('@')[0] || 'User';
   const getAvatarInitial = () => getDisplayName().charAt(0).toUpperCase();
-
-  // Combined notifications list
-  const allNotifications = [
-    ...contactRequests,
-    ...pushNotifications,
-  ].sort((a, b) => new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp));
 
   return (
     <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
@@ -477,90 +559,115 @@ const Header = () => {
         onClose={handleNotificationsClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{ sx: { mt: 1, width: 420, maxHeight: 500, borderRadius: 2, overflow: 'hidden' } }}
+        PaperProps={{ sx: { mt: 1, width: 450, maxHeight: 600, borderRadius: 2, overflow: 'hidden' } }}
       >
-        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" fontWeight="bold">Notifications</Typography>
+          <Stack direction="row" spacing={1}>
+            <Tooltip title="Mark all read">
+              <IconButton size="small" color="inherit" onClick={handleMarkAllRead}>
+                <MarkReadIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Clear all">
+              <IconButton size="small" color="inherit" onClick={handleClearAll}>
+                <ClearAllIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         </Box>
         <Divider />
-        {notificationsLoading && contactRequests.length === 0 && pushNotifications.length === 0 ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={32} /></Box>
-        ) : allNotifications.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">No notifications</Typography></Box>
+        
+        {inboxLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : inbox.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography color="text.secondary">No notifications</Typography>
+          </Box>
         ) : (
           <List sx={{ p: 0 }}>
-            {allNotifications.map((notif) => {
-              const notifText = getNotificationText(notif);
-              return (
-                <React.Fragment key={notif.id}>
-                  {notif.type === 'contact_request' ? (
-                    <ListItem sx={{ py: 2, px: 2 }}>
-                      <ListItemAvatar>
-                        <Avatar src={notif.avatarUrl}>{notif.displayName?.charAt(0).toUpperCase()}</Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={<Typography variant="body2" fontWeight="medium"><strong>{notif.displayName}</strong> sent you a request</Typography>}
-                        secondary={<Typography variant="caption" color="text.secondary">Pending approval • {notif.createdAt && new Date(notif.createdAt).toLocaleDateString()}</Typography>}
-                      />
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Accept">
-                          <IconButton size="small" color="success" onClick={() => handleAcceptRequest(notif)} sx={{ bgcolor: 'success.light', '&:hover': { bgcolor: 'success.main' } }}>
+            {inbox.map((notif) => (
+              <React.Fragment key={notif.id}>
+                <ListItem
+                  sx={{ 
+                    py: 2, px: 2, cursor: 'pointer', 
+                    bgcolor: notif.read ? 'transparent' : 'action.hover',
+                    '&:hover': { bgcolor: 'action.selected' }
+                  }}
+                  onClick={() => handleNotificationClick(notif)}
+                  secondaryAction={
+                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                      {(notif.type === 'CONTACT_REQUEST' || notif.type === 'contact_request') && (
+                        <>
+                          <Tooltip title="Accept">
+                            <IconButton 
+                              size="small" 
+                              color="success"
+                              onClick={(e) => { e.stopPropagation(); handleAcceptRequest(notif); }}
+                            >
+                              <CheckIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Decline">
+                            <IconButton 
+                              size="small" 
+                              color="error"
+                              onClick={(e) => { e.stopPropagation(); handleDeclineRequest(notif); }}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
+                      {!notif.read && (
+                        <Tooltip title="Mark read">
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleMarkRead(notif); }}>
                             <CheckIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Decline">
-                          <IconButton size="small" color="error" onClick={() => handleDeclineRequest(notif)} sx={{ bgcolor: 'error.light', '&:hover': { bgcolor: 'error.main' } }}>
-                            <CloseIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </ListItem>
-                  ) : (
-                    <ListItem
-                      component="div"
-                      onClick={() => handlePushClick(notif)}
-                      sx={{ py: 2, px: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                      secondaryAction={
-                        <IconButton 
-                          edge="end" 
-                          size="small" 
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            e.preventDefault();
-                            handleDismissPush(notif.id); 
-                          }}
-                        >
+                      )}
+                      <Tooltip title="Delete">
+                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDelete(notif); }}>
                           <CloseIcon fontSize="small" />
                         </IconButton>
-                      }
-                    >
-                      <ListItemAvatar>
-                        <Avatar src={notif.avatarUrl}>
-                          {notifText.icon}
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Typography variant="body2" fontWeight="medium">
-                            {notif.titlePlacement === 'suffix' ? (
-                              <>{notif.body} <strong>{notif.title}</strong></>
-                            ) : (
-                              <><strong>{notif.title}</strong> {notif.body}</>
-                            )}
-                          </Typography>
-                        }
-                        secondary={
-                          <Typography variant="caption" color="text.secondary">
-                            {formatNotificationTime(notif.timestamp)}
-                          </Typography>
-                        }
-                      />
-                    </ListItem>
-                  )}
-                  <Divider />
-                </React.Fragment>
-              );
-            })}
+                      </Tooltip>
+                    </Box>
+                  }
+                >
+                  <ListItemAvatar>
+                    <Avatar src={notif.avatarUrl} sx={{ bgcolor: notif.avatarUrl ? 'transparent' : (notif.read ? 'grey.400' : 'primary.main') }}>
+                      {!notif.avatarUrl && getIconForType(notif.type)}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={
+                      <Typography variant="body2" fontWeight={notif.read ? 'normal' : 'bold'}>
+                        {notif.titlePlacement === 'suffix' ? (
+                          <>{notif.body} <strong>{notif.title}</strong></>
+                        ) : (
+                          <><strong>{notif.title}</strong> {notif.body}</>
+                        )}
+                        {notif.groupCount > 1 && (
+                          <Badge 
+                            badgeContent={notif.groupCount} 
+                            color="primary" 
+                            sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: '0.65rem', position: 'static', transform: 'none' } }} 
+                          />
+                        )}
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography variant="caption" color="text.secondary">
+                        {formatNotificationTime(notif.createdAt || notif.timestamp)}
+                      </Typography>
+                    }
+                  />
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
           </List>
         )}
       </Menu>

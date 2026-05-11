@@ -80,7 +80,7 @@ spring:
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
               predicates:
-                - Path=/api/push/**, /api/conversations/*/notifications/**
+                - Path=/api/push/**, /api/conversations/*/notifications/**, /api/notifications/**
               filters:
                 - name: RequestRateLimiter
                   args:

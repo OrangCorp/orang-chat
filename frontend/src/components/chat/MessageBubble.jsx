@@ -110,7 +110,22 @@ const MessageBubble = ({
       )}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isOwn ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
-        <Paper elevation={1} sx={{ p: 1.5, bgcolor: isOwn ? 'primary.light' : 'secondary.light', color: 'white', borderRadius: isOwn ? '18px 4px 18px 18px' : '4px 18px 18px 18px', wordBreak: 'break-word' }}>
+        <Paper 
+          elevation={highlight ? 3 : 1} 
+          sx={{ 
+            p: 1.5, 
+            bgcolor: isOwn ? 'primary.light' : 'secondary.light', 
+            color: 'white', 
+            borderRadius: isOwn ? '18px 4px 18px 18px' : '4px 18px 18px 18px', 
+            wordBreak: 'break-word',
+            ...(highlight && {
+              fontWeight: 'bold',
+              border: '2px solid',
+              borderColor: isOwn ? 'secondary.main' : 'primary.main',
+              boxShadow: 3,
+            })
+          }}
+        >
           {editing ? (
             <Box>
               <TextField
@@ -131,7 +146,11 @@ const MessageBubble = ({
             </Box>
           ) : (
             <>
-              {message.content && <Typography variant="body2">{message.content}</Typography>}
+              {message.content && (
+                <Typography variant="body2" sx={{ fontWeight: highlight ? 'bold' : 'normal' }}>
+                  {message.content}
+                </Typography>
+              )}
               {attachments.length > 0 && (
                 <Box sx={{ mt: message.content ? 1 : 0 }}>
                   {attachments.map((att, idx) => (
