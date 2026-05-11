@@ -237,6 +237,57 @@ class NotificationService {
       console.error('Push initialization failed:', error);
     }
   }
+
+  // Inbox endpoints
+  async getInbox(page = 0, size = 20) {
+    const response = await fetch(`${API_BASE_URL}/notifications?page=${page}&size=${size}`, {
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to fetch notifications');
+    return response.json();
+  }
+
+  async getUnreadCount() {
+    const response = await fetch(`${API_BASE_URL}/notifications/unread-count`, {
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to fetch unread count');
+    const data = await response.json();
+    return data.unreadCount;
+  }
+
+  async markAsRead(notificationId) {
+    const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to mark as read');
+    return response.json();
+  }
+
+  async markAllRead() {
+    const response = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to mark all as read');
+  }
+
+  async deleteNotification(notificationId) {
+    const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to delete notification');
+  }
+
+  async clearAllNotifications() {
+    const response = await fetch(`${API_BASE_URL}/notifications`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to clear notifications');
+  }
 }
 
 export default new NotificationService();
