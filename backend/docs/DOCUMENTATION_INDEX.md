@@ -128,6 +128,7 @@ Located in `docs/` directory:
 2. Reference: [feature-status.md](feature-status.md) - Features to test
 3. Review: [ARCHITECTURE.md](ARCHITECTURE.md#resilience--fault-tolerance) - Failure scenarios
 4. Check: [api/](api/) files for API specifications
+5. Coverage snapshot: 77.38% line / 75.99% instruction / 59.73% branch / 78.21% method
 
 ### For Frontend Developers
 1. Read: [../../README.md](../../README.md#api-documentation) - API docs link

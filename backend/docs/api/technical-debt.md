@@ -66,6 +66,7 @@ Recommended direction:
 
 Issue:
 - Good auth/presence tests, but sparse coverage in message/chat critical paths.
+- Current backend total coverage is 77.38% line, 75.99% instruction, 59.73% branch, and 78.21% method.
 
 Risk:
 - Regressions in async messaging, role transitions, and websocket flows.

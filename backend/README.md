@@ -42,7 +42,7 @@ Orang Chat is a **production-ready backend** for a real-time messaging platform.
 - **Redis cache** for sessions, caching, and distributed locking
 - **S3-compatible MinIO** for object storage
 - **JWT + stateless auth** across all services
-- **80%+ test coverage** on critical services
+- **77.38% total line coverage** across backend modules
 
 ---
 
@@ -324,10 +324,10 @@ open message-service/target/site/jacoco/index.html
 ```
 
 **Current Coverage:**
-- auth-service: ~75%
-- user-service: ~70%
-- message-service: ~80%
-- notification-service: ~89%
+- Total backend: 77.38% line coverage
+- Total backend: 75.99% instruction coverage
+- Total backend: 59.73% branch coverage
+- Total backend: 78.21% method coverage
 
 ---
 
