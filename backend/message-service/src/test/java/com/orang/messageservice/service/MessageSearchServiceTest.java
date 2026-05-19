@@ -53,7 +53,7 @@ class MessageSearchServiceTest {
 
     @Test
     void searchMessagesThrowsWhenQueryTooShort() {
-        doNothing().when(conversationService).verifyParticipant(conversationId, userId);
+        lenient().doNothing().when(conversationService).verifyParticipant(conversationId, userId);
 
         Pageable pageable = PageRequest.of(0, 20);
 
@@ -65,7 +65,7 @@ class MessageSearchServiceTest {
 
     @Test
     void searchMessagesThrowsWhenQueryTooShortWithSpaces() {
-        doNothing().when(conversationService).verifyParticipant(conversationId, userId);
+        lenient().doNothing().when(conversationService).verifyParticipant(conversationId, userId);
 
         Pageable pageable = PageRequest.of(0, 20);
 
