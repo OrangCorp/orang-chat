@@ -119,47 +119,10 @@ Implemented:
 ---
 
 ## 2. Partially Implemented or Risky Areas
-
-### 2.1 WebSocket auth error handling is too generic
-
-Current state:
-- RuntimeException is thrown for invalid/missing JWT header in STOMP CONNECT interceptor.
-
-Impact:
-- Poor error semantics and weaker operational diagnostics.
-
-### 2.2 JWT filter swallows errors silently (user-service)
-
-Current state:
-- User service JWT filter catches Exception and ignores it. (Fixed in message-service).
-
-Impact:
-- Harder troubleshooting in user-service and weaker security observability.
-
-### 2.3 WebSocket CORS is permissive
-
-Current state:
-- setAllowedOriginPatterns("*")
-
-Impact:
-- Too open for production unless constrained by external network controls.
-
----
-
+ 
 ## 3. Not Implemented Yet / Known Issues
 
-Messaging domain gaps:
-- WebSocket direct message routing logic (Needs verification for self-messaging edge cases).
-- REST message sending endpoint is added to code but may require container restart to be active in some environments.
-
-Platform/ops gaps:
-- Flyway/Liquibase migration ownership across all services
-- Comprehensive integration tests for async flows
-- Production-grade observability (metrics/tracing/log correlation)
-- CI quality gates for service-level tests
-
----
-
+ ---
 ## 4. Test Coverage Snapshot
 
 Observed tests:
@@ -183,15 +146,4 @@ Missing tests with highest impact:
 
 ## 5. Implementation Priority
 
-P0 (fix immediately):
-- Replace silent auth filter catch in user-service with logging + explicit auth handling.
-- Replace generic RuntimeException in WebSocket security path.
-- Restrict WebSocket CORS by environment.
-
-P1 (next sprint):
-- Add tests for contact/conversation/message services.
-- Expand service-level integration tests for async flows.
-
-P2 (after core reliability):
-- Add observability stack and SLO metrics.
-- Complete migration strategy standardization.
+ 

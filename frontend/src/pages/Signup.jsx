@@ -28,8 +28,8 @@ const Signup = () => {
       newErrors.email = 'Invalid email address';
     }
     
-    if (!formData.password || formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    if (!formData.password || formData.password.length < 16) {
+      newErrors.password = 'Password must be at least 16 characters';
     }
     
     if (formData.password !== formData.confirmPassword) {
@@ -41,10 +41,8 @@ const Signup = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setApiError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -62,7 +60,8 @@ const Signup = () => {
       );
       navigate('/verify-email', { state: { email: response.email } });
     } catch (err) {
-      setApiError(err.message || 'Registration failed');
+      // Only show generic message for unhandled errors
+      setApiError('Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

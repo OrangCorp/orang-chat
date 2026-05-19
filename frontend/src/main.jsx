@@ -23,7 +23,7 @@ if ('serviceWorker' in navigator) {
     console.log('📨 SW message:', type, event.data);
 
     // Forward ALL push notification types as a single custom event
-    const pushTypes = ['new_message', 'reaction', 'mention', 'group_added', 'member_added', 'new_chat', 'message_deleted', 'message_edited'];
+    const pushTypes = ['new_message', 'reaction', 'mention', 'group_added', 'member_added', 'direct_chat_created', 'message_deleted', 'message_edited'];
     
     if (pushTypes.includes(type)) {
       window.dispatchEvent(new CustomEvent('sw-message', { detail: event.data }));

@@ -81,7 +81,7 @@ spring:
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL}
               predicates:
-                - Path=/api/push/**, /api/conversations/*/notifications/**
+                - Path=/api/push/**, /api/conversations/*/notifications/**, /api/notifications/**
               filters:
                 - name: RequestRateLimiter
                   args:

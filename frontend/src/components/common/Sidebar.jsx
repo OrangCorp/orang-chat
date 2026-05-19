@@ -1,5 +1,5 @@
 // Sidebar.js - Simplified with userService cache
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 // Material UI components
 import {
@@ -88,21 +88,43 @@ const Sidebar = () => {
   }, [isMobile]);
 
   useEffect(() => {
-    // Listen for conversation events
+    const handleSWMessage = (event) => {
+      console.log('📱 Sidebar received sw-message event:', event.detail || event.data);
+      const data = event.detail || event.data;
+      if (!data) {
+        console.log('No data in event');
+        return;
+      }
+      
+      const { type } = data;
+      console.log('Event type:', type);
+      
+      const relevantTypes = ['direct_chat_created', 'group_added'];
+      
+      if (relevantTypes.includes(type)) {
+        console.log(`✅ Relevant type "${type}" - refreshing conversations...`);
+        loadConversationsRef.current();
+      } else {
+        console.log(`❌ Type "${type}" not in relevant types:`, relevantTypes);
+      }
+    };
+    
     const handleConversationCreated = () => {
       console.log('Conversation created, refreshing sidebar...');
-      loadConversations();
+      loadConversationsRef.current();
     };
     
     const handleConversationUpdated = () => {
       console.log('Conversation updated, refreshing sidebar...');
-      loadConversations();
+      loadConversationsRef.current();
     };
     
+    window.addEventListener('sw-message', handleSWMessage);  // <-- THIS WAS MISSING
     window.addEventListener(CONVERSATION_CREATED, handleConversationCreated);
     window.addEventListener(CONVERSATION_UPDATED, handleConversationUpdated);
     
     return () => {
+      window.removeEventListener('sw-message', handleSWMessage);
       window.removeEventListener(CONVERSATION_CREATED, handleConversationCreated);
       window.removeEventListener(CONVERSATION_UPDATED, handleConversationUpdated);
     };
@@ -116,7 +138,7 @@ const Sidebar = () => {
 
   useEffect(() => {
     loadConversations();
-    loadContacts();
+    //loadContacts();
     
     // Listen for online status updates to force re-render
     const handleStatusUpdate = () => {
@@ -158,11 +180,26 @@ const Sidebar = () => {
     }
   };
 
+  const loadConversationsRef = useRef(loadConversations);
+  loadConversationsRef.current = loadConversations;
+
   const loadContacts = async () => {
     try {
       setContactsLoading(true);
       const contactsList = await userService.getContacts();
-      setContacts(contactsList.filter(c => c.status === 'ACCEPTED'));
+      const acceptedContacts = contactsList.filter(c => c.status === 'ACCEPTED');
+      
+      // Extract just the contact user IDs (not the current user)
+      const contactIds = acceptedContacts.map(c => 
+        c.requesterId === user.id ? c.recipientId : c.requesterId
+      );
+      
+      if (contactIds.length > 0) {
+        await userService.getProfiles(contactIds);
+      }
+      
+      // Store just the IDs - that's all we need
+      setContacts(contactIds);
     } catch (err) {
       console.error('Failed to load contacts:', err);
     } finally {
@@ -205,6 +242,7 @@ const Sidebar = () => {
     setSelectedUsers(new Set());
     setSearchQuery('');
     setSearchResults([]);
+    loadContacts();
   };
 
   const handleCloseCreateGroup = () => {
@@ -698,8 +736,7 @@ const Sidebar = () => {
               <CircularProgress size={24} />
             </Box>
           ) : contacts.length > 0 ? (
-            contacts.map((contact) => {
-              const contactId = contact.userId;
+            contacts.map((contactId) => {
               const profile = userService.profileCache.get(contactId);
               return (
                 <ListItem key={contactId} disablePadding dense>

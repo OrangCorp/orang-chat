@@ -103,6 +103,8 @@ const Chat = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
+  const highlightedMessageRef = useRef(null);
+
   useEffect(() => {
     if (conversation?.id) loadMuteStatus();
   }, [conversation]);
@@ -170,6 +172,22 @@ const Chat = () => {
     setTypingUsers(new Set());
     setViewMode('chat');
     setSelectedFiles([]);
+  }, [chatId]);
+
+  const initialScrollDone = useRef(false);
+
+  useEffect(() => {
+    if (!loading && messages.length > 0 && !initialScrollDone.current) {
+      initialScrollDone.current = true;
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 100);
+    }
+  }, [loading, messages]);
+
+  // Reset when chat changes
+  useEffect(() => {
+    initialScrollDone.current = false;
   }, [chatId]);
 
   const loadConversationData = useCallback(async () => {
@@ -310,11 +328,16 @@ const Chat = () => {
             }
           }
 
-          const messageWithId = { ...message, id: message.messageId || `ws-${Date.now()}` };
+          const messageWithId = { 
+            ...message, 
+            id: message.messageId || message.id || `ws-${Date.now()}` 
+          };
 
           // No more GROUP self‑ignore – backend sends our own messages back now
           setMessages(prev => {
-            const existingRealMessage = prev.findIndex(m => m.id === message.id);
+            const existingRealMessage = prev.findIndex(m => 
+              m.id === (message.messageId || message.id)
+            );
             if (existingRealMessage !== -1) return prev;
             return [...prev, messageWithId];
           });
@@ -458,12 +481,44 @@ const Chat = () => {
 
   const handleReaction = async (messageId, reactionType) => {
     try {
-      const responce = await messageService.toggleReaction(messageId, reactionType);
-      //console.log('reaction responce: ', responce);
-      // Optionally re-fetch reactions (or update locally)
-      const updatedReactions = await messageService.getReactions(messageId);
-      //console.log('updated reactions: ', updatedReactions);
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: updatedReactions } : m));
+      // Toggle the reaction
+      await messageService.toggleReaction(messageId, reactionType);
+      
+      // Get updated counts
+      const updatedCounts = await messageService.getReactions(messageId);
+      
+      setMessages(prev => prev.map(m => {
+        if (m.id !== messageId) return m;
+        
+        // Get current reactions array
+        const currentReactions = Array.isArray(m.reactions) ? m.reactions : [];
+        
+        // Check if user already has this reaction
+        const existingReactionIndex = currentReactions.findIndex(
+          r => r.userId === user.id && r.reactionType === reactionType
+        );
+        
+        let updatedReactions;
+        if (existingReactionIndex >= 0) {
+          // Remove the reaction (user toggled it off)
+          updatedReactions = currentReactions.filter((_, idx) => idx !== existingReactionIndex);
+        } else {
+          // Add a placeholder reaction
+          const placeholderReaction = {
+            id: `temp-${Date.now()}-${Math.random()}`,
+            userId: user.id,
+            reactionType: reactionType,
+            createdAt: new Date().toISOString(),
+          };
+          updatedReactions = [...currentReactions, placeholderReaction];
+        }
+        
+        return {
+          ...m,
+          reactionCounts: updatedCounts,
+          reactions: updatedReactions,
+        };
+      }));
     } catch (err) {
       console.error('Reaction failed:', err);
     }
@@ -568,6 +623,15 @@ const Chat = () => {
     setContextData(null);
   };
 
+  useEffect(() => {
+    if (contextData?.targetMessageId && highlightedMessageRef.current) {
+      highlightedMessageRef.current.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+    }
+  }, [contextData]);
+
   // Group management functions
   const getCurrentUserRole = () => {
     if (!conversation || !user) return 'MEMBER';
@@ -654,6 +718,7 @@ const Chat = () => {
     if (!window.confirm('Delete this conversation? This will remove it from your list.')) return;
     try {
       await messageService.deleteConversation(conversation.id);
+      emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
       console.error('Failed to delete conversation:', err);
@@ -666,8 +731,19 @@ const Chat = () => {
     try {
       const contactsList = await userService.getContacts();
       const existingIds = new Set(conversation.participants?.map(p => p.userId) || []);
-      const availableContacts = contactsList.filter(c => c.status === 'ACCEPTED' && !existingIds.has(c.userId));
-      setContacts(availableContacts);
+      const acceptedContacts = contactsList.filter(c => c.status === 'ACCEPTED');
+      
+      // Extract just the contact user IDs (not the current user)
+      const contactIds = acceptedContacts
+        .map(c => c.requesterId === user.id ? c.recipientId : c.requesterId)
+        .filter(id => !existingIds.has(id));
+      
+      if (contactIds.length > 0) {
+        await userService.getProfiles(contactIds);
+      }
+      
+      // Store just the IDs
+      setContacts(contactIds);
     } catch (err) {
       console.error('Failed to load contacts:', err);
     } finally {
@@ -931,12 +1007,12 @@ const Chat = () => {
                       <CircularProgress size={24} />
                     </Box>
                   ) : contacts.length > 0 ? (
-                    contacts.map((contact) => {
-                      const profile = userService.profileCache.get(contact.userId);
+                    contacts.map((contactId) => {
+                      const profile = userService.profileCache.get(contactId);
                       return (
-                        <ListItem key={contact.userId} disablePadding>
-                          <ListItemButton onClick={() => handleToggleUserToAdd(contact.userId)}>
-                            <Checkbox checked={selectedUsersToAdd.has(contact.userId)} size="small" />
+                        <ListItem key={contactId} disablePadding>
+                          <ListItemButton onClick={() => handleToggleUserToAdd(contactId)}>
+                            <Checkbox checked={selectedUsersToAdd.has(contactId)} size="small" />
                             <Avatar src={profile?.avatarUrl} sx={{ width: 32, height: 32, mr: 2 }}>
                               {profile?.displayName?.charAt(0).toUpperCase() || '?'}
                             </Avatar>
@@ -1019,12 +1095,16 @@ const Chat = () => {
   };
   
   const getDisplayName = (userId) => {
+    if (!userId) return 'Unknown';
     if (userId === user.id) return 'You';
     const p = participants[userId];
     return p?.displayName || userId.slice(0, 8);
   };
   
-  const getAvatar = (userId) => (userId === user.id ? null : participants[userId]?.avatarUrl);
+  const getAvatar = (userId) => {
+    if (!userId) return null;
+    return userId === user.id ? null : participants[userId]?.avatarUrl;
+  };
   
   const formatLastSeen = (lastSeen) => {
     if (!lastSeen) return 'Never';
@@ -1043,9 +1123,19 @@ const Chat = () => {
   };
   
   const getMessageTime = (msg) => {
-    const d = msg.createdAt || msg.timestamp;
+    let d = msg.createdAt || msg.timestamp;
     if (!d) return 'Just now';
-    try { return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return 'Just now'; }
+    try {
+      // If no timezone indicator, assume UTC
+      if (typeof d === 'string' && !/[+\-Z]/i.test(d.slice(-6))) {
+        d += 'Z';
+      }
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return 'Just now';
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Just now';
+    }
   };
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
@@ -1080,19 +1170,14 @@ const Chat = () => {
           ) : (
             <List>
               {searchResults.map((result) => (
-                <ListItem
-                  key={result.id}
-                  button
+                <ListItem 
+                  key={result.id} 
                   onClick={() => handleSearchResultClick(result.id)}
-                  sx={{
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}
+                  sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
                 >
                   <ListItemAvatar>
                     <Avatar src={getAvatar(result.senderId)}>
-                      {getDisplayName(result.senderId).charAt(0)}
+                      {(getDisplayName(result.senderId) || '?').charAt(0)}
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
@@ -1144,19 +1229,24 @@ const Chat = () => {
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: '#f5f5f5' }}>
             {contextData.messages.map((msg) => (
-              <MessageBubble
-                key={msg.id || i}
-                message={msg}
-                isOwn={msg.senderId === user.id}
-                senderName={getDisplayName(msg.senderId)}
-                senderAvatar={getAvatar(msg.senderId)}
-                time={getMessageTime(msg)}
-                onAvatarClick={() => handleProfileClick(msg.senderId)}
-                onEdit={handleEditMessage}
-                onDelete={handleDeleteMessage}
-                onReaction={handleReaction}
-                highlight={msg.id === contextData.targetMessageId}
-              />
+              <Box 
+                key={msg.id} 
+                ref={msg.id === contextData.targetMessageId ? highlightedMessageRef : null}
+              >
+                <MessageBubble
+                  message={msg}
+                  isOwn={msg.senderId === user.id}
+                  senderName={getDisplayName(msg.senderId)}
+                  senderAvatar={getAvatar(msg.senderId)}
+                  time={getMessageTime(msg)}
+                  onAvatarClick={() => handleProfileClick(msg.senderId)}
+                  onEdit={handleEditMessage}
+                  onDelete={handleDeleteMessage}
+                  onReaction={handleReaction}
+                  highlight={msg.id === contextData.targetMessageId}
+                  participants={participants}
+                />
+              </Box>
             ))}
           </Box>
         </Box>
@@ -1190,6 +1280,7 @@ const Chat = () => {
                 onEdit={handleEditMessage}
                 onDelete={handleDeleteMessage}
                 onReaction={handleReaction}
+                participants={participants}
               />
             ))}
           </Box>
@@ -1201,17 +1292,27 @@ const Chat = () => {
   return (
     <Box sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
       <Paper square elevation={1} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
-        
-        {searchMode !== 'off' ? (
+        {searchMode !== 'off' || viewMode === 'members' ? (
           <>
-            <IconButton onClick={exitSearchMode}><CloseIcon /></IconButton>
+            <IconButton onClick={() => {
+              setSearchMode('off');
+              setSearchQuery('');
+              setSearchResults([]);
+              setContextData(null);
+              setViewMode('chat');
+            }}>
+              <CloseIcon />
+            </IconButton>
             <Typography variant="h6" sx={{ flex: 1 }}>
-              {searchMode === 'results' ? 'Search Results' : 'Message Context'}
+              {searchMode === 'results' ? 'Search Results' : 
+              searchMode === 'context' ? 'Message Context' : 
+              'Members'}
             </Typography>
           </>
         ) : (
           <>
+            <IconButton onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
+            
             <IconButton 
               onClick={() => handleProfileClick(
                 conversation.type === 'DIRECT' ? otherId : conversation.id
@@ -1245,7 +1346,7 @@ const Chat = () => {
               </Typography>
               
               {conversation.type === 'DIRECT' ? (
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Box 
                       sx={{ 
@@ -1272,7 +1373,7 @@ const Chat = () => {
                   )}
                 </Stack>
               ) : (
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                   {conversation.participants?.length || 0} members
                 </Typography>
               )}
@@ -1365,7 +1466,7 @@ const Chat = () => {
                       src={getAvatar(userId)} 
                       sx={{ width: 20, height: 20 }}
                     >
-                      {getDisplayName(userId).charAt(0)}
+                      {(getDisplayName(userId) || '?').charAt(0)}
                     </Avatar>
                   ))}
                 </Box>

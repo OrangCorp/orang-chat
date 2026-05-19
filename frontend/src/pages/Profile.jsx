@@ -24,6 +24,11 @@ import {
   Menu,
   MenuItem,
   ListItemIcon,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListItemAvatar,
 } from '@mui/material';
 import {
   Chat as ChatIcon,
@@ -40,6 +45,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   MoreVert as MoreVertIcon,
+  Contacts as ContactsIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import userService from '../services/userService';
@@ -77,6 +84,10 @@ const Profile = () => {
   const isOwnProfile = !userId || userId === 'me' || userId === currentUser?.id;
   const profileUserId = isOwnProfile ? currentUser?.id : userId;
 
+  const [contactsDialogOpen, setContactsDialogOpen] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+
   // Load profile
   const loadProfile = async (forceRefresh = false) => {
     if (!profileUserId) return;
@@ -92,6 +103,44 @@ const Profile = () => {
       setLoading(false);
     }
   };
+
+  const loadContacts = async () => {
+    try {
+      setContactsLoading(true);
+      const contactsList = await userService.getContacts();
+      const acceptedContacts = contactsList.filter(c => c.status === 'ACCEPTED');
+      
+      const contactIds = acceptedContacts.map(c => 
+        c.requesterId === currentUser.id ? c.recipientId : c.requesterId
+      );
+      
+      if (contactIds.length > 0) {
+        await userService.getProfiles(contactIds);
+      }
+      
+      setContacts(contactIds);
+    } catch (err) {
+      console.error('Failed to load contacts:', err);
+    } finally {
+      setContactsLoading(false);
+    }
+  };
+
+  const handleOpenContactsDialog = () => {
+    setContactsDialogOpen(true);
+    loadContacts();
+  };
+
+  useEffect(() => {
+    if (!profileUserId) return;
+
+    const init = async () => {
+      await loadProfile(true);
+      await checkContactStatus();
+      await loadContacts(); // Add this line
+    };
+    init();
+  }, [profileUserId]);
 
   useEffect(() => {
     if (!profileUserId) return;
@@ -769,6 +818,23 @@ const Profile = () => {
 
           <Divider sx={{ my: 2 }} />
 
+          {contacts.length > 0 && (
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<ContactsIcon />}
+                  onClick={handleOpenContactsDialog}
+                  fullWidth
+                  size="small"
+                >
+                  {isOwnProfile ? `My Contacts (${contacts.length})` : `View Contacts (${contacts.length})`}
+                </Button>
+              </Box>
+              <Divider sx={{ my: 2 }} />
+            </>
+          )}
+
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>Bio</Typography>
             <Typography variant="body1" sx={{ fontStyle: !profile.bio ? 'italic' : 'normal' }}>
@@ -866,6 +932,67 @@ const Profile = () => {
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
+
+      <Dialog 
+        open={contactsDialogOpen} 
+        onClose={() => setContactsDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {isOwnProfile ? 'My Contacts' : `${profile?.displayName}'s Contacts`}
+          <IconButton size="small" onClick={() => setContactsDialogOpen(false)}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent dividers>
+          {contactsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : contacts.length > 0 ? (
+            <List sx={{ maxHeight: 400, overflow: 'auto' }}>
+              {contacts.map((contactId) => {
+                const profile = userService.profileCache.get(contactId);
+                return (
+                  <ListItem key={contactId} disablePadding>
+                    <ListItemButton onClick={() => {
+                      setContactsDialogOpen(false);
+                      navigate(`/profile/${contactId}`);
+                    }}>
+                      <ListItemAvatar>
+                        <Avatar src={profile?.avatarUrl}>
+                          {profile?.displayName?.charAt(0).toUpperCase() || '?'}
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText 
+                        primary={profile?.displayName || 'Unknown User'}
+                        secondary={
+                          profile?.online 
+                            ? <Typography component="span" variant="caption" color="success.main">● Online</Typography>
+                            : <Typography component="span" variant="caption" color="text.secondary">Offline</Typography>
+                        }
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                );
+              })}
+            </List>
+          ) : (
+            <Box sx={{ p: 3, textAlign: 'center' }}>
+              <Typography color="text.secondary">
+                {isOwnProfile ? 'No contacts yet' : 'No contacts to display'}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        
+        <DialogActions>
+          <Button onClick={() => setContactsDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
