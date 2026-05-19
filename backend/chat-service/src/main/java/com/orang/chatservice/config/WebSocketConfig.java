@@ -7,9 +7,14 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.Arrays;
+
 @Configuration
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Value("${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:3000}")
+    private String websocketAllowedOrigins;
 
     @Value("${spring.rabbitmq.host}")
     private String rabbitHost;
@@ -22,8 +27,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        String[] allowedOrigins = Arrays.stream(websocketAllowedOrigins.split(","))
+            .map(String::trim)
+            .filter(origin -> !origin.isBlank())
+            .toArray(String[]::new);
+
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*"); // Allow CORS
+            .setAllowedOriginPatterns(allowedOrigins);
     }
 
     public void configureMessageBroker(MessageBrokerRegistry registry) {

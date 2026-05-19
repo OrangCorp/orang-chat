@@ -220,26 +220,55 @@ For detailed service information, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 Create a `.env` file in `backend/`:
 
 ```bash
-# Database Credentials
+# Required database credentials
 AUTH_DB_USER=authuser
 AUTH_DB_PASS=authpass
-JWT_SECRET=myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456
+USER_DB_USER=useruser
+USER_DB_PASS=userpass
+MESSAGE_DB_USER=messageuser
+MESSAGE_DB_PASS=messagepass
+NOTIF_DB_USER=notificationuser
+NOTIF_DB_PASS=notificationpass
+
+# Shared secret used by every service and the gateway
+JWT_SECRET=replace-with-a-long-random-256-bit-secret
+
+# Redis
+REDIS_PASSWORD=replace-with-a-strong-redis-password
 
 # RabbitMQ
 RABBIT_USER=orangchat
-RABBIT_PASS=orangchat123
+RABBIT_PASS=replace-with-a-strong-rabbitmq-password
+
+# Email / SMTP
+MAIL_HOST=smtp.mailtrap.io
+MAIL_USER=replace-with-your-smtp-username
+MAIL_PASS=replace-with-your-smtp-password
+
+# MinIO
+MINIO_ENDPOINT=http://minio:9000
+MINIO_ROOT_USER=replace-with-minio-access-key
+MINIO_ROOT_PASS=replace-with-minio-secret-key
+MINIO_DOWNLOAD_MODE=backend
+MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
 
 # Web Push VAPID
-VAPID_PUBLIC_KEY=your_public_key
-VAPID_PRIVATE_KEY=your_private_key
-
-# Email (Mailtrap)
-MAIL_USER=your_mailtrap_token
-MAIL_PASS=your_mailtrap_token
+VAPID_PUB=BAMSANY2VXcACzimQfQ32znJ4hjyLblT0lRRZZMPryQzfQ-2T1lLJhax_antSYDGx8mYgDmPQLjynIUP7GpryCo
+VAPID_PRIV=1kdAe_QZMqdJZ1oQ0BTXJlk-gugzN_TFmQTSDLwBhaw
+VAPID_SUBJECT=mailto:admin@example.com
 
 # CORS
 CORS_ALLOWED_ORIGINS=http://localhost:3000
+
+# Internal service URLs used by the gateway
+AUTH_SERVICE_URL=http://auth-service:8081
+USER_SERVICE_URL=http://user-service:8082
+CHAT_SERVICE_URL=ws://chat-service:8083
+MESSAGE_SERVICE_URL=http://message-service:8084
+NOTIFICATION_SERVICE_URL=http://notification-service:8085
 ```
+
+The Docker Compose stack passes the database URLs internally. If you run a service outside Compose, export the matching `*_SPRING_DATASOURCE_URL` value as well.
 
 ### Spring Boot Configuration
 

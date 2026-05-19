@@ -9,9 +9,9 @@ spring:
   application:
     name: auth-service
   datasource:
-    url: ${AUTH_SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/auth_db}
-    username: ${AUTH_DATABASE_USERNAME:authuser}
-    password: ${AUTH_DATABASE_PASSWORD:authpass}
+    url: ${AUTH_SPRING_DATASOURCE_URL}
+    username: ${AUTH_DATABASE_USERNAME}
+    password: ${AUTH_DATABASE_PASSWORD}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
       minimum-idle: 5
@@ -24,22 +24,23 @@ spring:
         format_sql: ${FORMAT_SQL:false}
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
   rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    host: ${SPRING_RABBITMQ_HOST}
     port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USER:orangchat}
-    password: ${SPRING_RABBITMQ_PASSWORD:orangchat123}
+    username: ${SPRING_RABBITMQ_USER}
+    password: ${SPRING_RABBITMQ_PASSWORD}
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
   mail:
-    host: ${MAIL_HOST:sandbox.smtp.mailtrap.io}
+    host: ${MAIL_HOST}
     port: ${MAIL_PORT:2525}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -64,7 +65,7 @@ app:
     reset-url: ${FRONTEND_URL:http://localhost:3000}/reset-password
 
 jwt:
-  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION_MS:900000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION_MS:604800000}
 
