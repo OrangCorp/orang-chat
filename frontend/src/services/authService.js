@@ -93,7 +93,7 @@ class AuthService {
       this.handleAuthResponse(authResponse);
       return authResponse;
     } catch (error) {
-      console.error('Login error:', error);
+      //console.error('Login error:', error);
       this.isAuthenticated = false;
       throw error;
     }
@@ -119,7 +119,7 @@ class AuthService {
       // Don't set isAuthenticated yet - need email verification
       return registrationResponse;
     } catch (error) {
-      console.error('Registration error:', error);
+      //console.error('Registration error:', error);
       throw error;
     }
   }
@@ -143,7 +143,7 @@ class AuthService {
       this.handleAuthResponse(authResponse);
       return authResponse;
     } catch (error) {
-      console.error('Email verification error:', error);
+      //console.error('Email verification error:', error);
       throw error;
     }
   }
@@ -164,7 +164,7 @@ class AuthService {
 
       return true;
     } catch (error) {
-      console.error('Resend verification error:', error);
+      //console.error('Resend verification error:', error);
       throw error;
     }
   }
