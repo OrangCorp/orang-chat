@@ -58,7 +58,7 @@ class AttachmentServiceTest {
 
     @Test
     void uploadAttachmentThrowsWhenUserNotParticipant() throws IOException {
-        doThrow(new RuntimeException("Not a participant"))
+        lenient().doThrow(new RuntimeException("Not a participant"))
                 .when(conversationService).verifyParticipant(conversationId, uploaderId);
 
         assertThrows(RuntimeException.class,
@@ -69,7 +69,7 @@ class AttachmentServiceTest {
 
     @Test
     void uploadAttachmentThrowsWhenFileNull() throws IOException {
-        when(multipartFile.getOriginalFilename()).thenReturn(null);
+        lenient().when(multipartFile.getOriginalFilename()).thenReturn(null);
 
         assertThrows(BadRequestException.class,
                 () -> attachmentService.uploadAttachment(multipartFile, conversationId, uploaderId));
@@ -89,9 +89,9 @@ class AttachmentServiceTest {
 
     @Test
     void uploadAttachmentThrowsWhenFileTooLarge() throws IOException {
-        when(multipartFile.isEmpty()).thenReturn(false);
-        when(multipartFile.getOriginalFilename()).thenReturn("huge.bin");
-        when(multipartFile.getSize()).thenReturn(75 * 1024 * 1024L); // 75 MB > 50 MB limit
+        lenient().when(multipartFile.isEmpty()).thenReturn(false);
+        lenient().when(multipartFile.getOriginalFilename()).thenReturn("huge.bin");
+        lenient().when(multipartFile.getSize()).thenReturn(75 * 1024 * 1024L); // 75 MB > 50 MB limit
 
         assertThrows(BadRequestException.class,
                 () -> attachmentService.uploadAttachment(multipartFile, conversationId, uploaderId));

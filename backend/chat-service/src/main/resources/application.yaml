@@ -9,17 +9,18 @@ spring:
   application:
     name: chat-service
   rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    host: ${SPRING_RABBITMQ_HOST}
     port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USER:orangchat}
-    password: ${SPRING_RABBITMQ_PASSWORD:orangchat123}
+    username: ${SPRING_RABBITMQ_USER}
+    password: ${SPRING_RABBITMQ_PASSWORD}
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
 
 jwt:
-  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+  secret: ${JWT_SECRET}
 
 logging:
   level:

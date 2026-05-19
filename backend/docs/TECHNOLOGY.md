@@ -691,7 +691,7 @@ The Orang Chat backend is designed for **scalability, reliability, and maintaina
 ✅ **Real-Time**: WebSocket + RabbitMQ relay for truly global chat
 ✅ **Security**: JWT + blacklisting, role-based authorization, input validation
 ✅ **Performance**: Caching, indexing, async processing, connection pooling
-✅ **Testing**: JUnit 5, Testcontainers, 80%+ coverage in critical services
+✅ **Testing**: JUnit 5, Testcontainers, 77.38% total backend line coverage
 ✅ **Operations**: Docker, Flyway migrations, health checks, metrics
 
 The architecture supports millions of users with proper resource management and horizontal scaling.

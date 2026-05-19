@@ -9,6 +9,7 @@ services:
     container_name: orangchat-api-gateway
     ports:
       - "8080:8080"
+      - "9010:9010" # JMX Port
     networks:
       - frontend-nw
       - backend-nw
@@ -22,18 +23,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
-    restart: unless-stopped
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    container_name: orangchat-frontend
-    ports:
-      - "80:80"
-    networks:
-      - frontend-nw
-    depends_on:
-      - api-gateway
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
     restart: unless-stopped
 
   auth-service:
@@ -44,6 +34,8 @@ services:
         SERVICE_NAME: auth-service
         SERVICE_PORT: 8081
     container_name: orangchat-auth-service
+    ports:
+      - "9011:9011" # JMX Port
     networks:
       - backend-nw
       - db-nw
@@ -62,6 +54,7 @@ services:
       - MAIL_PASSWORD=${MAIL_PASS:?MAIL_PASSWORD must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9011 -Dcom.sun.management.jmxremote.rmi.port=9011 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -85,6 +78,8 @@ services:
         SERVICE_NAME: user-service
         SERVICE_PORT: 8082
     container_name: orangchat-user-service
+    ports:
+      - "9012:9012" # JMX Port
     networks:
       - backend-nw
       - db-nw
@@ -99,6 +94,7 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBIT_USER:?RABBIT_USER must be set}
       - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:?RABBIT_PASS must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9012 -Dcom.sun.management.jmxremote.rmi.port=9012 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
     depends_on:
       postgres-user:
         condition: service_healthy
@@ -122,6 +118,8 @@ services:
         SERVICE_NAME: chat-service
         SERVICE_PORT: 8083
     container_name: orangchat-chat-service
+    ports:
+      - "9013:9013" # JMX Port
     networks:
       - backend-nw
     environment:
@@ -131,7 +129,8 @@ services:
       - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:?RABBIT_PASS must be set}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - JWT_SECRET=${JWT_SECRET}
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9013 -Dcom.sun.management.jmxremote.rmi.port=9013 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -153,6 +152,8 @@ services:
         SERVICE_NAME: message-service
         SERVICE_PORT: 8084
     container_name: orangchat-message-service
+    ports:
+      - "9014:9014" # JMX Port
     networks:
       - backend-nw
       - db-nw
@@ -170,6 +171,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - MINIO_DOWNLOAD_MODE=${MINIO_DOWNLOAD_MODE:?MINIO_DOWNLOAD_MODE must be set}
       - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:?MINIO_EXTERNAL_ENDPOINT must be set}
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9014 -Dcom.sun.management.jmxremote.rmi.port=9014 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
     depends_on:
       postgres-message:
         condition: service_healthy
@@ -193,6 +195,8 @@ services:
         SERVICE_NAME: notification-service
         SERVICE_PORT: 8085
     container_name: orangchat-notification-service
+    ports:
+      - "9015:9015" # JMX Port
     networks:
       - backend-nw
       - db-nw
@@ -201,22 +205,19 @@ services:
       - NOTIFICATION_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-notification:5432/notification_db
       - NOTIFICATION_DATABASE_USERNAME=${NOTIF_DB_USER:?NOTIF_DB_USER must be set}
       - NOTIFICATION_DATABASE_PASSWORD=${NOTIF_DB_PASS:?NOTIF_DB_PASS must be set}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - SPRING_RABBITMQ_HOST=rabbitmq
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - SPRING_RABBITMQ_USERNAME=${RABBIT_USER:?RABBIT_USER must be set}
       - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:?RABBIT_PASS must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - VAPID_PUBLIC_KEY=${VAPID_PUB:?VAPID_PUB must be set}
       - VAPID_PRIVATE_KEY=${VAPID_PRIV:?VAPID_PRIV must be set}
       - VAPID_SUBJECT=${VAPID_SUBJECT:?VAPID_SUBJECT must be set}
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9015 -Dcom.sun.management.jmxremote.rmi.port=9015 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
     depends_on:
       postgres-notification:
         condition: service_healthy
       rabbitmq:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8085/actuator/health"]
@@ -226,6 +227,7 @@ services:
       start_period: 45s
     restart: unless-stopped
 
+  # Database and infrastructure services remain unchanged
   postgres-auth:
     image: postgres:18-alpine3.22
     container_name: orangchat-postgres-auth
@@ -330,7 +332,6 @@ services:
       retries: 5
 
   minio:
-    # Tag latest, ponieważ projekt jest zarchiwizowany na docker hubie
     image: minio/minio:latest
     container_name: orangchat-minio
     ports:
@@ -360,9 +361,9 @@ volumes:
   minio-data:
 
 networks:
-  frontend-nw: # Access from Internet (Gateway only)
+  frontend-nw:
     driver: bridge
-  backend-nw:  # App logic (Services, Redis, RabbitMQ)
+  backend-nw:
     driver: bridge
   db-nw:
     driver: bridge

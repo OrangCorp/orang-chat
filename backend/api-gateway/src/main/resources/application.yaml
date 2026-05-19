@@ -12,6 +12,7 @@ spring:
     redis:
       host: ${REDIS_HOST:orangchat-redis}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
       connect-timeout: 2000ms
       lettuce:
         pool:
@@ -25,7 +26,7 @@ spring:
           cors:
             cors-configurations:
               '[/**]':
-                allowed-origins: ${CORS_ALLOWED_ORIGINS:"https://your-ui-domain.com"}
+                allowed-origins: ${CORS_ALLOWED_ORIGINS}
                 allowed-methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
                 allowed-headers: "*"
                 allow-credentials: true
@@ -35,12 +36,12 @@ spring:
             # Auth Service Routes
             # -----------------------------------------
             - id: auth-service-docs
-              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              uri: ${AUTH_SERVICE_URL}
               predicates:
                 - Path=/v3/api-docs/api/auth
 
             - id: auth-service
-              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              uri: ${AUTH_SERVICE_URL}
               predicates:
                 - Path=/api/auth/**
               filters:
@@ -54,12 +55,12 @@ spring:
             # User Service Routes
             # -----------------------------------------
             - id: user-service-docs
-              uri: ${USER_SERVICE_URL:http://localhost:8082}
+              uri: ${USER_SERVICE_URL}
               predicates:
                 - Path=/v3/api-docs/api/users, /v3/api-docs/api/contacts, /v3/api-docs/api/presence
 
             - id: user-service
-              uri: ${USER_SERVICE_URL:http://localhost:8082}
+              uri: ${USER_SERVICE_URL}
               predicates:
                 - Path=/api/users/**, /api/contacts/**, /api/presence/**
               filters:
@@ -73,12 +74,12 @@ spring:
             # Notification Service Routes
             # -----------------------------------------
             - id: notification-service-docs
-              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              uri: ${NOTIFICATION_SERVICE_URL}
               predicates:
                 - Path=/v3/api-docs/api/notifications
 
             - id: notification-service
-              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              uri: ${NOTIFICATION_SERVICE_URL}
               predicates:
                 - Path=/api/push/**, /api/conversations/*/notifications/**, /api/notifications/**
               filters:
@@ -92,12 +93,12 @@ spring:
             # Message Service Routes
             # -----------------------------------------
             - id: message-service-docs
-              uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
+              uri: ${MESSAGE_SERVICE_URL}
               predicates:
                 - Path=/v3/api-docs/api/messages
 
             - id: message-service
-              uri: ${MESSAGE_SERVICE_URL:http://localhost:8084}
+              uri: ${MESSAGE_SERVICE_URL}
               predicates:
                 - Path=/api/messages/**, /api/conversations/**, /api/attachments/**
               filters:
@@ -111,7 +112,7 @@ spring:
             # Chat Service (WebSocket) - No Rate Limiting
             # -----------------------------------------
             - id: chat-service
-              uri: ${CHAT_SERVICE_URL:ws://localhost:8083}
+              uri: ${CHAT_SERVICE_URL}
               predicates:
                 - Path=/ws/**
           httpclient:
@@ -122,13 +123,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health
   endpoint:
     health:
       access: unrestricted
       show-details: never
-    gateway:
-      access: unrestricted
 
 logging:
   level:
@@ -136,6 +135,7 @@ logging:
 
 springdoc:
   swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /swagger-ui.html
     urls:
       - name: Auth Service
@@ -154,5 +154,5 @@ springdoc:
     path: /v3/api-docs
 
 jwt:
-  secret: ${JWT_SECRET:myVeryLongSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm123456}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION_MS:900000}

@@ -1,6 +1,6 @@
 # Feature Status Overview
 
-Current Date: 2026-04-09
+Current Date: 2026-05-19
 Project: Orang Chat backend microservices
 Source of truth: backend code (controllers, services, listeners, config, tests)
 
@@ -124,7 +124,24 @@ Implemented:
 
  ---
 ## 4. Test Coverage Snapshot
- 
+
+Observed tests:
+- Stronger unit coverage in auth service (AuthService/JWT)
+- Presence coverage in user service
+- Mostly application-context tests in chat/message/gateway/shared modules
+
+Current backend JaCoCo coverage:
+- Line coverage: 77.38%
+- Instruction coverage: 75.99%
+- Branch coverage: 59.73%
+- Method coverage: 78.21%
+
+Missing tests with highest impact:
+- ContactService workflow and edge cases
+- ConversationService authorization/role transitions
+- ChatMessageListener retry/failure behavior
+- WebSocket controller and security flows
+
 ---
 
 ## 5. Implementation Priority

@@ -137,7 +137,7 @@ class MinioFileStorageServiceTest {
         // Create a mock GetObjectResponse
         io.minio.GetObjectResponse mockResponse = mock(io.minio.GetObjectResponse.class);
         InputStream mockInputStream = new ByteArrayInputStream("file content".getBytes());
-        when(mockResponse.read()).thenReturn((int) 'a');
+        lenient().when(mockResponse.read()).thenReturn((int) 'a');
 
         when(minioClient.getObject(any()))
                 .thenReturn(mockResponse);
