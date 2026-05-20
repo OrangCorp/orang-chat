@@ -1,15 +1,19 @@
 // public/sw.js - Silent push notifications (no popups, in-app only)
 let pendingNotifications = [];
 
+const isDev = false;
+const log = (...args) => isDev && console.log(...args);
+const logError = (...args) => isDev && console.error(...args);
+
 self.addEventListener('push', event => {
-  console.log('📨 Push event received!');
+  log('📨 Push event received!');
   
   let data = {};
   try {
     data = event.data?.json() || {};
-    console.log('📦 Push payload:', JSON.stringify(data));
+    log('📦 Push payload:', JSON.stringify(data));
   } catch (e) {
-    console.error('Failed to parse push data:', e);
+    logError('Failed to parse push data:', e);
   }
   
   const notificationData = {
@@ -23,14 +27,14 @@ self.addEventListener('push', event => {
     timestamp: Date.now()
   };
   
-  console.log('📋 Processed notification:', notificationData.type);
+  log('📋 Processed notification:', notificationData.type);
   
   // Store for missed notifications
   pendingNotifications.push(notificationData);
   
   // IMMEDIATELY forward to all open app windows (in-app only, no popup)
   self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
-    console.log(`📤 Forwarding notification to ${clients.length} open windows`);
+    log(`📤 Forwarding notification to ${clients.length} open windows`);
     clients.forEach(client => {
       client.postMessage(notificationData);
     });
@@ -41,12 +45,12 @@ self.addEventListener('push', event => {
 
 // Handle messages from the app
 self.addEventListener('message', event => {
-  console.log('📬 SW received message:', event.data?.type);
+  log('📬 SW received message:', event.data?.type);
   
   if (event.data?.type === 'CHECK_MISSED') {
     const count = pendingNotifications.length;
     if (count > 0) {
-      console.log(`📤 Sending ${count} pending notifications to app`);
+      log(`📤 Sending ${count} pending notifications to app`);
       const latest = {};
       pendingNotifications.forEach(n => {
         latest[n.type] = n;
@@ -56,7 +60,7 @@ self.addEventListener('message', event => {
       });
       pendingNotifications = [];
     } else {
-      console.log('No pending notifications');
+      log('No pending notifications');
     }
   }
 });
@@ -84,4 +88,4 @@ self.addEventListener('notificationclick', event => {
   );
 });
 
-console.log('🔥 Service Worker loaded and ready!');
+log('🔥 Service Worker loaded and ready!');

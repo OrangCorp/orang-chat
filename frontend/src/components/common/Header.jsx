@@ -30,6 +30,10 @@ import notificationService from '../../services/notificationService';
 import logoImg from '../../assets/logo.png';
 import { emitConversationCreated } from '../../utils/conversationEvents';
 
+const isDev = import.meta.env.DEV;
+const log = (...args) => isDev && console.log(...args);
+const logError = (...args) => isDev && console.error(...args);
+
 // Helper to get icon based on type
 const getIconForType = (type) => {
   switch (type) {
@@ -241,7 +245,7 @@ const Header = () => {
       );
       setInbox(formatted);
     } catch (e) {
-      console.error('Failed to fetch inbox', e);
+      logError('Failed to fetch inbox', e);
     } finally {
       setInboxLoading(false);
     }
@@ -256,7 +260,7 @@ const Header = () => {
     // Fetch initial unread count
     notificationService.getUnreadCount()
       .then(setUnreadCount)
-      .catch(err => console.error('Failed to fetch unread count:', err));
+      .catch(err => logError('Failed to fetch unread count:', err));
   }, [user?.id]);
 
   // ------------------------------------------------------------------
@@ -286,10 +290,29 @@ const Header = () => {
     };
     
     // Also listen for contact request events
-    const handleRefresh = () => {
+    const handleRefresh = (event) => {
       notificationService.getUnreadCount()
         .then(setUnreadCount)
         .catch(() => {});
+      
+      const userId = event?.detail?.userId;
+      if (userId) {
+        setInbox(prev => {
+          const matching = prev.filter(n => 
+            (n.type === 'CONTACT_REQUEST' || n.type === 'contact_request') && n.actorId === userId
+          );
+          if (matching.length === 0) return prev;
+          
+          // Only delete once - use first match
+          const idsToDelete = [...new Set(matching.map(n => n.id))];
+          idsToDelete.forEach(id => {
+            notificationService.deleteNotification(id).catch(() => {});
+          });
+          
+          setUnreadCount(c => Math.max(0, c - matching.filter(n => !n.read).length));
+          return prev.filter(n => !matching.includes(n));
+        });
+      }
     };
     
     window.addEventListener('sw-message', handleSWMessage);
@@ -329,7 +352,7 @@ const Header = () => {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
     } catch (e) {
-      console.error('Mark read failed:', e);
+      logError('Mark read failed:', e);
     }
   };
 
@@ -341,7 +364,7 @@ const Header = () => {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
     } catch (e) {
-      console.error('Delete failed:', e);
+      logError('Delete failed:', e);
     }
   };
 
@@ -351,7 +374,7 @@ const Header = () => {
       setInbox(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (e) {
-      console.error('Mark all read failed:', e);
+      logError('Mark all read failed:', e);
     }
   };
 
@@ -361,7 +384,7 @@ const Header = () => {
       setInbox([]);
       setUnreadCount(0);
     } catch (e) {
-      console.error('Clear all failed:', e);
+      logError('Clear all failed:', e);
     }
   };
 
@@ -394,10 +417,12 @@ const Header = () => {
         await notificationService.deleteNotification(notif.id);
         setInbox(prev => prev.filter(n => n.id !== notif.id));
         if (!notif.read) setUnreadCount(prev => Math.max(0, prev - 1));
-        window.dispatchEvent(new CustomEvent('contact-request-resolved'));
+        window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+          detail: { userId: notif.actorId } 
+        }));
       }
     } catch (e) {
-      console.error('Accept failed:', e);
+      logError('Accept failed:', e);
     }
   };
 
@@ -411,10 +436,12 @@ const Header = () => {
         await notificationService.deleteNotification(notif.id);
         setInbox(prev => prev.filter(n => n.id !== notif.id));
         if (!notif.read) setUnreadCount(prev => Math.max(0, prev - 1));
-        window.dispatchEvent(new CustomEvent('contact-request-resolved'));
+        window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+          detail: { userId: notif.actorId } 
+        }));
       }
     } catch (e) {
-      console.error('Decline failed:', e);
+      logError('Decline failed:', e);
     }
   };
 
@@ -454,7 +481,7 @@ const Header = () => {
         setSearchResults(filtered);
         setSearchOpen(filtered.length > 0);
       } catch (error) {
-        console.error('Search failed:', error);
+        logError('Search failed:', error);
       } finally {
         setSearching(false);
       }
@@ -477,7 +504,7 @@ const Header = () => {
       emitConversationCreated(conversation); // Add this line
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
-      console.error('Failed to start chat:', error);
+      logError('Failed to start chat:', error);
     }
   };
 
