@@ -35,6 +35,10 @@ import attachmentService from '../services/attachmentService';
 import MessageBubble from '../components/chat/MessageBubble';
 import { emitConversationUpdated } from '../utils/conversationEvents';
 
+const isDev = import.meta.env.DEV;
+const log = (...args) => isDev && console.log(...args);
+const logError = (...args) => isDev && console.error(...args);
+
 const getRoleLabel = (role) => {
   switch (role) {
     case 'ADMIN': return 'Admin';
@@ -115,7 +119,7 @@ const Chat = () => {
       const prefs = await notificationService.getNotificationPreferences(conversation.id);
       setMuted(prefs.muted);
     } catch (err) {
-      console.debug('No notification preferences found, defaulting to unmuted');
+      log('No notification preferences found, defaulting to unmuted');
       setMuted(false);
     }
   };
@@ -130,7 +134,7 @@ const Chat = () => {
       }
       setMuted(!muted);
     } catch (err) {
-      console.error('Failed to toggle mute', err);
+      logError('Failed to toggle mute', err);
     } finally {
       setMuteLoading(false);
     }
@@ -200,7 +204,7 @@ const Chat = () => {
       setConversation(found);
 
       const messagePage = await messageService.getMessages(chatId, 0, 50);
-      console.log(messagePage);
+      log(messagePage);
       setMessages(messagePage.content.reverse());
       setHasMore(!messagePage.last);
       setPage(0);
@@ -217,7 +221,7 @@ const Chat = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
       });
     } catch (err) {
-      console.error(err);
+      logError(err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -250,7 +254,7 @@ const Chat = () => {
     const setupSubscriptions = async () => {
       try {
         if (!chatService.isConnected()) {
-          console.log('Chat service not connected, connecting...');
+          log('Chat service not connected, connecting...');
           await chatService.connect();
         }
 
@@ -324,7 +328,7 @@ const Chat = () => {
               );
               message.attachments = attachmentDetails;
             } catch (err) {
-              console.error('Failed to fetch attachment details:', err);
+              logError('Failed to fetch attachment details:', err);
             }
           }
 
@@ -358,7 +362,7 @@ const Chat = () => {
           chatService.subscribeToGroup(conversation.id, handleMessage);
         }
       } catch (err) {
-        console.error('WebSocket subscription failed:', err);
+        logError('WebSocket subscription failed:', err);
       }
     };
 
@@ -436,7 +440,7 @@ const Chat = () => {
           const response = await attachmentService.upload(file, conversation.id);
           uploadedIds.push(response);
         } catch (err) {
-          console.error('File upload failed:', err);
+          logError('File upload failed:', err);
           alert(`Failed to upload ${file.name}`);
         }
       }
@@ -466,7 +470,7 @@ const Chat = () => {
       await messageService.editMessage(messageId, newContent);
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: newContent, edited: true } : m));
     } catch (err) {
-      console.error('Edit failed:', err);
+      logError('Edit failed:', err);
     }
   };
 
@@ -475,7 +479,7 @@ const Chat = () => {
       await messageService.deleteMessage(messageId);
       setMessages(prev => prev.filter(m => m.id !== messageId));
     } catch (err) {
-      console.error('Delete failed:', err);
+      logError('Delete failed:', err);
     }
   };
 
@@ -520,7 +524,7 @@ const Chat = () => {
         };
       }));
     } catch (err) {
-      console.error('Reaction failed:', err);
+      logError('Reaction failed:', err);
     }
   };
 
@@ -546,7 +550,7 @@ const Chat = () => {
         }
         updateIsAtBottom();
       }, 100);
-    } catch (err) { console.error(err); } finally { setLoadingMore(false); }
+    } catch (err) { logError(err); } finally { setLoadingMore(false); }
   };
 
   // Search handlers
@@ -558,7 +562,7 @@ const Chat = () => {
       setSearchResults(results.content || results);
       setSearchMode('results');
     } catch (err) {
-      console.error('Search failed:', err);
+      logError('Search failed:', err);
       setError('Search failed. Please try again.');
     } finally {
       setSearchLoading(false);
@@ -580,7 +584,7 @@ const Chat = () => {
         setParticipants(prev => ({ ...prev, ...newProfiles }));
       }
     } catch (err) {
-      console.error('Failed to load context:', err);
+      logError('Failed to load context:', err);
       setError('Could not load conversation context.');
     } finally {
       setContextLoading(false);
@@ -610,7 +614,7 @@ const Chat = () => {
         targetMessageId: contextData.targetMessageId,
       });
     } catch (err) {
-      console.error('Failed to load more context:', err);
+      logError('Failed to load more context:', err);
     } finally {
       setContextLoading(false);
     }
@@ -659,7 +663,7 @@ const Chat = () => {
       }
       await loadConversationData();
     } catch (err) {
-      console.error(`Failed to ${action} participant:`, err);
+      logError(`Failed to ${action} participant:`, err);
       alert(`Failed to ${action} participant. Please try again.`);
     } finally {
       setProcessingAction(false);
@@ -676,7 +680,7 @@ const Chat = () => {
       emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
-      console.error('Failed to leave group:', err);
+      logError('Failed to leave group:', err);
       alert('Failed to leave group. Please try again.');
     } finally {
       setProcessingAction(false);
@@ -692,7 +696,7 @@ const Chat = () => {
       setRenameDialogOpen(false);
       setNewGroupName('');
     } catch (err) {
-      console.error('Failed to rename group:', err);
+      logError('Failed to rename group:', err);
       alert('Failed to rename group. Please try again.');
     } finally {
       setProcessingAction(false);
@@ -706,7 +710,7 @@ const Chat = () => {
       emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
-      console.error('Failed to delete group:', err);
+      logError('Failed to delete group:', err);
       alert('Failed to delete group. Please try again.');
     } finally {
       setProcessingAction(false);
@@ -721,7 +725,7 @@ const Chat = () => {
       emitConversationUpdated(conversation.id);
       navigate('/');
     } catch (err) {
-      console.error('Failed to delete conversation:', err);
+      logError('Failed to delete conversation:', err);
       alert('Failed to delete conversation');
     }
   };
@@ -745,7 +749,7 @@ const Chat = () => {
       // Store just the IDs
       setContacts(contactIds);
     } catch (err) {
-      console.error('Failed to load contacts:', err);
+      logError('Failed to load contacts:', err);
     } finally {
       setContactsLoading(false);
     }
@@ -770,7 +774,7 @@ const Chat = () => {
       const filtered = results.filter(u => u.userId !== user.id && !existingIds.has(u.userId));
       setMemberSearchResults(filtered);
     } catch (err) {
-      console.error('Failed to search users:', err);
+      logError('Failed to search users:', err);
     }
   };
 
@@ -792,7 +796,7 @@ const Chat = () => {
       await loadConversationData();
       setAddMembersDialogOpen(false);
     } catch (err) {
-      console.error('Failed to add participants:', err);
+      logError('Failed to add participants:', err);
       alert('Failed to add participants. Please try again.');
     } finally {
       setProcessingAction(false);
@@ -1517,6 +1521,9 @@ const Chat = () => {
                   disabled={sending} 
                   multiline 
                   maxRows={4}
+                  inputProps={{ maxLength: 2000 }}
+                  helperText={input.length > 1800 ? `${input.length}/2000` : ''}
+                  FormHelperTextProps={{ sx: { textAlign: 'right' } }}
                   onKeyDown={(e) => { 
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();

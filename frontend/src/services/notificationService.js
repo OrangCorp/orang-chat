@@ -1,5 +1,9 @@
 // services/notificationService.js
 
+const isDev = import.meta.env.DEV;
+const log = (...args) => isDev && console.log(...args);
+const logError = (...args) => isDev && console.error(...args);
+
 const API_BASE_URL = '/api';
 
 const getHeaders = () => {
@@ -54,22 +58,19 @@ class NotificationService {
 
   async muteConversation(conversationId, until = null) {
     const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}/notifications/mute`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ until })
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ until })
     });
     if (!response.ok) {
-        // Try to get error message, but handle empty response
-        try {
+      try {
         const error = await response.json();
         throw new Error(error.message || 'Failed to mute conversation');
-        } catch {
+      } catch {
         throw new Error(`Failed to mute conversation (${response.status})`);
-        }
+      }
     }
-    // Success - no need to return anything
-    }
-
+  }
 
   async unmuteConversation(conversationId) {
     const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}/notifications/unmute`, {
@@ -87,7 +88,6 @@ class NotificationService {
     return response.json();
   }
 
-  // Permission and subscription management
   async requestPermission() {
     if (!('Notification' in window)) {
       throw new Error('This browser does not support notifications');
@@ -96,10 +96,7 @@ class NotificationService {
     return permission === 'granted';
   }
 
-  // notificationService.js - Add this method
   handleNotificationPayload(payload) {
-    // Called when push notification is received
-    // This handles the payload format from the backend
     return {
       type: payload.type || 'default',
       title: payload.title || 'New Notification',
@@ -127,7 +124,6 @@ class NotificationService {
     return registration.pushManager.getSubscription();
   }
 
-  // notificationService.js - Fix the subscribeToPush method
   async subscribeToPush() {
     try {
       const vapidKey = await this.getVapidPublicKey();
@@ -136,15 +132,15 @@ class NotificationService {
       let subscription = await registration.pushManager.getSubscription();
       
       if (!subscription) {
-        console.log('Creating new browser subscription...');
+        log('Creating new browser subscription...');
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
         });
       }
       
-      console.log('📱 Sending subscription to backend...');
-      console.log('Endpoint:', subscription.endpoint);
+      log('📱 Sending subscription to backend...');
+      log('Endpoint:', subscription.endpoint);
       
       const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_BASE_URL}/push/subscribe`, {
@@ -163,24 +159,23 @@ class NotificationService {
         })
       });
       
-      console.log('Backend response status:', response.status);
+      log('Backend response status:', response.status);
       
       if (!response.ok) {
         const text = await response.text();
-        console.error('Backend subscription failed:', response.status, text);
+        logError('Backend subscription failed:', response.status, text);
         throw new Error(`Subscribe failed: ${response.status}`);
       }
       
       const result = await response.json();
-      console.log('✅ Backend subscription saved:', result.id);
+      log('✅ Backend subscription saved:', result.id);
       return subscription;
     } catch (error) {
-      console.error('❌ subscribeToPush failed:', error);
+      logError('❌ subscribeToPush failed:', error);
       throw error;
     }
   }
 
-  // Helper to convert VAPID key
   urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
@@ -202,43 +197,38 @@ class NotificationService {
     }
   }
 
-
   async initialize() {
-    console.log('🔔 Initializing push notifications...');
+    log('🔔 Initializing push notifications...');
     
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.log('Push not supported');
+      log('Push not supported');
       return;
     }
     
     try {
-      // Check if we have a browser subscription
       const registration = await navigator.serviceWorker.ready;
       const existingSubscription = await registration.pushManager.getSubscription();
       
       if (existingSubscription) {
-        // We have a browser subscription - make sure backend knows about it
-        console.log('📱 Browser subscription exists, syncing to backend...');
+        log('📱 Browser subscription exists, syncing to backend...');
         await this.subscribeToPush();
         this._initialized = true;
         return;
       }
       
-      // No subscription yet - create one
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         await this.subscribeToPush();
-        console.log('✅ Push notifications initialized successfully');
+        log('✅ Push notifications initialized successfully');
         this._initialized = true;
       } else {
-        console.log('Notification permission denied');
+        log('Notification permission denied');
       }
     } catch (error) {
-      console.error('Push initialization failed:', error);
+      logError('Push initialization failed:', error);
     }
   }
 
-  // Inbox endpoints
   async getInbox(page = 0, size = 20) {
     const response = await fetch(`${API_BASE_URL}/notifications?page=${page}&size=${size}`, {
       headers: getHeaders()

@@ -14,6 +14,10 @@ import authService from '../services/authService';
 import notificationService from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
 
+const isDev = import.meta.env.DEV;
+const log = (...args) => isDev && console.log(...args);
+const logError = (...args) => isDev && console.error(...args);
+
 const Settings = () => {
   const { user } = useAuth();
   
@@ -57,7 +61,7 @@ const Settings = () => {
         setPushStatus('disabled');
       }
     } catch (err) {
-      console.debug('Could not check push status:', err);
+      Log('Could not check push status:', err);
       setPushStatus('unsupported');
     }
   };
@@ -86,7 +90,7 @@ const Settings = () => {
         setPushStatus('disabled');
       }
     } catch (err) {
-      console.error('Failed to toggle push notifications:', err);
+      logError('Failed to toggle push notifications:', err);
       setPushError(err.message || 'Failed to update notification settings');
       setPushEnabled(!enable);
     } finally {
