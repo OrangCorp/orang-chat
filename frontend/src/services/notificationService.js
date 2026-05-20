@@ -278,7 +278,7 @@ class NotificationService {
       method: 'DELETE',
       headers: getHeaders()
     });
-    if (!response.ok) throw new Error('Failed to delete notification');
+    if (!response.ok && response.status !== 404) throw new Error('Failed to delete notification');
   }
 
   async clearAllNotifications() {

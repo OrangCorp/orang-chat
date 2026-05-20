@@ -286,10 +286,29 @@ const Header = () => {
     };
     
     // Also listen for contact request events
-    const handleRefresh = () => {
+    const handleRefresh = (event) => {
       notificationService.getUnreadCount()
         .then(setUnreadCount)
         .catch(() => {});
+      
+      const userId = event?.detail?.userId;
+      if (userId) {
+        setInbox(prev => {
+          const matching = prev.filter(n => 
+            (n.type === 'CONTACT_REQUEST' || n.type === 'contact_request') && n.actorId === userId
+          );
+          if (matching.length === 0) return prev;
+          
+          // Only delete once - use first match
+          const idsToDelete = [...new Set(matching.map(n => n.id))];
+          idsToDelete.forEach(id => {
+            notificationService.deleteNotification(id).catch(() => {});
+          });
+          
+          setUnreadCount(c => Math.max(0, c - matching.filter(n => !n.read).length));
+          return prev.filter(n => !matching.includes(n));
+        });
+      }
     };
     
     window.addEventListener('sw-message', handleSWMessage);
@@ -394,7 +413,9 @@ const Header = () => {
         await notificationService.deleteNotification(notif.id);
         setInbox(prev => prev.filter(n => n.id !== notif.id));
         if (!notif.read) setUnreadCount(prev => Math.max(0, prev - 1));
-        window.dispatchEvent(new CustomEvent('contact-request-resolved'));
+        window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+          detail: { userId: notif.actorId } 
+        }));
       }
     } catch (e) {
       console.error('Accept failed:', e);
@@ -411,7 +432,9 @@ const Header = () => {
         await notificationService.deleteNotification(notif.id);
         setInbox(prev => prev.filter(n => n.id !== notif.id));
         if (!notif.read) setUnreadCount(prev => Math.max(0, prev - 1));
-        window.dispatchEvent(new CustomEvent('contact-request-resolved'));
+        window.dispatchEvent(new CustomEvent('contact-request-resolved', { 
+          detail: { userId: notif.actorId } 
+        }));
       }
     } catch (e) {
       console.error('Decline failed:', e);

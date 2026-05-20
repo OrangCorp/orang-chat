@@ -132,6 +132,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - WEBSOCKET_ALLOWED_ORIGINS=${WEBSOCKET_ALLOWED_ORIGINS:?WEBSOCKET_ALLOWED_ORIGINS must be set}
     depends_on:
       rabbitmq:
         condition: service_healthy
