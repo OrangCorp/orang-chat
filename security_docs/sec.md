@@ -1,11 +1,32 @@
-# Authentication & Authorization
-
 ## Backend
-- **JWT-based Authentication**: All backend services (auth, user, chat, notification, message) use JWT for stateless authentication. JWT secrets are injected via environment variables (`JWT_SECRET`).
-- **Spring Security**: Services use `spring-boot-starter-security` (see each service's `pom.xml`) for authentication and authorization enforcement.
-- **Password Handling**: Passwords for databases, Redis, RabbitMQ, and mail are injected via environment variables and never hardcoded.
-- **Password Reset**: Auth service supports password reset tokens with expiry (`password-reset.token-expiry-hours`).
-- **Role-based Access**: Role and permission enforcement is handled via Spring Security (see `pom.xml` and likely code in each service).
+
+### 1. Authentication
+- **JWT with HMAC-SHA256**: Stateless, microservices-friendly
+- **Password Hashing**: BCrypt (Spring Security default)
+- **Token Reuse Detection**: Redis markers + full session blacklist
+
+### 2. Authorization
+- **Role-Based**: Participant in conversation, contact status, group admin role
+- **Fine-Grained**: Each service checks user eligibility for operation
+- **API Annotations**: `@AuthenticationPrincipal` injects current userId
+
+### 3. Encryption
+- **Passwords**: BCrypt hashing (non-reversible)
+- **JWT**: HMAC-SHA256 signing (verifies server created token)
+- **Web Push**: ECDP256 asymmetric encryption (browser validates server)
+- **Transport**: HTTPS recommended for production
+
+### 4. Input Validation
+- **DTOs**: All endpoints validate request bodies (null checks, length limits)
+- **Message Content**: 2000 character max
+- **Email**: RFC 5322 validation
+- **Rate Limiting**: Prevents brute force attacks
+
+### 5. Session Management
+- **Access Token**: 15 minutes (short-lived, minimal damage if stolen)
+- **Refresh Token**: 7 days (tied to device, separate expiry)
+- **Logout**: Blacklist in Redis (can't reuse tokens)
+- **Concurrent Sessions**: Tracked per user (can terminate specific sessions)
 
 ## Frontend
 - **No secrets in code**: No authentication secrets are present in the frontend codebase.

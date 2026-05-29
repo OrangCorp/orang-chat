@@ -67,7 +67,7 @@
 │  │  │  PostgreSQL      │  │  PostgreSQL      │                  │ │
 │  │  │  :5432           │  │  :5433           │                  │ │
 │  │  └──────────────────┘  └──────────────────┘                  │ │
-│  │                                                                │ │
+│  │                                                              │ │ 
 │  │  ┌──────────────────┐  ┌──────────────────┐                  │ │
 │  │  │  Chat Service    │  │  Message Service │                  │ │
 │  │  │  Port: 8083      │  │  Port: 8084      │                  │ │
@@ -99,10 +99,10 @@
 │  │  └──────────────────┘                                        │ │
 │  │                                                                │ │
 │  └────────────────────────────────────────────────────────────────┘ │
-│                           │                                          │
-│                ┌──────────┼──────────┐                               │
-│                │          │          │                               │
-│                ▼          ▼          ▼                               │
+│                           │                                        │
+│                ┌──────────┼───────────────────────────┐            │
+│                │          │                           │            │
+│                ▼          ▼                           ▼            │
 │  ┌──────────────────┐ ┌────────────────────┐ ┌──────────────────┐  │
 │  │     RabbitMQ     │ │  Redis Cache       │ │   MinIO Storage  │  │
 │  │  Message Broker  │ │  :6379             │ │   S3-compatible  │  │
@@ -131,7 +131,7 @@
 - **API aggregation**: Combine OpenAPI docs from all services
 
 ### 3. **Event-Driven Pattern**
-- **Publishers**: Services emit events when important actions occur
+- **Publishers**: Services emit events when important actions occura
 - **Subscribers**: Services listen and react to events
 - **Loose coupling**: Publishers don't know subscribers
 - **Eventual consistency**: Events processed asynchronously
@@ -162,39 +162,7 @@ Solution: Event choreography
 - **Verification**: HMAC signature proves server created token
 - **Advantage**: No session replication across services
 - **Trade-off**: Can't revoke token until expiration (mitigated with blacklist)
-
-### 8. **Circuit Breaker Pattern** (Ready for implementation)
-```
-// If Message Service is down:
-@CircuitBreaker(name = "messageService")
-public List<Message> getMessages(...) {
-  // Calls Message Service
-  // If repeated failures, circuit OPENS
-  // Requests fail fast instead of hanging
-  // Prevents cascading failures
-}
-```
-
-### 9. **Bulkhead Pattern** (Ready for implementation)
-```
-// Isolate thread pools per service
-@Bulkhead(name = "getMessages", type = Bulkhead.Type.THREAD)
-public List<Message> getMessages(...) {
-  // Dedicates thread pool for this operation
-  // If getMessages slow, won't block other operations
-}
-```
-
-### 10. **Retry Pattern** (Active in Thumbnail Generation)
-```
-@Retry(name = "thumbnailGeneration", maxAttempts = 3)
-@Async
-public void generateThumbnail(Attachment attachment) {
-  // Retries up to 3 times on failure
-  // Exponential backoff between retries
-}
-```
-
+ 
 ---
 
 ## Data Flow
@@ -433,7 +401,8 @@ public void generateThumbnail(Attachment attachment) {
 │    Skip for: /api/auth/register, /api/auth/login,           │
 │              /actuator/health, /swagger-ui                  │
 │                                                             │
-│ 4. CIRCUIT BREAKER (Optional)                               │
+│ 4. CIRCUIT BREAKER (Optional)                               │spring:
+  cloud:
 │    If backend service down:                                 │
 │    - Close circuit (fast fail)                              │
 │    - Return 503 Service Unavailable                         │
@@ -461,74 +430,7 @@ public void generateThumbnail(Attachment attachment) {
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Gateway Route Configuration
-
-```yaml
-spring:
-  cloud:
-    gateway:
-      routes:
-        # Auth Service
-        - id: auth_service
-          uri: http://auth-service:8081
-          predicates:
-            - Path=/api/auth/**
-          filters:
-            - RewritePath=/api/auth(/?.*),$1
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
-                key-resolver: "#{@ipAddressKeyResolver}"
-
-        # User Service
-        - id: user_service
-          uri: http://user-service:8082
-          predicates:
-            - Path=/api/users/**,/api/contacts/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                key-resolver: "#{@userIdKeyResolver}"
-            - JwtAuthenticationFilter
-
-        # Chat Service (WebSocket)
-        - id: chat_service
-          uri: ws://chat-service:8083
-          predicates:
-            - Path=/ws/**
-          filters:
-            - RewritePath=/ws(/?.*),$1
-
-        # Message Service
-        - id: message_service
-          uri: http://message-service:8084
-          predicates:
-            - Path=/api/messages/**,/api/conversations/**,/api/reactions/**,/api/attachments/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 50
-                redis-rate-limiter.burstCapacity: 100
-                key-resolver: "#{@userIdKeyResolver}"
-            - JwtAuthenticationFilter
-
-        # Notification Service
-        - id: notification_service
-          uri: http://notification-service:8085
-          predicates:
-            - Path=/api/push/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-                key-resolver: "#{@userIdKeyResolver}"
-            - JwtAuthenticationFilter
-```
-
+ 
 ---
 
 ## Service Layer Architecture
@@ -602,85 +504,7 @@ com.orang.{service}/
         ├── V2__add_feature.sql
         └── ...
 ```
-
-### Example Service Implementation
-
-```java
-@Service
-@Transactional
-public class UserService {
-    
-    // 1. Dependency injection
-    private final UserRepository userRepository;
-    private final ContactRepository contactRepository;
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final RabbitTemplate rabbitTemplate;
-    
-    // 2. Business logic methods
-    public UserProfile createProfile(UUID userId, CreateProfileRequest req) {
-        // Validate authorization
-        validateUserOwnership(userId);
-        
-        // Check if profile exists (idempotency)
-        Optional<UserProfile> existing = userRepository.findById(userId);
-        if (existing.isPresent()) {
-            return mapper.toResponse(existing.get());
-        }
-        
-        // Create new profile
-        UserProfile profile = new UserProfile();
-        profile.setUserId(userId);
-        profile.setDisplayName(req.getDisplayName());
-        profile.setAvatarUrl(req.getAvatarUrl());
-        profile.setBio(req.getBio());
-        profile.setCreatedAt(Instant.now());
-        
-        // Save to database
-        UserProfile saved = userRepository.save(profile);
-        
-        // Cache in Redis (1 hour TTL)
-        cacheProfile(saved);
-        
-        return mapper.toResponse(saved);
-    }
-    
-    public void removeContact(UUID userId, UUID contactId) {
-        // Authorization: user must be party to contact
-        Contact contact = contactRepository.findById(contactId)
-            .orElseThrow(() -> new ResourceNotFoundException("Contact not found"));
-        
-        if (!contact.involvesUser(userId)) {
-            throw new AuthorizationException("User not involved in contact");
-        }
-        
-        // Soft delete (set deletedAt timestamp)
-        contact.setDeletedAt(Instant.now());
-        contactRepository.save(contact);
-        
-        // Publish event
-        rabbitTemplate.convertAndSend("user.exchange", "contact.removed",
-            new ContactRemovedEvent(contactId, userId));
-    }
-    
-    // 3. Cache management
-    private void cacheProfile(UserProfile profile) {
-        String key = "profile:" + profile.getUserId();
-        redisTemplate.opsForValue().set(key, profile, Duration.ofHours(1));
-    }
-    
-    // 4. Authorization checks
-    private void validateUserOwnership(UUID userId) {
-        String currentUserId = SecurityContextHolder.getContext()
-            .getAuthentication().getPrincipal();
-        if (!currentUserId.equals(userId.toString())) {
-            throw new AuthorizationException("User cannot access other users' data");
-        }
-    }
-}
-```
-
----
-
+ 
 ## Database Design
 
 ### Entity-Relationship Diagram (Simplified)
@@ -720,7 +544,8 @@ User DB (user_db):
 │ recipientId (UUID, FK)   │  ├─ Both reference users (auth_db)
 │ status (enum)            │ ──┘
 │   PENDING/ACCEPTED/BLOCKED
-│ acceptedAt (timestamp)   │
+│ acceptedAt (timestamp)   |
+| blockedBy (UUID,FK)      │
 │ createdAt (timestamp)    │
 │ deletedAt (timestamp)    │ ← Soft delete
 └──────────────────────────┘
@@ -729,11 +554,13 @@ Message DB (message_db):
 ┌──────────────────────────┐
 │ conversations            │
 ├──────────────────────────┤
-│ id (UUID, PK)            │
+│ id (UUID, PK)            | 
+│ type   (enum)            │
+│   DIRECT/GROUP           |
 │ name (string, optional)  │ ← NULL for direct chats
-│ isGroup (boolean)        │
 │ createdBy (UUID)         │
 │ createdAt (timestamp)    │
+│ updatedAt (timestamp)    |
 └──────────────────────────┘
 
 ┌────────────────────────────────────┐
@@ -742,8 +569,8 @@ Message DB (message_db):
 │ conversationId (UUID, PK, FK)      │
 │ userId (UUID, PK, FK)              │
 │ role (enum: MEMBER/ADMIN)          │
-│ joinedAt (timestamp)               │
-│ leftAt (timestamp, nullable)       │ ← Soft delete
+│ joinedAt (timestamp)               │ ← Soft delete
+| addedBy (UUID, FK)                 |
 └────────────────────────────────────┘
 
 ┌────────────────────────────────────┐
@@ -755,14 +582,18 @@ Message DB (message_db):
 │ content (text, 2000 char max)      │ ──┘
 │ replyToMessageId (UUID, FK, nullable)
 │ createdAt (timestamp)              │
+| updatedAt (timestamp)              │
 │ editedAt (timestamp, nullable)     │
 │ deletedAt (timestamp, nullable)    │ ← Soft delete
+| deletedBy (UUID)                   |
+| replyToMessageId(UUID)             |
 │ INDEX: full-text GIN on content    │
 └────────────────────────────────────┘
 
 ┌────────────────────────────────────┐
 │ message_reactions                  │
 ├────────────────────────────────────┤
+│ id (UUID)                          │
 │ messageId (UUID, PK, FK)           │
 │ userId (UUID, PK)                  │
 │ reactionType (enum: LIKE/ORANG)    │
@@ -782,23 +613,31 @@ Message DB (message_db):
 ┌────────────────────────────────────┐
 │ read_receipts                      │
 ├────────────────────────────────────┤
-│ messageId (UUID, PK, FK)           │
-│ userId (UUID, PK)                  │
+│ id (UUID, PK, FK)                  │
+│ lastReadMessageId (UUID, PK)       │
 │ readAt (timestamp)                 │
 └────────────────────────────────────┘
 
-┌────────────────────────────────────┐
-│ attachments                        │
-├────────────────────────────────────┤
-│ id (UUID, PK)                      │
-│ messageId (UUID, FK)               │
-│ fileType (string: image/jpeg, etc) │
-│ fileSize (bigint: bytes)           │
-│ s3Key (string: path in MinIO)      │
-│ thumbnailKey (string, nullable)    │
-│ thumbnailStatus (enum)             │
-│   PENDING/READY/FAILED             │
-│ createdAt (timestamp)              │
+┌─────────────────────────────────────┐
+│ attachments                         │
+├─────────────────────────────────────┤
+│ id (UUID, PK)                       │
+| version (long)                      │
+│ conversationId (UUID, FK)           │
+│ uploaderId (UUID, FK)               │
+│ messageId (UUID, FK)                │
+| fileName(string)                    |
+| contentType (string)                | 
+| fileSize(Long)                      |
+| storageKey(string)                  |
+│thumbnailStorageKey (string,nullable)│
+| thumbnailGenerate(bool)             |
+| thumbnailAttempts(int)              |
+| thumbnailLastAttempt(timestamp)      |
+| thumbnailError(String)              |
+| uploadedAt(timestamp)                |
+| deletedAt(timestamp)                 |
+| permanentlyDeletedAt(timestamp)      | 
 └────────────────────────────────────┘
 
 Notification DB (notification_db):
@@ -808,50 +647,25 @@ Notification DB (notification_db):
 │ id (UUID, PK)                      │
 │ userId (UUID, FK to auth_db)       │
 │ endpoint (string, unique)          │
-│   https://fcm.googleapis.com/...   │
 │ p256dhKey (string: ECDP256 key)    │
 │ authKey (string: authentication)   │
 │ expiresAt (timestamp, nullable)    │
 │ userAgent (string: device info)    │
 │ createdAt (timestamp)              │
 │ lastUsedAt (timestamp)             │
+│ useragent (string)                 │
 └────────────────────────────────────┘
 
 ┌────────────────────────────────────┐
 │ notification_preferences           │
 ├────────────────────────────────────┤
-│ userId (UUID, PK, FK to auth_db)   │
-│ conversationId (UUID, PK, FK)      │
+│ id (UUID, PK)                      |
 │ muted (boolean: true = silent)     │
 │ mutedUntil (timestamp, nullable)   │
-│   (e.g., mute for 1 hour)          │
-│ createdAt (timestamp)              │
 │ updatedAt (timestamp)              │
 └────────────────────────────────────┘
 ```
 
-### Query Patterns & Indexes
-
-```sql
--- User lookups (Auth Service)
-CREATE INDEX idx_users_email ON users(email);
-
--- Conversation queries
-CREATE INDEX idx_conversation_participants_user ON conversation_participants(userId);
-CREATE INDEX idx_messages_conversation ON messages(conversationId);
-
--- Search queries (Message Service)
-CREATE INDEX idx_messages_content_gin ON messages 
-  USING GIN(to_tsvector('english', content));
-
--- Read receipt tracking
-CREATE INDEX idx_read_receipts_user ON read_receipts(userId);
-CREATE INDEX idx_read_receipts_message ON read_receipts(messageId);
-
--- Contact queries (User Service)
-CREATE INDEX idx_contacts_requester ON contacts(requesterId, status);
-CREATE INDEX idx_contacts_recipient ON contacts(recipientId, status);
-```
 
 ---
 
@@ -1152,91 +966,10 @@ SCENARIO 7: Message Size Exceeds Message Broker Limit
 └─ ✓ Graceful error response
 ```
 
-### Idempotency Guarantees
-
-```
-Problem: Message sent twice due to network retry
-
-Solution: Idempotent message handlers
-
-@RabbitListener(queues = "chat.message.sent.queue")
-public void onChatMessageSent(ChatMessagePayload payload) {
-    // Check if message already persisted
-    Optional<Message> existing = messageRepository
-        .findById(payload.getMessageId());
-    
-    if (existing.isPresent()) {
-        log.debug("Message already persisted: {}", payload.getMessageId());
-        return; // Idempotent ✓
-    }
-    
-    // Persist message (only if first time)
-    Message message = new Message();
-    message.setId(payload.getMessageId());
-    // ... set other fields
-    messageRepository.save(message);
-}
-
-Result: Can safely retry failed RabbitMQ messages
-        No duplicate persistence
-```
 
 ---
 
-## Deployment Architecture
-
-### Container Topology
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    PRODUCTION CLUSTER                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Load Balancer (Nginx / HAProxy)                                │
-│  ├─ Handle TLS termination                                      │
-│  ├─ Route to API Gateway instances                              │
-│  └─ Health check every 5 seconds                                │
-│       │                                                         │
-│       ├─ API Gateway Instance 1 (8080)                          │
-│       ├─ API Gateway Instance 2 (8080)                          │
-│       └─ API Gateway Instance 3 (8080)                          │
-│             │                                                   │
-│             ├─── Auth Service Instance 1 (8081)                 │
-│             ├─── Auth Service Instance 2 (8081)                 │
-│             ├─ User Service Instance 1 (8082)                   │
-│             ├─ User Service Instance 2 (8082)                   │
-│             ├─ User Service Instance 3 (8082)                   │
-│             ├─ Chat Service Instance 1 (8083) [sticky session]  │
-│             ├─ Chat Service Instance 2 (8083) [sticky session]  │
-│             ├─ Chat Service Instance 3 (8083) [sticky session]  │
-│             ├─ Message Service Instance 1 (8084)                │
-│             ├─ Message Service Instance 2 (8084)                │
-│             ├─ Message Service Instance 3 (8084)                │
-│             ├─ Notification Service Instance 1 (8085)           │
-│             └─ Notification Service Instance 2 (8085)           │
-│                     │                                           │
-│  ┌────────────────┼──────────────┬──────────────┐               │
-│  │                │              │              │               │
-│  ▼                ▼              ▼              ▼               │
-│  PostgreSQL      Redis           RabbitMQ      MinIO            │
-│  Cluster         Cluster         Cluster       Cluster          │
-│  (3 nodes)       (3 nodes)       (3 nodes)     (3 nodes)        │
-│  - auth_db       - cache         - messages    - attachments    │
-│  - user_db       - sessions      - exchanges   - thumbnails     │
-│  - message_db    - blacklist     - queues                       │
-│  - notification_ - ShedLock      - durability                   │
-│    db                                                           │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-Note:
-- API Gateway: No sticky session (stateless)
-- Chat Service: Sticky session (WebSocket state tied to instance)
-  RabbitMQ relay allows messages to sync across instances
-- All DBs: Replication for HA
-- All services: Health checks, auto-restart on failure
-```
- ---
+ 
 
 ## Summary
 
@@ -1256,4 +989,3 @@ The design supports growth from thousands to millions of concurrent users throug
 - Connection pooling
 - Rate limiting & circuit breakers
 
-All components are designed for high availability with redundancy at every layer.

@@ -1,10 +1,3 @@
-# Feature Status Overview
-
-Current Date: 2026-05-19
-Project: Orang Chat backend microservices
-Source of truth: backend code (controllers, services, listeners, config, tests)
-
----
 
 ## 1. Implemented Features
 
