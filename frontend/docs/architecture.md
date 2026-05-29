@@ -55,6 +55,28 @@ The frontend is built with React and Vite, following a modular component-based a
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 
+
+
+## Directory Structure
+
+src/
+├── assets/            # Static assets (icons, logos)
+|     ├──  styles/ # Themes
+├── components/          # Reusable UI components
+|        ├── chat/           # Chat-specific components (message bubble)
+|        ├── common/         # Universal components (header, sidebar)
+├── context/            # React Context providers for use elsewhere
+├── layouts/            # Layout wrapper components 
+├── pages/              # Page screen components (Chat, login, profile ,etc.)
+├── routes/             # Route definitions and guards
+├── services/           # API and external service calls
+├── types/              # TypeScript type definitions
+├── utils/              # Miscellaneous utility functions and constants
+|
+├── App.jsx             # Main application component
+└── main.jsx            # Application entry point
+
+
 ### Component Hierarchy
 
 App.jsx (Root)
@@ -76,28 +98,6 @@ App.jsx (Root)
     ├── API Services (REST calls)
     ├── WebSocket Service (Real-time)
     └── Utility Services (Helpers)
-
-## Directory Structure
-
-src/
-├── assets/             # Static assets (images, icons)
-├── components/          # Reusable UI components
-│   ├── common/         # Generic components (Button, Input, etc.)
-│   ├── layout/         # Layout components (Header, Sidebar)
-│   ├── chat/           # Chat-specific components
-│   ├── auth/           # Authentication components
-│   └── forms/          # Form components
-├── context/            # React Context providers 
-├── hooks/              # Custom React hooks 
-├── layouts/            # Layout wrapper components
-├── pages/              # Page-level components (routes)
-├── routes/             # Route definitions and guards
-├── services/           # API and external service calls
-├── types/              # TypeScript type definitions
-├── utils/              # Utility functions and constants
-|
-├── App.jsx             # Main application component
-└── main.jsx            # Application entry point
 
 ---
 

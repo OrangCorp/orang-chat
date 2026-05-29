@@ -1,0 +1,15 @@
+localhost {
+     
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket api-gateway:8080
+    
+     
+    reverse_proxy /api/* api-gateway:8080
+    reverse_proxy /actuator/* api-gateway:8080
+    
+    
+    reverse_proxy frontend:80
+}

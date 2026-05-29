@@ -44,8 +44,8 @@ const ResetPassword = () => {
     setError(null);
     setPasswordError('');
     
-    if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+    if (newPassword.length < 16) {
+      setPasswordError('Password must be at least 16 characters');
       return;
     }
     
@@ -136,7 +136,7 @@ const ResetPassword = () => {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={success}
-            helperText="At least 8 characters"
+            helperText="At least 16 characters"
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '20px 8px 20px 8px' } }}
           />
           
