@@ -10,21 +10,7 @@ React-based chat application frontend for the Orang Chat.
 - npm or yarn
 
 ---
-
-## Installation
-
-### 1. Clone the repository
-```bash
-git clone <repository-url>
-cd frontend
-```
-
-### 2. Install dependencies
-```bash
-npm install
-```
-
----
+ 
 
 ## Environment Setup
 

@@ -329,7 +329,3 @@ On logout:
 
 ---
 
- 
- 
-
-This architecture provides a scalable, maintainable, and performant frontend foundation for the Orang Chat application.
