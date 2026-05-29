@@ -199,34 +199,127 @@ User Interaction → Component Event → Action Dispatch → Context Reducer →
 ---
 
   
-## Security Architecture
+## Security Architecture 
 
-### Authentication
+### Authentication & Token Management
 
-- *JWT tokens*: Stored in localStorage with httpOnly cookies as backup
-- *Token refresh*: Automatic token renewal before expiration
-- *Route protection*: Private routes check authentication status
-- *Logout*: Clear tokens and redirect to login
+The app uses a *JWT access/refresh token* pair stored in localStorage. The authService.js singleton manages the full lifecycle:
 
-### Authorization
+| Token | Lifetime | Storage | Purpose |
+|-------|----------|---------|---------|
+| Access token | ~15 minutes | localStorage | Authenticates API requests via Authorization: Bearer header |
+| Refresh token | Longer-lived | localStorage | Obtains new access tokens without re-login |
 
-- *Role-based access*: Check user roles for feature access
-- *API permissions*: Backend validates permissions on each request
-- *UI conditional rendering*: Hide/show features based on permissions
+*Token refresh* happens proactively — a timer fires 60 seconds before the access token expires, calling /api/auth/refresh. If the refresh succeeds, the new tokens replace the old ones silently. The user never sees this.
 
-### Security Headers
+*When refresh fails* (expired refresh token, network error, server rejects):
+- All auth data is cleared from localStorage
+- isAuthenticated is set to false
+- The user is redirected to the login page
+- Any cached profile/contact data is purged (userService.clearCache())
 
-// Content Security Policy
-const csp = {
-  'default-src': "'self'",
-  'script-src': "'self' 'unsafe-inline'",
-  'style-src': "'self' 'unsafe-inline'",
-  'img-src': "'self' data: https:",
-  'connect-src': "'self' ws: wss:"
-};
+*On app startup*, authService.initialize() checks localStorage for existing tokens. If an access token is expired, it attempts a refresh immediately. If that fails, the user starts unauthenticated and sees the login page.
 
-// Implemented via nginx.conf or meta tags
+---
 
+### Route Protection (PrivateRoute.jsx)
+
+All authenticated routes are wrapped in a PrivateRoute component:
+
+User navigates to /chat/:id
+        │
+        ▼
+┌─────────────────────────┐
+│ Is attemptedAuth true?  │── No ──► Show loading spinner
+│ (auth initialized yet?) │
+└──────────┬──────────────┘
+           │ Yes
+           ▼
+┌─────────────────────────┐
+│ Is isAuthenticated true?│── No ──► Redirect to /login
+└──────────┬──────────────┘
+           │ Yes
+           ▼
+     Render the page
+
+This prevents unauthenticated users from accessing any page behind the MainLayout. The attemptedAuth flag prevents a flash of the login page while tokens are being validated on initial load.
+
+---
+
+### API Request Authentication
+
+Every API call goes through service classes that attach the JWT via a shared helper:
+
+const getHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+});
+
+If a request returns *401 Unauthorized*, the user's auth state is cleared and they're redirected to login. There's no automatic retry — the refresh timer handles keeping the token fresh proactively.
+
+---
+
+### Server-Side Authorization (Backend Enforced)
+
+The frontend sends the JWT with every request, but *the backend is the authority* on whether a user can access a resource. Examples:
+
+- *Accessing a conversation you're not a member of:* The backend returns 403 Forbidden. The frontend displays an error message.
+- *Editing/deleting someone else's message:* The backend rejects it. The frontend only shows edit/delete buttons on your own messages (isOwn flag).
+- *Group admin actions (kick, promote, rename):* The UI only shows these controls to users with the ADMIN role, but the backend validates again on every request.
+
+The frontend uses UI-level hiding as a convenience, not as security.
+
+---
+
+### WebSocket Authentication
+
+The STOMP WebSocket connection authenticates once on connect by passing the JWT in the Authorization header:
+
+connectHeaders: {
+  Authorization: `Bearer ${token}`
+}
+
+The chat service backend validates this token on CONNECT. If the token expires while connected, the socket disconnects with an error, and the STOMP client's auto-reconnect fires — which uses a fresh token from localStorage (refreshed by the timer). If the refresh also failed and the user was logged out, the reconnection attempt sends no token and is rejected.
+
+*Message-level authorization:* Even after connection, the backend checks that the user is a participant of the conversation before routing messages. For direct messages, it verifies the sender/recipient match. For group messages, it checks group membership.
+
+---
+
+### Push Notification Subscription
+
+Push notifications use the *Web Push API* with VAPID keys:
+
+1. Frontend fetches the VAPID public key from GET /api/push/vapid-public-key (requires JWT)
+2. Browser creates a push subscription with FCM (Chrome) or equivalent
+3. Subscription details are sent to POST /api/push/subscribe (requires JWT)
+4. Backend stores the subscription keyed to the authenticated user
+
+The subscription is tied to both the browser and the VAPID key pair. If VAPID keys change, old subscriptions become invalid (FCM returns 403) and the frontend re-subscribes automatically.
+
+---
+
+### Logout & Cleanup
+
+On logout:
+1. POST /api/auth/logout is called (best-effort — errors are swallowed)
+2. localStorage is cleared (tokens, user info, expiry)
+3. Auth state is reset
+4. Profile and contact caches are purged
+5. WebSocket is disconnected
+6. User is redirected to /login
+
+---
+
+### Security Considerations
+
+| Area | Approach |
+|------|----------|
+| *Token storage* | localStorage (acceptable for this app; HttpOnly cookies would be stronger but add complexity) |
+| *Token lifetime* | Short access tokens (15 min) with silent refresh |
+| *XSS* | React's default escaping prevents injection; no dangerouslySetInnerHTML except in search result highlighting (server-provided HTML) |
+| *CSRF* | JWTs in Authorization header are not automatically sent by browsers, so CSRF is not a concern |
+| *Dev vs Prod logging* | All console.log`/console.error` calls are wrapped with import.meta.env.DEV checks — stripped from production builds |
+| *Error messages* | Generic messages shown to users ("Login failed. Please try again."); detailed errors only logged in dev |
 ### Input Validation
 
 - *Client-side validation*: Immediate feedback using react-hook-form
