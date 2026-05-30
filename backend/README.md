@@ -4,24 +4,8 @@ A modern, cloud-native microservices chat application built with **Java 21**, **
 
 ---
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [Services Overview](#services-overview)
-- [API Documentation](#api-documentation)
-- [Configuration](#configuration)
-- [Database Setup](#database-setup)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
+ 
+ 
 ## Overview
 
 Orang Chat is a **production-ready backend** for a real-time messaging platform. It handles:

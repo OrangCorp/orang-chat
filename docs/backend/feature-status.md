@@ -110,13 +110,8 @@ Implemented:
 - Swagger aggregation enabled on /swagger-ui.html.
 
 ---
-
-## 2. Partially Implemented or Risky Areas
  
-## 3. Not Implemented Yet / Known Issues
-
- ---
-## 4. Test Coverage Snapshot
+## 2. Test Coverage Snapshot
 
 Observed tests:
 - Stronger unit coverage in auth service (AuthService/JWT)
@@ -134,9 +129,4 @@ Missing tests with highest impact:
 - ConversationService authorization/role transitions
 - ChatMessageListener retry/failure behavior
 - WebSocket controller and security flows
-
----
-
-## 5. Implementation Priority
-
  

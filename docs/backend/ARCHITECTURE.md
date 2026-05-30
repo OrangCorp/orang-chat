@@ -1,17 +1,5 @@
 # Orang Chat Backend - Architecture & Design Patterns
-
-## Table of Contents
-1. [System Architecture](#system-architecture)
-2. [Design Patterns](#design-patterns)
-3. [Data Flow](#data-flow)
-4. [API Gateway Design](#api-gateway-design)
-5. [Service Layer Architecture](#service-layer-architecture)
-6. [Database Design](#database-design)
-7. [Message Queue Architecture](#message-queue-architecture)
-8. [Security Architecture](#security-architecture)
-9. [Resilience & Fault Tolerance](#resilience--fault-tolerance)
-10. [Deployment Architecture](#deployment-architecture)
-
+ 
 ---
 
 ## System Architecture

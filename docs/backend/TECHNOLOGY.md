@@ -1,13 +1,6 @@
 # Orang Chat Backend - Technology Stack & Solutions
 
-## Table of Contents
-1. [Technology Stack](#technology-stack)
-2. [Architecture Overview](#architecture-overview)
-3. [Core Solutions](#core-solutions)
-4. [Infrastructure](#infrastructure)
-5. [Security](#security)
-6. [Performance & Scalability](#performance--scalability)
-
+ 
 ---
 
 ## Technology Stack

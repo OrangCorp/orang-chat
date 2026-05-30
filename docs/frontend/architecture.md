@@ -3,60 +3,11 @@
 ## Overview
 The frontend is built with React and Vite, following a modular component-based architecture with modern React patterns and state management.
 
-## Table of Contents
-1. [System Architecture](#system-architecture)
-2. [Design Patterns](#design-patterns)
-3. [Data Flow](#data-flow)
-4. [Component Architecture](#component-architecture)
-5. [State Management](#state-management)
-6. [Routing Architecture](#routing-architecture)
-7. [API Integration](#api-integration)
-8. [Performance Patterns](#performance-patterns)
-9. [Security Architecture](#security-architecture)
-10. [Build & Deployment](#build--deployment)
-
+ 
 ---
 
 ## System Architecture
-
-### High-Level Overview
-
-┌──────────────────────────────────────────────────────────────────────────┐
-│                           ORANG CHAT FRONTEND                            │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                   BROWSER LAYER                                 │   │
-│  │  Modern Browser (ES6+, WebSocket, Service Worker)              │   │
-│  └─────────────────┬───────────────────────────────────────────────┘   │
-│                    │                                                    │
-│                    ▼                                                    │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │              REACT APPLICATION (Vite)                           │   │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │   │
-│  │  │ Context │  │ Router  │  │ Service │  │ Hooks   │            │   │
-│  │  │ State   │  │ (React) │  │ Layer   │  │ Layer   │            │   │
-│  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘            │   │
-│  │  └──────────────────────────────────────────────────────────┘   │   │
-│  └─────────┬──────────────┬──────────────┬───────────────────────┘   │
-│            │              │              │                           │
-│      ┌─────▼────┐  ┌──────▼──────┐ ┌────▼───────┐                  │
-│      │   HTTP   │  │   WebSocket │ │   Context  │                  │
-│      │ REST API │  │   STOMP     │ │   Updates  │                  │
-│      └──────────┘  └─────────────┘ └────────────┘                  │
-│            │              │              │                           │
-│            ▼              ▼              ▼                           │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐  │
-│  │   API Gateway    │ │   Auth Service   │ │   Chat Service   │  │
-│  │   (Spring Cloud) │ │   Port: 8081     │ │   Port: 8083     │  │
-│  │   Port: 8080     │ │   JWT Tokens     │ │   WebSocket      │  │
-│  │   Load Balanced  │ │   User Auth      │ │   Real-time      │  │
-│  └──────────────────┘ └──────────────────┘ └──────────────────┘  │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
-
-
-
+ 
 ## Directory Structure
 
 src/
@@ -76,6 +27,22 @@ src/
 ├── App.jsx             # Main application component
 └── main.jsx            # Application entry point
 
+
+
+---
+
+### Routing
+
+React Router with two layouts:
+
+| Layout | Routes |
+|--------|--------|
+| **AuthLayout** | `/login`, `/signup`, `/verify-email`, `/reset-password` |
+| **MainLayout** (sidebar + header) | `/chat/:id`, `/profile/:id`, `/settings`, `/` |
+
+`PrivateRoute.jsx` wraps protected routes — checks authentication, redirects to `/login` if not authenticated.
+
+---
 
 ### Component Hierarchy
 
@@ -328,4 +295,9 @@ On logout:
 - *Type safety*: TypeScript prevents type-related vulnerabilities
 
 ---
+## Build & Deployment
 
+- `npm run dev` — Vite dev server at `localhost:5173`
+- `npm run build` — outputs static files to `dist/`
+- Dockerfile builds the app, copies `dist/` into nginx
+- nginx serves React and proxies `/api` (REST) and `/ws` (WebSocket) to the backend gateway
