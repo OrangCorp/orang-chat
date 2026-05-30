@@ -196,15 +196,12 @@ All authenticated routes are wrapped in a PrivateRoute component:
 User navigates to /chat/:id
         │
         ▼
-┌─────────────────────────┐
-│ Is attemptedAuth true?  │── No ──► Show loading spinner
-│ (auth initialized yet?) │
-└──────────┬──────────────┘
+
+ Is attemptedAuth true? ── No ──► Show loading spinner
+ (auth initialized yet?) 
            │ Yes
            ▼
-┌─────────────────────────┐
-│ Is isAuthenticated true?│── No ──► Redirect to /login
-└──────────┬──────────────┘
+ Is isAuthenticated true?── No ──► Redirect to /login
            │ Yes
            ▼
      Render the page
