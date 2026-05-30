@@ -10,24 +10,23 @@ The frontend is built with React and Vite, following a modular component-based a
  
 ## Directory Structure
 
+```text
 src/
 ├── assets/            # Static assets (icons, logos)
-|     ├──  styles/ # Themes
-├── components/          # Reusable UI components
-|        ├── chat/           # Chat-specific components (message bubble)
-|        ├── common/         # Universal components (header, sidebar)
-├── context/            # React Context providers for use elsewhere
-├── layouts/            # Layout wrapper components 
-├── pages/              # Page screen components (Chat, login, profile ,etc.)
-├── routes/             # Route definitions and guards
-├── services/           # API and external service calls
-├── types/              # TypeScript type definitions
-├── utils/              # Miscellaneous utility functions and constants
-|
-├── App.jsx             # Main application component
-└── main.jsx            # Application entry point
-
-
+│   └── styles/        # Themes
+├── components/        # Reusable UI components
+│   ├── chat/          # Chat-specific components (message bubble)
+│   └── common/        # Universal components (header, sidebar)
+├── context/           # React Context providers for use elsewhere
+├── layouts/           # Layout wrapper components
+├── pages/             # Page screen components (Chat, login, profile, etc.)
+├── routes/            # Route definitions and guards
+├── services/          # API and external service calls
+├── types/             # TypeScript type definitions
+├── utils/             # Miscellaneous utility functions and constants
+├── App.jsx            # Main application component
+└── main.jsx           # Application entry point
+```
 
 ---
 
@@ -45,7 +44,7 @@ React Router with two layouts:
 ---
 
 ### Component Hierarchy
-
+```text
 App.jsx (Root)
 ├── Router (React Router)
 │   ├── Layout Components
@@ -65,7 +64,7 @@ App.jsx (Root)
     ├── API Services (REST calls)
     ├── WebSocket Service (Real-time)
     └── Utility Services (Helpers)
-
+```
 ---
 
 ## Design Patterns
@@ -193,18 +192,23 @@ The app uses a *JWT access/refresh token* pair stored in localStorage. The authS
 
 All authenticated routes are wrapped in a PrivateRoute component:
 
+```text
 User navigates to /chat/:id
         │
         ▼
-
- Is attemptedAuth true? ── No ──► Show loading spinner
- (auth initialized yet?) 
+┌─────────────────────────┐
+│ Is attemptedAuth true?  │── No ──► Show loading spinner
+│ (auth initialized yet?) │
+└──────────┬──────────────┘
            │ Yes
            ▼
- Is isAuthenticated true?── No ──► Redirect to /login
+┌─────────────────────────┐
+│ Is isAuthenticated true?│── No ──► Redirect to /login
+└──────────┬──────────────┘
            │ Yes
            ▼
      Render the page
+```
 
 This prevents unauthenticated users from accessing any page behind the MainLayout. The attemptedAuth flag prevents a flash of the login page while tokens are being validated on initial load.
 
@@ -298,3 +302,4 @@ On logout:
 - `npm run build` — outputs static files to `dist/`
 - Dockerfile builds the app, copies `dist/` into nginx
 - nginx serves React and proxies `/api` (REST) and `/ws` (WebSocket) to the backend gateway
+```
