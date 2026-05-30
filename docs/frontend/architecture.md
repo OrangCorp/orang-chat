@@ -302,4 +302,4 @@ On logout:
 - `npm run build` — outputs static files to `dist/`
 - Dockerfile builds the app, copies `dist/` into nginx
 - nginx serves React and proxies `/api` (REST) and `/ws` (WebSocket) to the backend gateway
-```
+
