@@ -1,94 +1,116 @@
 # Orang Chat 🍊
-A chat application for orang souls
-# About
- Orang chat is a web chat application designed as part of a college project.
- It boasts the following features
-## Features
-### One-on-one and group chats
-The app allows for both one-on-one and group chats with a simple role system for the latter
 
-### Simple account and activity system 
-There is a simple account system with basic customisation and a blocking feature  In addition, user activity is also tracked and displayed for other
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java 21" />
+  <img src="https://img.shields.io/badge/Spring_Boot-3.5-brightgreen?style=for-the-badge&logo=spring-boot&logoColor=white" alt="Spring Boot 3.5" />
+  <img src="https://img.shields.io/badge/React-18-blue?style=for-the-badge&logo=react&logoColor=white" alt="React 18" />
+  <img src="https://img.shields.io/badge/Docker-Supported-blue?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License MIT" />
+</p>
 
-### Real time chatting 
-Users can chat with each other in real time with updates being sent out immediately after a new message appears
+<p align="center">
+  <strong>A cloud-native, microservices-driven real-time chat application built for "orang" souls.</strong>
+</p>
 
-### Message editing and deletion
-The app design eknowledges human fallibility and thus allows for both editing and removal of messages.
+---
 
-### File attatchments with thumbnails
-Users can send each other files up to 50MB in size (max 250MB total per message) with thumbnails generated for select formats such as .png and .gif
+## 🚀 About
 
-### Notifications
-The app features notifications for important events pertinent to the user allowing, for instance for the user to be instantly updated even on conversations they are not currently browsing
+**Orang Chat** is a modern web-based communication platform developed as a college project. Built with a robust cloud-native microservices architecture, the application is engineered from the ground up for high scalability, fault tolerance, ultra-low latency real-time communication, and enterprise-grade reliability.
 
-### Message reading status
-The app tracks messages seen by users allowing them both to quickly come back to the point in the conversation they were last at 
+---
 
-### Reaction system
-Users can add reactions to messages allowing for them to quickly share their feelings about others' messages
+## ✨ Features
 
-# Running
- The docker compose files required to run the application (as well as brief documentation on the topic) are located in the ./Run folder
+| Feature | Description |
+| :--- | :--- |
+| 💬 **Rich Messaging** | Seamless 1-1 and group chats equipped with a flexible group role and permissions system. |
+| ⚡ **Real-Time Pipeline** | Instant message delivery, typing indicators, and presence tracking powered by WebSockets. |
+| 📝 **Message Controls** | Human-centric design allowing full editing and deletion (un-sending) of messages. |
+| 📎 **Smart Attachments** | Supports file uploads up to 50MB (max 250MB per message) with automatic server-side image/GIF thumbnailing. |
+| 🗂️ **Read Receipts** | Persistent read-status tracking so you can seamlessly pick up exactly where you left off. |
+| ❤️ **Reactions & Expressiveness** | Express yourself instantly with emoji-based message reactions. |
+| 🔔 **Push Notifications** | Background alerts via Web Push API (VAPID) to keep you informed even when the browser tab is closed. |
+| 🛡️ **Account & Safety** | Secure authentication, customizable profiles, robust contact request management, and user blocking. |
 
-# Docs
- The documentation files for the backend and frontend, and deployment are located in their respective folders in the docs folder. In addition, a brief security feature overview is located in the security_docs folder
+---
 
-# Brief overview
-## Frontend
- The frontend is a single-page application built with React and Vite, using Material UI (MUI) for the component library. It communicates with the backend through REST APIs for data operations and STOMP over WebSocket for real-time messaging. The app is served in production by nginx, which also proxies API and WebSocket traffic to the backend gateway.
+## 🏗️ Architecture Overview
 
- The interface is split into two main layouts: an AuthLayout for unauthenticated pages (login, signup, email verification) and a MainLayout for the authenticated experience. The MainLayout consists of a persistent Header with search, notifications, and profile controls, a collapsible Sidebar listing conversations, and a content area that renders the active page — typically the Chat view, user Profile pages, or Settings. Navigation between chats, profiles, and settings is handled by React Router with a PrivateRoute wrapper that redirects unauthenticated users to login.
+### 🎨 Frontend
 
- Real-time chat is the core feature. Messages, typing indicators, and presence updates flow through a single WebSocket connection managed by chatService.js, which wraps the STOMP protocol over RabbitMQ. Messages appear instantly for all participants without polling. Users can send text, attachments (images, files), and emoji reactions. The sidebar updates live when new conversations are created or when push notifications arrive about group additions or direct chats. A search feature lets users find specific messages and jump to their context in the conversation.
+The frontend is a cutting-edge Single Page Application (SPA) optimized for speed and fluid user experiences. 
 
- The app also handles contacts and push notifications. Users can search for others, send contact requests, and manage their contact list. Push notifications (via the Web Push API and a service worker) deliver real-time alerts for new messages, reactions, mentions, and contact requests — even when the browser tab is in the background. A notification inbox accessible from the Header stores persistent notifications, supports marking as read or deleting, and allows accepting or declining contact requests directly from the dropdown.
+* **UI/UX Layer:** Built with **React 18** and scaffolded via **Vite**, utilizing **Material UI (MUI)** for a polished, accessible, and responsive user interface.
+* **State & Routing:** Component rendering and protected views are managed safely by **React Router v6** via an `AuthLayout` (unauthenticated) and `MainLayout` (authenticated) architecture.
+* **Real-Time Data:** Powered by `chatService.js`, which encapsulates **STOMP.js over WebSockets** to pipe messages, typing status, and presence updates directly from the RabbitMQ broker without polling.
+* **Background Workers:** Integrates a native **Service Worker** to handle Web Push notifications globally, appending updates directly into a header-docked notification tray.
 
-### Tech Stack
+#### Frontend Tech Stack
+* React 18 & Vite
+* Material UI (MUI)
+* React Router v6
+* STOMP.js (WebSocket client)
+* React Hook Form
 
-- React 18
-- Vite
-- Material UI
-- React Router v6
-- STOMP.js for WebSocket
-- React Hook Form
+---
 
-## Backend
-### A modern, cloud-native microservices chat application built with **Java 21**, **Spring Boot 3.5**, and **Spring Cloud**. Designed for scalability, real-time communication, and reliability.
-### The orang chat backend handles: 
-✅ **Authentication & Authorization** - JWT tokens, password reset, email verification
-✅ **User Management** - Profiles, contacts, friend requests, blocking, presence tracking
-✅ **Real-Time Messaging** - WebSocket/STOMP with horizontal scaling via RabbitMQ
-✅ **Persistent Storage** - Messages, conversations, reactions, pins, read receipts
-✅ **File Attachments** - MinIO S3-compatible storage with async thumbnail generation
-✅ **Web Push Notifications** - Native browser notifications with VAPID protocol
-✅ **Event-Driven Architecture** - Loose coupling via RabbitMQ message broker
-✅ **Full-Text Search** - PostgreSQL GIN indexes for searching 1M+ messages
-### 🛠 Tech Stack
+### ⚙️ Backend
+
+The backend engine orchestrates business logic, complex data persistence, and inter-service events using **Java 21** (leveraging virtual threads for high concurrency) and **Spring Boot 3.5**.
+
+* **Gateway & Routing:** **Spring Cloud Gateway** acts as the single entry point, managing service routing, security enforcement, and rate limiting.
+* **Asynchronous Architecture:** Microservices communicate asynchronously via **RabbitMQ**, establishing a decoupled, event-driven ecosystem.
+* **Storage Strategy:** Structured relational data is kept in **PostgreSQL** (optimized with GIN indexes for fast full-text searching over 1M+ messages), while **Redis** acts as a lightning-fast session and JWT blacklist cache.
+* **Object Storage:** **MinIO** provides S3-compatible, distributed object storage for attachments, paired with async backend workers for image processing.
+
+#### Backend Tech Stack
 
 | Category | Technology | Version | Purpose |
-|----------|-----------|---------|---------|
-| **Language** | Java | 21 | Modern JVM with virtual threads |
-| **Framework** | Spring Boot | 3.5.11 | Application framework |
-| **Cloud** | Spring Cloud | 2025.0.1 | Microservices orchestration |
-| **Gateway** | Spring Cloud Gateway | Latest | API routing & rate limiting |
-| **Databases** | PostgreSQL | 15+ | Relational data storage |
-| **Cache** | Redis | 7.0+ | Session cache, token blacklist |
-| **Message Broker** | RabbitMQ | 4.0+ | Event-driven messaging |
-| **Storage** | MinIO | 8.5.7 | S3-compatible object storage |
-| **Security** | Spring Security | 6.x | Authentication & authorization |
-| **ORM** | Hibernate | 6.x | JPA entity mapping |
-| **Migrations** | Flyway | Latest | Database schema versioning |
-| **Auth** | JJWT | 0.12.5 | JWT generation & validation |
-| **Web Push** | web-push | 5.1.1 | VAPID protocol implementation |
-| **Documentation** | SpringDoc OpenAPI | 2.8.16 | Swagger/OpenAPI 3.0 |
-| **Testing** | JUnit 5 + Testcontainers | Latest | Unit & integration tests |
-| **Build** | Maven | 3.9+ | Dependency management |
+| :--- | :--- | :--- | :--- |
+| **Language** | Java | 21 | Modern JVM utilizing Virtual Threads |
+| **Framework** | Spring Boot | 3.5.11 | Core enterprise application framework |
+| **Cloud** | Spring Cloud | 2025.0.1 | Microservices discovery & orchestration |
+| **Gateway** | Spring Cloud Gateway | *Latest* | Edge routing, security filtering, and rate limiting |
+| **Database** | PostgreSQL | 15+ | Relational data persistence with advanced GIN indexing |
+| **Cache** | Redis | 7.0+ | Session storage, presence tracking, and JWT blacklisting |
+| **Broker** | RabbitMQ | 4.0+ | Distributed message broker for event-driven workflows |
+| **Storage** | MinIO | 8.5.7 | S3-compatible distributed object storage for assets |
+| **Security** | Spring Security | 6.x | Enterprise authentication & role-based authorization |
+| **ORM** | Hibernate | 6.x | Java Persistence API (JPA) data mapping |
+| **Migrations**| Flyway | *Latest* | Automated, version-controlled database schema migrations |
+| **Auth** | JJWT | 0.12.5 | Secure stateless JWT token generation & verification |
+| **Web Push** | web-push | 5.1.1 | VAPID protocol implementation for browser push |
+| **API Docs** | SpringDoc OpenAPI | 2.8.16 | Automated Swagger UI / OpenAPI 3.0 generation |
+| **Testing** | JUnit 5 + Testcontainers | *Latest* | Isolated integration and unit testing suites |
+| **Build** | Maven | 3.9+ | Dependency management and build automation |
 
+---
 
-## Deployment
-### The orang chat app is fully containerised with separate setups for fully local development deployments as well as production setups which assume external databases and mailing services. Instructions for migrating databases when moving from the dev setup to the prod one have been provided
+## 🛠️ Getting Started & Deployment
+
+### Local Development
+The application is fully containerized for trivial local initialization. Docker Compose configurations and a quick-start guide can be found within the setup directory:
+
+```bash
+cd ./Run
+# Refer to the README.md within this directory for environment variables and execution scripts
+```
+
+## 📦 Production Notes
+Production deployment environments assume decoupled external database instances and enterprise SMTP mailing integrations.
+
+> 💡 **Database Migration:** For step-by-step instructions on running Flyway schemas and migrating data safely from local Docker setups to cloud-managed production environments, please consult the migration guides inside the `docs/` folder.
+
+---
+
+## 📂 Documentation Structure
+Comprehensive technical overviews are structured into localized folders across the repository:
+
+* 📁 `docs/` — Comprehensive design breakdowns for the Backend, Frontend, and Cloud Infrastructure.
+* 📁 `security_docs/` — Security whitepapers detailing encryption, JWT lifecycle, verification mechanics, and vulnerability mitigations.
+
+---
 
 ## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for complete details.
