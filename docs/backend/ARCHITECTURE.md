@@ -6,7 +6,7 @@
 
 ### High-Level Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                           ORANG CHAT SYSTEM                              │
 ├──────────────────────────────────────────────────────────────────────────┤
@@ -427,7 +427,7 @@ Solution: Event choreography
 
 Each microservice follows this layered architecture:
 
-```
+```text
 com.orang.{service}/
 ├── controller/            # HTTP endpoints
 │   ├── AuthController

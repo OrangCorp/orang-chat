@@ -52,7 +52,7 @@ The app uses a *JWT access/refresh token* pair stored in localStorage. The authS
 ### Route Protection (PrivateRoute.jsx)
 
 All authenticated routes are wrapped in a PrivateRoute component:
-
+```text
 User navigates to /chat/:id
         │
         ▼
@@ -70,7 +70,7 @@ User navigates to /chat/:id
      Render the page
 
 This prevents unauthenticated users from accessing any page behind the MainLayout. The attemptedAuth flag prevents a flash of the login page while tokens are being validated on initial load.
-
+```
 ---
 
 ### API Request Authentication
