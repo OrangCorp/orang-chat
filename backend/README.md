@@ -1,27 +1,11 @@
 # Orang Chat Backend 🍊
 
-A modern, cloud-native microservices chat application built with **Java 21**, **Spring Boot 3.5**, and **Spring Cloud**. Designed for scalability, real-time communication, and enterprise-grade reliability.
+A modern, cloud-native microservices chat application built with **Java 21**, **Spring Boot 3.5**, and **Spring Cloud**. Designed for scalability, real-time communication, and reliability.
 
 ---
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [Services Overview](#services-overview)
-- [API Documentation](#api-documentation)
-- [Configuration](#configuration)
-- [Database Setup](#database-setup)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
+ 
+ 
 ## Overview
 
 Orang Chat is a **production-ready backend** for a real-time messaging platform. It handles:
@@ -105,89 +89,10 @@ backend/
 - **Docker & Docker Compose**: For infrastructure services
 - **Git**: For cloning the repository
 
----
-
-## 🚀 Quick Start
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/OrangCorp/orang-chat.git
-cd orang-chat
-```
-
-### 2. Start Infrastructure
-
-Start all supporting services:
-
-```bash
-cd backend
-docker-compose up -d
-```
-
-**Verify services started:**
-```bash
-docker-compose ps
-```
-
-### 3. Build All Services
-
-```bash
-./mvnw clean install
-```
-
-### 4. Start Services
-
-**Option A: Development (individual terminals):**
-
-```bash
-# Terminal 1 - Auth Service
-cd auth-service && ../mvnw spring-boot:run
-
-# Terminal 2 - User Service  
-cd user-service && ../mvnw spring-boot:run
-
-# Terminal 3 - Chat Service
-cd chat-service && ../mvnw spring-boot:run
-
-# Terminal 4 - Message Service
-cd message-service && ../mvnw spring-boot:run
-
-# Terminal 5 - Notification Service
-cd notification-service && ../mvnw spring-boot:run
-
-# Terminal 6 - API Gateway
-cd api-gateway && ../mvnw spring-boot:run
-```
-
-**Option B: Production (Docker):**
-
-```bash
-docker-compose up -d
-```
-
-### 5. Test API
-
-Register a user:
-
-```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "password123",
-    "displayName": "John Doe"
-  }'
-```
-
-### 6. API Documentation
-
-- **Swagger UI**: http://localhost:8080/swagger-ui.html
-- **OpenAPI JSON**: http://localhost:8080/v3/api-docs
 
 ---
 
-## 🏗 Services Overview
+## 🏗 Service Overview
 
 | Service | Port | Role | Responsibility |
 |---------|------|------|---|
@@ -346,9 +251,6 @@ docker tag orangchat/auth-service:latest your-registry/auth-service:latest
 docker push your-registry/auth-service:latest
 ```
 
-### Deploy to Kubernetes
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deployment-architecture) for Kubernetes YAML examples.
 
 ---
 
@@ -388,32 +290,6 @@ curl http://localhost:8083/actuator/health
 ```
 
 See [README.md troubleshooting section](#troubleshooting) for more details.
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Add tests
-4. Run tests: `./mvnw test`
-5. Commit: `git commit -m 'Add amazing feature'`
-6. Push: `git push origin feature/amazing-feature`
-7. Open Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
-
----
-
-## 🔗 Quick Links
-
-- **Issues**: https://github.com/OrangCorp/orang-chat/issues
-- **Discussions**: https://github.com/OrangCorp/orang-chat/discussions
-- **Frontend Repo**: https://github.com/OrangCorp/orang-chat-frontend
 
 ---
 

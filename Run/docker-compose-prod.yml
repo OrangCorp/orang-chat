@@ -1,7 +1,25 @@
-services:
+services: 
+
+  caddy:
+    security_opt:
+      - label:disable
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    networks:
+      - frontend-nw  
+    depends_on:
+      - frontend
+      
   api-gateway:
     build:
-      context: .
+      context: ../backend
       dockerfile: service.Dockerfile
       args:
         SERVICE_NAME: api-gateway
@@ -13,11 +31,11 @@ services:
       - frontend-nw
       - backend-nw
     environment:
-      - AUTH_SERVICE_URL=http://auth-service:8081
-      - USER_SERVICE_URL=http://user-service:8082
-      - CHAT_SERVICE_URL=ws://chat-service:8083
-      - MESSAGE_SERVICE_URL=http://message-service:8084
-      - NOTIFICATION_SERVICE_URL=http://notification-service:8085
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
+      - USER_SERVICE_URL=${USER_SERVICE_URL}
+      - CHAT_SERVICE_URL=${CHAT_SERVICE_URL}
+      - MESSAGE_SERVICE_URL=${MESSAGE_SERVICE_URL}
+      - NOTIFICATION_SERVICE_URL=${NOTIFICATION_SERVICE_URL}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS must be set}
@@ -27,9 +45,7 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
-    container_name: orangchat-frontend
-    ports:
-      - "80:80"
+    container_name: orangchat-frontend 
     networks:
       - frontend-nw
     depends_on:
@@ -38,7 +54,7 @@ services:
 
   auth-service:
     build:
-      context: .
+      context: ../backend
       dockerfile: service.Dockerfile
       args:
         SERVICE_NAME: auth-service
@@ -49,7 +65,7 @@ services:
       - db-nw
     environment:
       - AUTH_SERVER_PORT=8081
-      - AUTH_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-auth:5432/auth_db
+      - AUTH_SPRING_DATASOURCE_URL=${AUTH_DB_URL:? AUTH_DB_URL must be set}
       - AUTH_DATABASE_USERNAME=${AUTH_DB_USER:?AUTH_DB_USER must be set}
       - AUTH_DATABASE_PASSWORD=${AUTH_DB_PASS:?AUTH_DB_PASS must be set}
       - REDIS_HOST=redis
@@ -59,12 +75,14 @@ services:
       - SPRING_RABBITMQ_USER=${RABBIT_USER:?RABBIT_USER must be set}
       - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:?RABBIT_PASS must be set}
       - MAIL_USERNAME=${MAIL_USER:?MAIL_USER must be set}
-      - MAIL_PASSWORD=${MAIL_PASS:?MAIL_PASSWORD must be set}
+      - MAIL_PASSWORD=${MAIL_PASS:?MAIL_PASSWORD must be set} 
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - SPRING_PROFILES_ACTIVE=dev
-    depends_on:
-      postgres-auth:
-        condition: service_healthy
+
+      - SPRING_MAIL_HOST=mailpit
+      - SPRING_MAIL_PORT=1025
+      
+    depends_on: 
       rabbitmq:
         condition: service_healthy
       redis:
@@ -79,7 +97,7 @@ services:
 
   user-service:
     build:
-      context: .
+      context: ../backend
       dockerfile: service.Dockerfile
       args:
         SERVICE_NAME: user-service
@@ -90,7 +108,7 @@ services:
       - db-nw
     environment:
       - USER_SERVER_PORT=8082
-      - USER_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_db
+      - USER_SPRING_DATASOURCE_URL=${USER_DB_URL:?USER_DB_URL must be set}
       - USER_DATABASE_USERNAME=${USER_DB_USER:?USER_DB_USER must be set}
       - USER_DATABASE_PASSWORD=${USER_DB_PASS:?USER_DB_PASS must be set}
       - REDIS_HOST=redis
@@ -99,9 +117,7 @@ services:
       - SPRING_RABBITMQ_USERNAME=${RABBIT_USER:?RABBIT_USER must be set}
       - SPRING_RABBITMQ_PASSWORD=${RABBIT_PASS:?RABBIT_PASS must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
-    depends_on:
-      postgres-user:
-        condition: service_healthy
+    depends_on: 
       redis:
         condition: service_healthy
       rabbitmq:
@@ -116,7 +132,7 @@ services:
 
   chat-service:
     build:
-      context: .
+      context: ../backend
       dockerfile: service.Dockerfile
       args:
         SERVICE_NAME: chat-service
@@ -148,7 +164,7 @@ services:
 
   message-service:
     build:
-      context: .
+      context: ../backend
       dockerfile: service.Dockerfile
       args:
         SERVICE_NAME: message-service
@@ -159,7 +175,7 @@ services:
       - db-nw
     environment:
       - MESSAGE_SERVER_PORT=8084
-      - MESSAGE_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-message:5432/message_db
+      - MESSAGE_SPRING_DATASOURCE_URL=${MESSAGE_DB_URL:?MESSAGE_DB_URL must be set}
       - MESSAGE_DATABASE_USERNAME=${MESSAGE_DB_USER:?MESSAGE_DB_USER must be set}
       - MESSAGE_DATABASE_PASSWORD=${MESSAGE_DB_PASS:?MESSAGE_DB_PASS must be set}
       - SPRING_RABBITMQ_HOST=rabbitmq
@@ -171,9 +187,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - MINIO_DOWNLOAD_MODE=${MINIO_DOWNLOAD_MODE:?MINIO_DOWNLOAD_MODE must be set}
       - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:?MINIO_EXTERNAL_ENDPOINT must be set}
-    depends_on:
-      postgres-message:
-        condition: service_healthy
+    depends_on: 
       rabbitmq:
         condition: service_healthy
       minio:
@@ -188,7 +202,7 @@ services:
 
   notification-service:
     build:
-      context: .
+      context: ../backend
       dockerfile: service.Dockerfile
       args:
         SERVICE_NAME: notification-service
@@ -199,7 +213,7 @@ services:
       - db-nw
     environment:
       - NOTIFICATION_SERVER_PORT=8085
-      - NOTIFICATION_SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-notification:5432/notification_db
+      - NOTIFICATION_SPRING_DATASOURCE_URL=${NOTIF_DB_URL:?NOTIF_DB_URL must be set}
       - NOTIFICATION_DATABASE_USERNAME=${NOTIF_DB_USER:?NOTIF_DB_USER must be set}
       - NOTIFICATION_DATABASE_PASSWORD=${NOTIF_DB_PASS:?NOTIF_DB_PASS must be set}
       - REDIS_HOST=redis
@@ -212,9 +226,7 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUB:?VAPID_PUB must be set}
       - VAPID_PRIVATE_KEY=${VAPID_PRIV:?VAPID_PRIV must be set}
       - VAPID_SUBJECT=${VAPID_SUBJECT:?VAPID_SUBJECT must be set}
-    depends_on:
-      postgres-notification:
-        condition: service_healthy
+    depends_on: 
       rabbitmq:
         condition: service_healthy
       redis:
@@ -226,75 +238,7 @@ services:
       retries: 12
       start_period: 45s
     restart: unless-stopped
-
-  postgres-auth:
-    image: postgres:18-alpine3.22
-    container_name: orangchat-postgres-auth
-    environment:
-      POSTGRES_DB: auth_db
-      POSTGRES_USER: ${AUTH_DB_USER:?AUTH_DB_USER must be set}
-      POSTGRES_PASSWORD: ${AUTH_DB_PASS:?AUTH_DB_PASS must be set}
-    volumes:
-      - postgres-auth-data:/var/lib/postgresql/data
-    networks:
-      - db-nw
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  postgres-user:
-    image: postgres:18-alpine3.22
-    container_name: orangchat-postgres-user
-    environment:
-      POSTGRES_DB: user_db
-      POSTGRES_USER: ${USER_DB_USER:?USER_DB_USER must be set}
-      POSTGRES_PASSWORD: ${USER_DB_PASS:?USER_DB_PASS must be set}
-    volumes:
-      - postgres-user-data:/var/lib/postgresql/data
-    networks:
-      - db-nw
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  postgres-message:
-    image: postgres:18-alpine3.22
-    container_name: orangchat-postgres-message
-    environment:
-      POSTGRES_DB: message_db
-      POSTGRES_USER: ${MESSAGE_DB_USER:?MESSAGE_DB_USER must be set}
-      POSTGRES_PASSWORD: ${MESSAGE_DB_PASS:?MESSAGE_DB_PASS must be set}
-    volumes:
-      - postgres-message-data:/var/lib/postgresql/data
-    networks:
-      - db-nw
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  postgres-notification:
-    image: postgres:18-alpine3.22
-    container_name: orangchat-postgres-notification
-    environment:
-      POSTGRES_DB: notification_db
-      POSTGRES_USER: ${NOTIF_DB_USER:?NOTIF_DB_USER must be set}
-      POSTGRES_PASSWORD: ${NOTIF_DB_PASS:?NOTIF_DB_PASS must be set}
-    volumes:
-      - postgres-notification-data:/var/lib/postgresql/data
-    networks:
-      - db-nw
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+ 
   redis:
     image: redis:8.6.1-alpine
     container_name: orangchat-redis
@@ -352,10 +296,7 @@ services:
       retries: 3
 
 volumes:
-  postgres-auth-data:
-  postgres-user-data:
-  postgres-message-data:
-  postgres-notification-data:
+  caddy_data: 
   redis-data:
   rabbitmq-data:
   minio-data:

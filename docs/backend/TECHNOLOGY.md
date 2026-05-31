@@ -1,13 +1,6 @@
 # Orang Chat Backend - Technology Stack & Solutions
 
-## Table of Contents
-1. [Technology Stack](#technology-stack)
-2. [Architecture Overview](#architecture-overview)
-3. [Core Solutions](#core-solutions)
-4. [Infrastructure](#infrastructure)
-5. [Security](#security)
-6. [Performance & Scalability](#performance--scalability)
-
+ 
 ---
 
 ## Technology Stack
@@ -102,50 +95,7 @@
 
 ## Architecture Overview
 
-### Microservices Topology
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    API Gateway (8080)                           │
-│              Spring Cloud Gateway + Rate Limiting               │
-└──┬──────────┬──────────┬──────────┬──────────┬──────────────────┘
-   │          │          │          │          │
-   ├─ Auth    ├─ User    ├─ Chat    ├─ Message ├─ Notification
-   │ (8081)   │ (8082)   │ (8083)   │ (8084)   │ (8085)
-   │          │          │          │          │
-   ▼          ▼          ▼          ▼          ▼
-┌──────┐ ┌──────┐ ┌─────────┐ ┌──────┐ ┌──────────┐
-│Auth  │ │User  │ │  Chat   │ │Msg   │ │Notif    │
-│DB    │ │DB    │ │WebSocket│ │DB    │ │DB       │
-│      │ │      │ └─────────┘ │      │ │         │
-│ POST │ │ POST │             │ POST │ │ POST    │
-│(5432)│ │(5433)│    Redis    │(5434)│ │(5435)   │
-└──────┘ └──────┘  Lettuce    └──────┘ └──────────┘
-   │        │       (6379)         │        │
-   │        │                      │        │
-   └────────┼──────────────────────┼────────┘
-            │                      │
-            ▼                      ▼
-        ┌─────────────────────────────┐
-        │    RabbitMQ Message Broker  │
-        │   (Topic Exchanges + Queues)│
-        │         (5672)              │
-        └─────────────────────────────┘
-            │
-            ▼
-        ┌──────────────┐
-        │   MinIO S3   │
-        │   Storage    │
-        │   (9000)     │
-        └──────────────┘
-
-Shared Library:
-├─ JWT Utilities
-├─ Security Filters
-├─ Event Models
-├─ Constants & DTOs
-└─ Common Exceptions
-```
+ 
 
 ### Service Responsibilities
 
@@ -593,23 +543,7 @@ message-service/src/main/resources/db/migration/
   └─ ...
 ```
 
-### Deployment
 
-```bash
-# Start infrastructure
-docker-compose up -d
-
-# Build all services
-./mvnw clean install
-
-# Start services (can be containerized)
-cd api-gateway && ../mvnw spring-boot:run &
-cd auth-service && ../mvnw spring-boot:run &
-cd user-service && ../mvnw spring-boot:run &
-cd chat-service && ../mvnw spring-boot:run &
-cd message-service && ../mvnw spring-boot:run &
-cd notification-service && ../mvnw spring-boot:run &
-```
 
 ---
 
@@ -693,5 +627,3 @@ The Orang Chat backend is designed for **scalability, reliability, and maintaina
 ✅ **Performance**: Caching, indexing, async processing, connection pooling
 ✅ **Testing**: JUnit 5, Testcontainers, 77.38% total backend line coverage
 ✅ **Operations**: Docker, Flyway migrations, health checks, metrics
-
-The architecture supports millions of users with proper resource management and horizontal scaling.

@@ -1,10 +1,3 @@
-# Feature Status Overview
-
-Current Date: 2026-05-19
-Project: Orang Chat backend microservices
-Source of truth: backend code (controllers, services, listeners, config, tests)
-
----
 
 ## 1. Implemented Features
 
@@ -117,13 +110,8 @@ Implemented:
 - Swagger aggregation enabled on /swagger-ui.html.
 
 ---
-
-## 2. Partially Implemented or Risky Areas
  
-## 3. Not Implemented Yet / Known Issues
-
- ---
-## 4. Test Coverage Snapshot
+## 2. Test Coverage Snapshot
 
 Observed tests:
 - Stronger unit coverage in auth service (AuthService/JWT)
@@ -141,9 +129,4 @@ Missing tests with highest impact:
 - ConversationService authorization/role transitions
 - ChatMessageListener retry/failure behavior
 - WebSocket controller and security flows
-
----
-
-## 5. Implementation Priority
-
  
