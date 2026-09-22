@@ -58,7 +58,7 @@ Orang Chat is a **production-ready backend** for a real-time messaging platform.
 | **Testing** | JUnit 5 + Testcontainers | Latest | Unit & integration tests |
 | **Build** | Maven | 3.9+ | Dependency management |
 
-See [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md) for detailed technology descriptions and design patterns.
+See [docs/TECHNOLOGY.md](../docs/backend/TECHNOLOGY.md) for detailed technology descriptions and design patterns.
 
 ---
 
@@ -111,17 +111,17 @@ backend/
 | **Notification Service** | 8085 | Push | Web Push subscriptions, notifications |
 | **Shared Library** | — | Common | JWT utils, security filters, events, DTOs |
 
-For detailed service information, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For detailed service information, see [docs/ARCHITECTURE.md](../docs/backend/ARCHITECTURE.md).
 
 ---
 
 ## 📚 Documentation
 
-- **[docs/TECHNOLOGY.md](docs/TECHNOLOGY.md)** - Technology stack, design patterns, solutions to core problems
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture, data flows, deployment topology
-- **[docs/feature-status.md](docs/feature-status.md)** - Feature implementation status
-- **[docs/api/auth-api.md](docs/api/auth-api.md)** - Authentication API details
-- **[docs/api/technical-debt.md](docs/api/technical-debt.md)** - Known technical debt
+- **[docs/TECHNOLOGY.md](../docs/backend/TECHNOLOGY.md)** - Technology stack, design patterns, solutions to core problems
+- **[docs/ARCHITECTURE.md](../docs/backend/ARCHITECTURE.md)** - System architecture, data flows, deployment topology
+- **[docs/feature-status.md](../docs/backend/feature-status.md)** - Feature implementation status
+- **[docs/exception-handling.md](../docs/backend/exception-handling.md)** - Error handling and resilience patterns
+- **[docs/deployment.md](../docs/deployment/deployment.md)** - Deployment and environment setup
 
 ---
 
