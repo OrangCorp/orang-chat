@@ -11,12 +11,19 @@ A modern, cloud-native microservices chat application built with **Java 21**, **
 Orang Chat is a **production-ready backend** for a real-time messaging platform. It handles:
 
 ✅ **Authentication & Authorization** - JWT tokens, password reset, email verification
+
 ✅ **User Management** - Profiles, contacts, friend requests, blocking, presence tracking
+
 ✅ **Real-Time Messaging** - WebSocket/STOMP with horizontal scaling via RabbitMQ
+
 ✅ **Persistent Storage** - Messages, conversations, reactions, pins, read receipts
+
 ✅ **File Attachments** - MinIO S3-compatible storage with async thumbnail generation
+
 ✅ **Web Push Notifications** - Native browser notifications with VAPID protocol
+
 ✅ **Event-Driven Architecture** - Loose coupling via RabbitMQ message broker
+
 ✅ **Full-Text Search** - PostgreSQL GIN indexes for searching 1M+ messages
 
 **Key Stats:**
