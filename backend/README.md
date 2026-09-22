@@ -8,7 +8,7 @@ A modern, cloud-native microservices chat application built with **Java 21**, **
  
 ## Overview
 
-Orang Chat is a **production-ready backend** for a real-time messaging platform. It handles:
+Orang Chat is has a **production-ready backend** for a real-time messaging platform. It handles:
 
 ✅ **Authentication & Authorization** - JWT tokens, password reset, email verification
 
