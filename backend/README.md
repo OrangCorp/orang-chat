@@ -4,11 +4,9 @@ A modern, cloud-native microservices chat application built with **Java 21**, **
 
 ---
 
- 
- 
 ## Overview
 
-Orang Chat is has a **production-ready backend** for a real-time messaging platform. It handles:
+Orang Chat is a **production-ready backend** for a real-time messaging platform. It handles:
 
 ✅ **Authentication & Authorization** - JWT tokens, password reset, email verification
 
@@ -27,7 +25,7 @@ Orang Chat is has a **production-ready backend** for a real-time messaging platf
 ✅ **Full-Text Search** - PostgreSQL GIN indexes for searching 1M+ messages
 
 **Key Stats:**
-- **7 microservices** deployed independently
+- **6 microservices + 1 shared library** deployed as backend modules
 - **4 PostgreSQL databases** (per-service ownership)
 - **1 RabbitMQ broker** for event-driven async processing
 - **Redis cache** for sessions, caching, and distributed locking
@@ -58,34 +56,33 @@ Orang Chat is has a **production-ready backend** for a real-time messaging platf
 | **Testing** | JUnit 5 + Testcontainers | Latest | Unit & integration tests |
 | **Build** | Maven | 3.9+ | Dependency management |
 
-See [docs/TECHNOLOGY.md](../docs/backend/TECHNOLOGY.md) for detailed technology descriptions and design patterns.
+See [docs/backend/TECHNOLOGY.md](../docs/backend/TECHNOLOGY.md) for detailed technology descriptions and design patterns.
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 backend/
+├── .mvn/                            # Maven wrapper configuration
 ├── api-gateway/                    # Spring Cloud Gateway (8080)
 ├── auth-service/                   # Authentication & Authorization (8081)
-├── user-service/                   # User Profiles & Contacts (8082)
 ├── chat-service/                   # WebSocket Real-Time Messaging (8083)
 ├── message-service/                # Message Persistence (8084)
 ├── notification-service/           # Push Notifications (8085)
-├── shared-library/                 # Common Utilities (no port)
-├── docs/                           # Documentation
-│   ├── api/
-│   │   ├── auth-api.md
-│   │   └── technical-debt.md
-│   ├── feature-status.md
-│   ├── email-error-handling.md
-│   ├── TECHNOLOGY.md               # Tech stack & design patterns
-│   └── ARCHITECTURE.md             # System architecture & design
-├── docker-compose.yml              # Infrastructure setup
-├── service.Dockerfile              # Multi-stage build for services
-├── pom.xml                         # Parent POM (module definitions)
-└── README.md                       # This file
+├── shared-library/                 # Common utilities, DTOs, auth helpers
+├── user-service/                   # User Profiles & Contacts (8082)
+├── .gitignore                      # Backend-local ignores
+├── HELP.md                         # Spring Boot help/reference
+├── mvnw                            # Maven wrapper
+├── mvnw.cmd                        # Windows Maven wrapper
+├── pom.xml                         # Parent POM for all backend modules
+├── service.Dockerfile              # Shared service image definition
+├── README.md                       # This file
+└── ...
 ```
+
+Project documentation is stored in the repository-level `docs/` directory, not inside `backend/docs`.
 
 ---
 
@@ -95,7 +92,6 @@ backend/
 - **Maven**: 3.9+
 - **Docker & Docker Compose**: For infrastructure services
 - **Git**: For cloning the repository
-
 
 ---
 
@@ -111,17 +107,17 @@ backend/
 | **Notification Service** | 8085 | Push | Web Push subscriptions, notifications |
 | **Shared Library** | — | Common | JWT utils, security filters, events, DTOs |
 
-For detailed service information, see [docs/ARCHITECTURE.md](../docs/backend/ARCHITECTURE.md).
+For detailed service information, see [docs/backend/ARCHITECTURE.md](../docs/backend/ARCHITECTURE.md).
 
 ---
 
 ## 📚 Documentation
 
-- **[docs/TECHNOLOGY.md](../docs/backend/TECHNOLOGY.md)** - Technology stack, design patterns, solutions to core problems
-- **[docs/ARCHITECTURE.md](../docs/backend/ARCHITECTURE.md)** - System architecture, data flows, deployment topology
-- **[docs/feature-status.md](../docs/backend/feature-status.md)** - Feature implementation status
-- **[docs/exception-handling.md](../docs/backend/exception-handling.md)** - Error handling and resilience patterns
-- **[docs/deployment.md](../docs/deployment/deployment.md)** - Deployment and environment setup
+- **[docs/backend/TECHNOLOGY.md](../docs/backend/TECHNOLOGY.md)** - Technology stack, design patterns, solutions to core problems
+- **[docs/backend/ARCHITECTURE.md](../docs/backend/ARCHITECTURE.md)** - System architecture, data flows, deployment topology
+- **[docs/backend/feature-status.md](../docs/backend/feature-status.md)** - Feature implementation status
+- **[docs/backend/exception-handling.md](../docs/backend/exception-handling.md)** - Error handling and resilience patterns
+- **[docs/deployment/deployment.md](../docs/deployment/deployment.md)** - Deployment and environment setup
 
 ---
 
@@ -196,7 +192,7 @@ Flyway automatically runs migrations on startup. To manually create databases:
 # Create auth_db
 docker exec orangchat-postgres-auth createdb auth_db -U postgres
 
-# Create user_db  
+# Create user_db
 docker exec orangchat-postgres-user createdb user_db -U postgres
 
 # Create message_db
@@ -257,7 +253,6 @@ docker-compose build
 docker tag orangchat/auth-service:latest your-registry/auth-service:latest
 docker push your-registry/auth-service:latest
 ```
-
 
 ---
 
